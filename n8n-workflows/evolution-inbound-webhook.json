@@ -1,0 +1,212 @@
+{
+  "name": "WhatsApp Evolution API – Inbound Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/evolution",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-webhook-evo",
+      "name": "Evolution Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse Evolution API webhook payload\nconst body = $input.first().json.body || $input.first().json;\nconst event = body.event;\n\n// Handle different Evolution events\nif (event === 'messages.upsert') {\n  const msg = body.data;\n  const key = msg.key;\n  const isFromMe = key.fromMe;\n  \n  // Skip outgoing messages (we already logged them)\n  if (isFromMe) {\n    return [{ json: { skip: true, reason: 'Outgoing message from this device' } }];\n  }\n\n  const phone = key.remoteJid?.replace('@s.whatsapp.net', '') || '';\n  const pushName = msg.pushName || phone;\n  \n  let content = '';\n  let contentType = 'text';\n  let mediaUrl = null;\n  \n  if (msg.message?.conversation) {\n    content = msg.message.conversation;\n  } else if (msg.message?.extendedTextMessage?.text) {\n    content = msg.message.extendedTextMessage.text;\n  } else if (msg.message?.imageMessage) {\n    content = msg.message.imageMessage.caption || '[Imagem]';\n    contentType = 'image';\n    mediaUrl = msg.message.imageMessage.url;\n  } else if (msg.message?.audioMessage) {\n    content = '[Áudio]';\n    contentType = 'audio';\n    mediaUrl = msg.message.audioMessage.url;\n  } else if (msg.message?.videoMessage) {\n    content = msg.message.videoMessage.caption || '[Vídeo]';\n    contentType = 'video';\n    mediaUrl = msg.message.videoMessage.url;\n  } else if (msg.message?.documentMessage) {\n    content = msg.message.documentMessage.fileName || '[Documento]';\n    contentType = 'document';\n    mediaUrl = msg.message.documentMessage.url;\n  } else if (msg.message?.stickerMessage) {\n    content = '[Sticker]';\n    contentType = 'sticker';\n  } else {\n    content = '[Mensagem não suportada]';\n  }\n\n  return [{\n    json: {\n      event_type: 'message.received',\n      whatsapp_msg_id: key.id,\n      phone: phone,\n      contact_name: pushName,\n      direction: 'in',\n      content: content,\n      content_type: contentType,\n      media_url: mediaUrl,\n      timestamp: new Date(msg.messageTimestamp * 1000).toISOString(),\n      instance: body.instance,\n      raw_payload: body\n    }\n  }];\n\n} else if (event === 'connection.update') {\n  // Session status change (connected, disconnected, expired)\n  const state = body.data?.state;\n  return [{\n    json: {\n      event_type: 'session.status',\n      instance: body.instance,\n      status: state === 'open' ? 'connected' : state === 'close' ? 'disconnected' : 'expired',\n      skip_message: true,\n      raw_payload: body\n    }\n  }];\n\n} else if (event === 'qrcode.updated') {\n  return [{\n    json: {\n      event_type: 'qrcode.updated',\n      instance: body.instance,\n      qrcode: body.data?.qrcode,\n      skip_message: true,\n      raw_payload: body\n    }\n  }];\n\n} else {\n  return [{ json: { skip: true, reason: `Unhandled event: ${event}` } }];\n}"
+      },
+      "id": "node-parse-evo",
+      "name": "Parse Evolution Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.event_type }}",
+              "operation": "equals",
+              "value2": "message.received"
+            }
+          ]
+        }
+      },
+      "id": "node-route-event",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "parameters_extra": {
+        "rules": [
+          { "output": 0, "value": "message.received" },
+          { "output": 1, "value": "session.status" },
+          { "output": 2, "value": "qrcode.updated" }
+        ]
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Upsert contact in Supabase\nconst contactResult = await $helpers.httpRequest({\n  method: 'POST',\n  url: `${$env.SUPABASE_URL}/rest/v1/contacts`,\n  headers: {\n    'apikey': $env.SUPABASE_SERVICE_KEY,\n    'Authorization': `Bearer ${$env.SUPABASE_SERVICE_KEY}`,\n    'Content-Type': 'application/json',\n    'Prefer': 'resolution=merge-duplicates,return=representation'\n  },\n  body: JSON.stringify({\n    phone: $json.phone,\n    name: $json.contact_name\n  })\n});\n\nconst contactId = contactResult?.[0]?.id;\n\nreturn [{ json: { ...$json, contact_id: contactId } }];"
+      },
+      "id": "node-upsert-contact-evo",
+      "name": "Upsert Contact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [960, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "channel_id", "value": "={{ $env.EVOLUTION_CHANNEL_ID }}" },
+            { "name": "contact_id", "value": "={{ $json.contact_id }}" },
+            { "name": "direction", "value": "in" },
+            { "name": "content", "value": "={{ $json.content }}" },
+            { "name": "content_type", "value": "={{ $json.content_type }}" },
+            { "name": "media_url", "value": "={{ $json.media_url }}" },
+            { "name": "whatsapp_msg_id", "value": "={{ $json.whatsapp_msg_id }}" },
+            { "name": "timestamp", "value": "={{ $json.timestamp }}" }
+          ]
+        },
+        "options": {
+          "retry": {
+            "maxRetries": 5,
+            "retryInterval": 2000,
+            "retryIntervalMultiplier": 2
+          }
+        }
+      },
+      "id": "node-insert-msg-evo",
+      "name": "Insert Message to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1200, 160]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/channels?instance=eq.{{ $json.instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "status", "value": "={{ $json.status }}" },
+            { "name": "last_seen", "value": "={{ new Date().toISOString() }}" }
+          ]
+        }
+      },
+      "id": "node-update-session",
+      "name": "Update Channel Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [960, 340]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/webhook_logs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "channel_id", "value": "={{ $env.EVOLUTION_CHANNEL_ID }}" },
+            { "name": "event_type", "value": "={{ $json.event_type }}" },
+            { "name": "source", "value": "evolution" },
+            { "name": "status", "value": "processed" }
+          ]
+        }
+      },
+      "id": "node-log-evo",
+      "name": "Log Webhook Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1440, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/failed_messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "channel_id", "value": "={{ $env.EVOLUTION_CHANNEL_ID }}" },
+            { "name": "payload", "value": "={{ JSON.stringify($json) }}" },
+            { "name": "error_message", "value": "={{ $json.error?.message || 'Unknown error' }}" }
+          ]
+        }
+      },
+      "id": "node-dead-letter-evo",
+      "name": "Dead Letter Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1200, 480]
+    }
+  ],
+  "connections": {
+    "Evolution Webhook Trigger": {
+      "main": [[{ "node": "Parse Evolution Payload", "type": "main", "index": 0 }]]
+    },
+    "Parse Evolution Payload": {
+      "main": [[{ "node": "Route by Event Type", "type": "main", "index": 0 }]]
+    },
+    "Route by Event Type": {
+      "main": [
+        [{ "node": "Upsert Contact", "type": "main", "index": 0 }],
+        [{ "node": "Update Channel Status", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Upsert Contact": {
+      "main": [[{ "node": "Insert Message to Supabase", "type": "main", "index": 0 }]]
+    },
+    "Insert Message to Supabase": {
+      "main": [[{ "node": "Log Webhook Event", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "errorWorkflow": "Dead Letter Queue",
+    "executionTimeout": 30,
+    "retry": {
+      "enabled": true,
+      "maxRetries": 5,
+      "retryInterval": 2000
+    }
+  }
+}

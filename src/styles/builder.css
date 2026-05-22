@@ -1,0 +1,243 @@
+/* No-Code Flow Builder Canvas */
+.builder-workspace {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: calc(100vh - 160px);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-lg);
+  background: var(--bg-surface-solid);
+}
+
+/* Sidebar catalog of Nodes */
+.builder-sidebar {
+  border-right: 1px solid var(--border-glass);
+  background: var(--bg-sidebar);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.builder-sidebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.node-template-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  transition: all var(--transition-fast);
+}
+
+.node-template-card:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.node-icon-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-round);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+}
+
+.node-icon-circle.trigger { background: var(--color-status-new); }
+.node-icon-circle.message { background: var(--color-status-proposal); }
+.node-icon-circle.condition { background: var(--color-status-contacted); }
+.node-icon-circle.webhook { background: var(--color-status-won); }
+
+.node-template-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.node-template-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.node-template-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Visual Canvas Workspace Area */
+.builder-canvas {
+  position: relative;
+  background-color: var(--bg-app);
+  /* Elegant grid background */
+  background-image: radial-gradient(var(--border-glass) 1.2px, transparent 1.2px);
+  background-size: 24px 24px;
+  overflow: auto;
+  height: 100%;
+  width: 100%;
+}
+
+/* Node Block Card positioning inside canvas */
+.canvas-node {
+  position: absolute;
+  width: 200px;
+  background: var(--bg-surface-solid);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  overflow: visible; /* Essential for handle circles */
+  transition: box-shadow var(--transition-fast), border var(--transition-fast);
+  cursor: move;
+}
+
+.canvas-node:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--accent-primary);
+}
+
+.canvas-node-header {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-glass);
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.canvas-node-header.trigger { background: var(--color-status-new); }
+.canvas-node-header.message { background: var(--color-status-proposal); }
+.canvas-node-header.condition { background: var(--color-status-contacted); }
+.canvas-node-header.webhook { background: var(--color-status-won); }
+
+.canvas-node-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.canvas-node-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.node-textarea {
+  width: 100%;
+  background: var(--bg-app);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  resize: vertical;
+  min-height: 50px;
+  outline: none;
+  font-family: var(--font-sans);
+}
+
+.node-textarea:focus {
+  border-color: var(--accent-primary);
+}
+
+.node-delete-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.8;
+  font-size: 11px;
+}
+
+.node-delete-btn:hover {
+  opacity: 1;
+}
+
+/* Connective handles (left/right dots) */
+.node-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--bg-surface-solid);
+  border: 2px solid var(--accent-primary);
+  border-radius: var(--radius-round);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
+.node-handle.left {
+  left: -6px;
+}
+
+.node-handle.right {
+  right: -6px;
+}
+
+/* SVG Line Connections Renderer overlay */
+.connections-svg-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.connection-path {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2.5;
+  stroke-dasharray: 4 4;
+  animation: flowLine 20s linear infinite;
+}
+
+.connection-path.active {
+  stroke: var(--accent-primary);
+  stroke-width: 3;
+}
+
+@keyframes flowLine {
+  to {
+    stroke-dashoffset: -40;
+  }
+}
+
+/* Simulation overlay top panel */
+.builder-alert-bar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  background: var(--bg-surface-solid);
+  border: 1px solid var(--color-status-won);
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+}

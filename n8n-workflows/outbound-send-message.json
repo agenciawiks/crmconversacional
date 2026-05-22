@@ -1,0 +1,171 @@
+{
+  "name": "WhatsApp – Outbound Send Message",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/send",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "node-webhook-send",
+      "name": "Send Message Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Fetch channel details from Supabase to determine provider\nconst channelId = $json.body?.channel_id || $json.channel_id;\nconst content = $json.body?.content || $json.content;\nconst phone = $json.body?.phone || $json.phone;\n\nconst channelResp = await $helpers.httpRequest({\n  method: 'GET',\n  url: `${$env.SUPABASE_URL}/rest/v1/channels?id=eq.${channelId}&select=*`,\n  headers: {\n    'apikey': $env.SUPABASE_SERVICE_KEY,\n    'Authorization': `Bearer ${$env.SUPABASE_SERVICE_KEY}`\n  }\n});\n\nconst channel = channelResp?.[0];\nif (!channel) {\n  throw new Error(`Channel ${channelId} not found`);\n}\n\nreturn [{\n  json: {\n    channel_id: channelId,\n    provider: channel.provider,\n    content: content,\n    phone: phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
+      },
+      "id": "node-resolve-channel",
+      "name": "Resolve Channel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.provider }}",
+              "operation": "equals",
+              "value2": "meta"
+            }
+          ]
+        }
+      },
+      "id": "node-switch-provider",
+      "name": "Which Provider?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{ $json.phone_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer {{ $json.access_token }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.content }}\"\n  }\n}",
+        "options": {
+          "retry": {
+            "maxRetries": 3,
+            "retryInterval": 3000,
+            "retryIntervalMultiplier": 2
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "node-send-meta",
+      "name": "Send via Meta API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [980, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.evo_url }}/message/sendText/{{ $json.evo_instance }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $json.evo_api_key }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"{{ $json.phone }}@s.whatsapp.net\",\n  \"text\": \"{{ $json.content }}\"\n}",
+        "options": {
+          "retry": {
+            "maxRetries": 3,
+            "retryInterval": 2000,
+            "retryIntervalMultiplier": 2
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "node-send-evo",
+      "name": "Send via Evolution API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [980, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "channel_id", "value": "={{ $json.channel_id || $input.first().json.channel_id }}" },
+            { "name": "direction", "value": "out" },
+            { "name": "content", "value": "={{ $json.content || $input.first().json.content }}" },
+            { "name": "content_type", "value": "text" },
+            { "name": "status", "value": "sent" },
+            { "name": "timestamp", "value": "={{ new Date().toISOString() }}" }
+          ]
+        }
+      },
+      "id": "node-log-outgoing",
+      "name": "Log Outgoing Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
+      },
+      "id": "node-respond",
+      "name": "Response OK",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1480, 300]
+    }
+  ],
+  "connections": {
+    "Send Message Trigger": {
+      "main": [[{ "node": "Resolve Channel", "type": "main", "index": 0 }]]
+    },
+    "Resolve Channel": {
+      "main": [[{ "node": "Which Provider?", "type": "main", "index": 0 }]]
+    },
+    "Which Provider?": {
+      "main": [
+        [{ "node": "Send via Meta API", "type": "main", "index": 0 }],
+        [{ "node": "Send via Evolution API", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send via Meta API": {
+      "main": [[{ "node": "Log Outgoing Message", "type": "main", "index": 0 }]]
+    },
+    "Send via Evolution API": {
+      "main": [[{ "node": "Log Outgoing Message", "type": "main", "index": 0 }]]
+    },
+    "Log Outgoing Message": {
+      "main": [[{ "node": "Response OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionTimeout": 30
+  }
+}
