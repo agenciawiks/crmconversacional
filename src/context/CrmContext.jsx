@@ -1,11 +1,12 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
-import { fetchContacts, useRealtimeMessages } from '../hooks/useSupabase';
+import { useRealtimeMessages } from '../hooks/useSupabase';
+import SupabaseService from '../services/supabaseService';
+import N8nService from '../services/n8nService';
 
 const CrmContext = createContext();
 
 const CHANNEL_ID = '4886443e-4996-4d2a-83e1-d96f503e1a28'; // WhatsApp Oficial (Meta)
-const N8N_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
 
 const initialFlowNodes = [
   { id: '1', type: 'trigger', label: 'Mensagem Recebida', x: 80, y: 150, data: { condition: 'Qualquer palavra' } },
@@ -34,7 +35,7 @@ export const CrmProvider = ({ children }) => {
   // Load Initial Data from Supabase
   useEffect(() => {
     async function loadData() {
-      const dbContacts = await fetchContacts();
+      const dbContacts = await SupabaseService.fetchContacts();
       const { data: dbMessages } = await supabase.from('messages').select('*').order('timestamp', { ascending: true });
       
       const idSet = new Set();
@@ -70,6 +71,24 @@ export const CrmProvider = ({ children }) => {
       const updated = prev.map(c => {
         if (c.id === newMsg.contact_id) {
           exists = true;
+          
+          // Look for matching optimistic temp message to replace
+          const optIdx = c.messages.findIndex(m => 
+            typeof m.id === 'string' && m.id.startsWith('temp-') &&
+            m.sender === newMsg.sender &&
+            m.text === newMsg.text &&
+            Math.abs(new Date(m.timestamp) - new Date(newMsg.timestamp)) < 15000
+          );
+
+          if (optIdx !== -1) {
+            const newMsgs = [...c.messages];
+            newMsgs[optIdx] = newMsg;
+            return {
+              ...c,
+              messages: newMsgs
+            };
+          }
+
           const existsMsg = c.messages.find(m => m.id === newMsg.id);
           if (!existsMsg) {
             return {
@@ -84,7 +103,7 @@ export const CrmProvider = ({ children }) => {
       
       if (!exists) {
         // Fetch contact info for brand new contacts
-        fetchContacts().then(dbContacts => {
+        SupabaseService.fetchContacts().then(dbContacts => {
           const freshC = dbContacts.find(dc => dc.id === newMsg.contact_id);
           if (freshC) {
             setContacts(prev2 => {
@@ -152,7 +171,7 @@ export const CrmProvider = ({ children }) => {
           setContacts(prev => {
             const missing = contactIds.filter(cid => !prev.find(c => c.id === cid));
             if (missing.length > 0) {
-              fetchContacts().then(dbContacts => {
+              SupabaseService.fetchContacts().then(dbContacts => {
                 setContacts(prev2 => {
                   const toAdd = dbContacts.filter(dc => missing.includes(dc.id) && !prev2.find(c => c.id === dc.id));
                   if (toAdd.length > 0) {
@@ -247,35 +266,27 @@ export const CrmProvider = ({ children }) => {
     }));
 
     // Send to n8n Outbound Router if sender is agent
-    if (sender === 'agent' && N8N_URL) {
+    if (sender === 'agent') {
       const activeC = contacts.find(c => c.id === contactId);
       if (activeC) {
         try {
-          const response = await fetch(`${N8N_URL}/webhook/outbound`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              channel_id: CHANNEL_ID,
-              contact_id: activeC.id,
-              phone: activeC.phone,
-              content: text
-            })
-          });
+          await N8nService.sendOutboundMessage(
+            CHANNEL_ID,
+            activeC.id,
+            activeC.phone,
+            text
+          );
 
-          if (response.ok) {
-            // Mark as sent
-            setContacts(prev => prev.map(c => {
-              if (c.id === contactId) {
-                return {
-                  ...c,
-                  messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' } : m)
-                };
-              }
-              return c;
-            }));
-          } else {
-            throw new Error(`HTTP ${response.status}`);
-          }
+          // Mark as sent
+          setContacts(prev => prev.map(c => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' } : m)
+              };
+            }
+            return c;
+          }));
         } catch (e) {
           console.error("Failed sending outbound msg:", e);
           // Mark as failed
