@@ -57,6 +57,12 @@ export const CrmProvider = ({ children }) => {
       knownMsgIdsRef.current = idSet;
       setContacts(mappedContacts);
       if (mappedContacts.length > 0) setActiveContactId(mappedContacts[0].id);
+
+      // Load channels
+      const dbChannels = await SupabaseService.fetchChannels();
+      if (dbChannels && dbChannels.length > 0) {
+        setChannels(dbChannels);
+      }
     }
     loadData();
   }, []);
@@ -72,12 +78,11 @@ export const CrmProvider = ({ children }) => {
         if (c.id === newMsg.contact_id) {
           exists = true;
           
-          // Look for matching optimistic temp message to replace
+          // Look for matching optimistic temp message to replace (robust lookback without strict timestamp)
           const optIdx = c.messages.findIndex(m => 
             typeof m.id === 'string' && m.id.startsWith('temp-') &&
             m.sender === newMsg.sender &&
-            m.text === newMsg.text &&
-            Math.abs(new Date(m.timestamp) - new Date(newMsg.timestamp)) < 15000
+            m.text === newMsg.text
           );
 
           if (optIdx !== -1) {
@@ -192,9 +197,34 @@ export const CrmProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [mergeMessage]);
 
-  const addChannel = (name, provider, details) => {
-    const newChannel = { id: Date.now().toString(), name, provider, status: 'connected', ...details };
-    setChannels(prev => [...prev, newChannel]);
+  const addChannel = async (name, provider, details) => {
+    const channelData = {
+      name,
+      provider,
+      url: details.url,
+      instance: details.instance,
+      apiKey: details.apiKey,
+      phoneId: details.phoneId,
+      accessToken: details.accessToken
+    };
+
+    const newDbChannel = await SupabaseService.addChannel(channelData);
+    if (newDbChannel) {
+      const mappedChannel = {
+        id: newDbChannel.id,
+        name: newDbChannel.name,
+        provider: newDbChannel.provider === 'meta' ? 'meta_cloud' : 'evolution',
+        status: newDbChannel.status,
+        url: newDbChannel.url,
+        instance: newDbChannel.instance,
+        apiKey: newDbChannel.api_key,
+        phoneId: newDbChannel.phone_id,
+        accessToken: newDbChannel.access_token
+      };
+
+      setChannels(prev => [...prev, mappedChannel]);
+      return mappedChannel;
+    }
   };
 
   const toggleChannelStatus = (id) => {
@@ -222,10 +252,15 @@ export const CrmProvider = ({ children }) => {
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, status: newStatus } : c)));
   };
 
-  const addNoteToContact = (contactId, text) => {
+  const addNoteToContact = async (contactId, text) => {
     if (!text.trim()) return;
-    const newNote = { id: Date.now(), text, date: new Date().toISOString().replace('T', ' ').substring(0, 16) };
-    setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, notes: [newNote, ...c.notes] } : c)));
+    
+    // Save note to database
+    const success = await SupabaseService.updateContactNotes(contactId, text);
+    if (success) {
+      const newNote = { id: Date.now(), text, date: new Date().toISOString().replace('T', ' ').substring(0, 16) };
+      setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, notes: [newNote] } : c)));
+    }
   };
 
   const updateContactTags = (contactId, tags) => {

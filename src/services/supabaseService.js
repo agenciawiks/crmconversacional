@@ -106,6 +106,20 @@ class SupabaseService {
     return data?.[0];
   }
 
+  static async updateContactNotes(contactId, notesText) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ notes: notesText })
+      .eq('id', contactId)
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] updateContactNotes error:', error);
+      return false;
+    }
+    return true;
+  }
+
   static _hashCode(str) {
     let hash = 0;
     for (let i = 0; i < (str || '').length; i++) {
