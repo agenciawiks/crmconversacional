@@ -1,8 +1,11 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { fetchContacts, useRealtimeMessages } from '../hooks/useSupabase';
 
 const CrmContext = createContext();
+
+const CHANNEL_ID = '4886443e-4996-4d2a-83e1-d96f503e1a28'; // WhatsApp Oficial (Meta)
+const N8N_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
 
 const initialFlowNodes = [
   { id: '1', type: 'trigger', label: 'Mensagem Recebida', x: 80, y: 150, data: { condition: 'Qualquer palavra' } },
@@ -25,6 +28,8 @@ export const CrmProvider = ({ children }) => {
   ]);
 
   const { realtimeMessages } = useRealtimeMessages();
+  const lastPollRef = useRef(new Date().toISOString());
+  const knownMsgIdsRef = useRef(new Set());
 
   // Load Initial Data from Supabase
   useEffect(() => {
@@ -32,65 +37,141 @@ export const CrmProvider = ({ children }) => {
       const dbContacts = await fetchContacts();
       const { data: dbMessages } = await supabase.from('messages').select('*').order('timestamp', { ascending: true });
       
+      const idSet = new Set();
       const mappedContacts = dbContacts.map(c => {
-         const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id).map(m => ({
-            id: m.id,
-            sender: m.direction === 'in' ? 'client' : 'agent',
-            text: m.content,
-            time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            timestamp: new Date(m.timestamp)
-         }));
+         const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id).map(m => {
+            idSet.add(m.id);
+            return {
+              id: m.id,
+              sender: m.direction === 'in' ? 'client' : 'agent',
+              text: m.content,
+              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              timestamp: new Date(m.timestamp),
+              channel_id: m.channel_id,
+              status: m.direction === 'out' ? 'sent' : undefined
+            };
+         });
          return { ...c, messages: cMsgs };
       });
+      knownMsgIdsRef.current = idSet;
       setContacts(mappedContacts);
       if (mappedContacts.length > 0) setActiveContactId(mappedContacts[0].id);
     }
     loadData();
   }, []);
 
-  // Listen to realtime messages
-  useEffect(() => {
-     if (realtimeMessages.length > 0) {
-        const newMsg = realtimeMessages[realtimeMessages.length - 1];
-        setContacts(prev => {
-           let exists = false;
-           const updated = prev.map(c => {
-              if (c.id === newMsg.contact_id) {
-                 exists = true;
-                 const existsMsg = c.messages.find(m => m.id === newMsg.id);
-                 if (!existsMsg) {
-                    return {
-                       ...c,
-                       unread: newMsg.sender === 'client',
-                       messages: [...c.messages, newMsg]
-                    };
-                 }
-              }
-              return c;
-           });
-           
-           if (!exists) {
-              // Create new contact entry dynamically if not loaded
-              const freshContact = {
-                id: newMsg.contact_id,
-                name: newMsg.contact_id, // Fallback, would need fetch
-                email: '',
-                phone: 'Novo Contato',
-                status: 'new',
-                channel: 'whatsapp',
-                value: 0,
-                tags: ['Novo Lead'],
-                unread: true,
-                avatarColor: `hsl(200, 80%, 65%)`,
-                notes: [],
-                messages: [newMsg]
-              };
-              return [freshContact, ...updated];
-           }
-           return updated;
+  // Merge a new message into contacts state (deduplicating by id)
+  const mergeMessage = useCallback((newMsg) => {
+    if (knownMsgIdsRef.current.has(newMsg.id)) return; // Already known
+    knownMsgIdsRef.current.add(newMsg.id);
+
+    setContacts(prev => {
+      let exists = false;
+      const updated = prev.map(c => {
+        if (c.id === newMsg.contact_id) {
+          exists = true;
+          const existsMsg = c.messages.find(m => m.id === newMsg.id);
+          if (!existsMsg) {
+            return {
+              ...c,
+              unread: newMsg.sender === 'client',
+              messages: [...c.messages, newMsg]
+            };
+          }
+        }
+        return c;
+      });
+      
+      if (!exists) {
+        // Fetch contact info for brand new contacts
+        fetchContacts().then(dbContacts => {
+          const freshC = dbContacts.find(dc => dc.id === newMsg.contact_id);
+          if (freshC) {
+            setContacts(prev2 => {
+              if (prev2.find(c => c.id === freshC.id)) return prev2;
+              return [{ ...freshC, messages: [newMsg], unread: true }, ...prev2];
+            });
+          }
         });
-     }
-  }, [realtimeMessages]);
+        // For now, add a placeholder
+        const freshContact = {
+          id: newMsg.contact_id,
+          name: 'Novo Contato',
+          email: '',
+          phone: 'Carregando...',
+          status: 'new',
+          channel: 'whatsapp',
+          value: 0,
+          tags: ['Novo Lead'],
+          unread: true,
+          avatarColor: `hsl(200, 80%, 65%)`,
+          notes: [],
+          messages: [newMsg]
+        };
+        return [freshContact, ...updated];
+      }
+      return updated;
+    });
+  }, []);
+
+  // Listen to realtime messages (Supabase Realtime subscription)
+  useEffect(() => {
+    if (realtimeMessages.length > 0) {
+      const newMsg = realtimeMessages[realtimeMessages.length - 1];
+      mergeMessage(newMsg);
+    }
+  }, [realtimeMessages, mergeMessage]);
+
+  // Polling fallback: fetch new messages every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const { data: newMsgs } = await supabase
+          .from('messages')
+          .select('*')
+          .gt('created_at', lastPollRef.current)
+          .order('timestamp', { ascending: true });
+
+        if (newMsgs && newMsgs.length > 0) {
+          lastPollRef.current = new Date().toISOString();
+          for (const m of newMsgs) {
+            mergeMessage({
+              id: m.id,
+              sender: m.direction === 'in' ? 'client' : 'agent',
+              text: m.content,
+              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              timestamp: new Date(m.timestamp),
+              channel_id: m.channel_id,
+              contact_id: m.contact_id,
+              status: m.direction === 'out' ? 'sent' : undefined
+            });
+          }
+
+          // Also check for new contacts we don't have yet
+          const contactIds = [...new Set(newMsgs.map(m => m.contact_id))];
+          setContacts(prev => {
+            const missing = contactIds.filter(cid => !prev.find(c => c.id === cid));
+            if (missing.length > 0) {
+              fetchContacts().then(dbContacts => {
+                setContacts(prev2 => {
+                  const toAdd = dbContacts.filter(dc => missing.includes(dc.id) && !prev2.find(c => c.id === dc.id));
+                  if (toAdd.length > 0) {
+                    return [...toAdd.map(c => ({ ...c, unread: true })), ...prev2];
+                  }
+                  return prev2;
+                });
+              });
+            }
+            return prev;
+          });
+        }
+      } catch (e) {
+        // Silently ignore polling errors
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [mergeMessage]);
 
   const addChannel = (name, provider, details) => {
     const newChannel = { id: Date.now().toString(), name, provider, status: 'connected', ...details };
@@ -137,7 +218,6 @@ export const CrmProvider = ({ children }) => {
   };
 
   const addContact = (name, channel, initialText = 'Olá!') => {
-    // This is a UI-only mock for manual adding, you can hook it up to Supabase later
     const id = Date.now().toString();
     const hue = Math.floor(Math.random() * 360);
     const newContact = {
@@ -153,9 +233,11 @@ export const CrmProvider = ({ children }) => {
   const sendMessage = async (contactId, text, sender = 'agent') => {
     if (!text.trim()) return;
     
-    // Optimistic UI update
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newMessage = { id: Date.now().toString(), sender, text, time, timestamp: new Date() };
+    const tempId = 'temp-' + Date.now().toString();
+    
+    // Optimistic UI update with "sending" status
+    const newMessage = { id: tempId, sender, text, time, timestamp: new Date(), status: sender === 'agent' ? 'sending' : undefined };
 
     setContacts(prev => prev.map(c => {
       if (c.id === contactId) {
@@ -164,27 +246,48 @@ export const CrmProvider = ({ children }) => {
       return c;
     }));
 
-    // Send to webhook/supabase if sender is agent
-    if (sender === 'agent') {
+    // Send to n8n Outbound Router if sender is agent
+    if (sender === 'agent' && N8N_URL) {
       const activeC = contacts.find(c => c.id === contactId);
       if (activeC) {
-        // Find channel configured for this
-        const N8N_URL = import.meta.env.VITE_N8N_WEBHOOK_URL;
-        if(N8N_URL) {
-            try {
-               await fetch(`${N8N_URL}/webhook/outbound`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                     channel_id: activeC.channel_id,
-                     contact_id: activeC.id,
-                     phone: activeC.phone,
-                     content: text
-                  })
-               });
-            } catch(e) {
-               console.error("Failed sending outbound msg", e);
+        try {
+          const response = await fetch(`${N8N_URL}/webhook/outbound`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              channel_id: CHANNEL_ID,
+              contact_id: activeC.id,
+              phone: activeC.phone,
+              content: text
+            })
+          });
+
+          if (response.ok) {
+            // Mark as sent
+            setContacts(prev => prev.map(c => {
+              if (c.id === contactId) {
+                return {
+                  ...c,
+                  messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' } : m)
+                };
+              }
+              return c;
+            }));
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } catch (e) {
+          console.error("Failed sending outbound msg:", e);
+          // Mark as failed
+          setContacts(prev => prev.map(c => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+              };
             }
+            return c;
+          }));
         }
       }
     }

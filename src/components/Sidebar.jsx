@@ -114,7 +114,7 @@ export default function Sidebar() {
             fontWeight: '800',
             letterSpacing: '0.5px',
             color: 'var(--text-primary)'
-          }}>OmniCRM</span>
+          }}>CRM Wiks</span>
           <span style={{
             fontSize: '10px',
             color: 'var(--text-muted)',

@@ -1,4 +1,4 @@
-/* Supabase schema for OmniCRM */
+/* Supabase schema for CRM Wiks */
 
 -- Table: channels
 CREATE TABLE public.channels (
@@ -15,7 +15,7 @@ CREATE TABLE public.channels (
 -- Table: contacts
 CREATE TABLE public.contacts (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    phone text NOT NULL,
+    phone text NOT NULL UNIQUE,
     name text,
     tags jsonb,
     created_at timestamptz NOT NULL DEFAULT now(),

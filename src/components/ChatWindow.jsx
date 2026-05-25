@@ -235,6 +235,36 @@ export default function ChatWindow() {
                 <span>{msg.sender === 'agent' ? 'Agente' : msg.sender === 'bot' ? 'Automação Bot' : 'Cliente'}</span>
                 <span>•</span>
                 <span>{msg.time}</span>
+                {msg.sender === 'agent' && msg.status && (
+                  <span className={`msg-status msg-status-${msg.status}`}>
+                    {msg.status === 'sending' && (
+                      <span className="status-sending" title="Enviando...">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" strokeDasharray="30" strokeDashoffset="10">
+                            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+                          </circle>
+                        </svg>
+                      </span>
+                    )}
+                    {msg.status === 'sent' && (
+                      <span className="status-sent" title="Enviado">
+                        <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="2 8 7 13 14 3" />
+                          <polyline points="8 8 13 13 20 3" />
+                        </svg>
+                      </span>
+                    )}
+                    {msg.status === 'failed' && (
+                      <span className="status-failed" title="Falha ao enviar. Tente novamente.">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      </span>
+                    )}
+                  </span>
+                )}
               </div>
             </div>
           ))}
