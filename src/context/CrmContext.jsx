@@ -18,30 +18,43 @@ const initialFlowNodes = [
 ];
 
 export const CrmProvider = ({ children }) => {
-  const [activeScreen, setActiveScreen] = useState('dashboard');
+  const [activeScreen, setActiveScreen] = useState(() => {
+    return localStorage.getItem('crm_active_screen') || 'dashboard';
+  });
   const [contacts, setContacts] = useState([]);
-  const [activeContactId, setActiveContactId] = useState(null);
+  const [activeContactId, setActiveContactId] = useState(() => {
+    return localStorage.getItem('crm_active_contact_id') || null;
+  });
   const [flowNodes, setFlowNodes] = useState(initialFlowNodes);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('crm_theme') || 'dark';
+  });
   const [isBotEnabled, setIsBotEnabled] = useState(true);
   const [channels, setChannels] = useState([
     { id: '1', name: 'Whats Suporte (Evolution API)', provider: 'evolution', status: 'connected', instance: 'SuporteCorp', url: 'https://api.evolution.cloudcorp.com', apiKey: 'token_evo_suporte_xyz' },
     { id: '2', name: 'Whats Vendas (Meta Cloud API)', provider: 'meta_cloud', status: 'connected', phoneId: '1098457293847', accessToken: 'EAAd8B_meta_official_token' }
   ]);
 
-  const { realtimeMessages } = useRealtimeMessages();
   const lastPollRef = useRef(new Date().toISOString());
   const knownMsgIdsRef = useRef(new Set());
 
   // Load Initial Data from Supabase
   useEffect(() => {
     async function loadData() {
-      const dbContacts = await SupabaseService.fetchContacts();
-      const { data: dbMessages } = await supabase.from('messages').select('*').order('timestamp', { ascending: true });
-      
-      const idSet = new Set();
-      const mappedContacts = dbContacts.map(c => {
-         const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id).map(m => {
+      try {
+        const [dbContacts, { data: dbMessages }, dbChannels] = await Promise.all([
+          SupabaseService.fetchContacts(),
+          supabase.from('messages').select('*').order('timestamp', { ascending: true }),
+          SupabaseService.fetchChannels()
+        ]);
+
+        if (dbChannels && dbChannels.length > 0) {
+          setChannels(dbChannels);
+        }
+
+        const idSet = new Set();
+        const mappedContacts = dbContacts.map(c => {
+          const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id).map(m => {
             idSet.add(m.id);
             return {
               id: m.id,
@@ -50,28 +63,77 @@ export const CrmProvider = ({ children }) => {
               time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               timestamp: new Date(m.timestamp),
               channel_id: m.channel_id,
+              content_type: m.content_type,
+              media_url: m.media_url,
               status: m.direction === 'out' ? 'sent' : undefined
             };
-         });
-         return { ...c, messages: cMsgs };
-      });
-      knownMsgIdsRef.current = idSet;
-      setContacts(mappedContacts);
-      if (mappedContacts.length > 0) setActiveContactId(mappedContacts[0].id);
+          });
 
-      // Load channels
-      const dbChannels = await SupabaseService.fetchChannels();
-      if (dbChannels && dbChannels.length > 0) {
-        setChannels(dbChannels);
+          // Compute provider from last message channel_id
+          const lastMsgWithChannel = [...cMsgs].reverse().find(m => m.channel_id);
+          let provider = 'unknown';
+          if (lastMsgWithChannel) {
+            const channel = dbChannels?.find(ch => ch.id === lastMsgWithChannel.channel_id);
+            if (channel) {
+              provider = channel.provider === 'meta' || channel.provider === 'meta_cloud' ? 'meta_cloud' : 'evolution';
+            }
+          }
+
+          return { ...c, messages: cMsgs, provider };
+        });
+
+        knownMsgIdsRef.current = idSet;
+        setContacts(mappedContacts);
+        
+        if (mappedContacts.length > 0) {
+          const persistedId = localStorage.getItem('crm_active_contact_id');
+          if (persistedId && mappedContacts.some(c => c.id === persistedId)) {
+            setActiveContactId(persistedId);
+          } else {
+            setActiveContactId(mappedContacts[0].id);
+          }
+        }
+
+        // Prevent clock-skew bug by using latest database created_at timestamp
+        if (dbMessages && dbMessages.length > 0) {
+          lastPollRef.current = dbMessages[dbMessages.length - 1].created_at;
+        } else {
+          lastPollRef.current = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        }
+      } catch (e) {
+        console.error("[CrmContext] Error loading initial data:", e);
       }
     }
     loadData();
   }, []);
 
+  // Synchronize state changes to localStorage
+  useEffect(() => {
+    localStorage.setItem('crm_active_screen', activeScreen);
+  }, [activeScreen]);
+
+  useEffect(() => {
+    if (activeContactId) {
+      localStorage.setItem('crm_active_contact_id', activeContactId);
+    } else {
+      localStorage.removeItem('crm_active_contact_id');
+    }
+  }, [activeContactId]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_theme', theme);
+  }, [theme]);
+
   // Merge a new message into contacts state (deduplicating by id)
   const mergeMessage = useCallback((newMsg) => {
     if (knownMsgIdsRef.current.has(newMsg.id)) return; // Already known
     knownMsgIdsRef.current.add(newMsg.id);
+
+    // Resolve provider for the incoming message
+    const channel = channels.find(ch => ch.id === newMsg.channel_id);
+    const resolvedProvider = channel 
+      ? (channel.provider === 'meta' || channel.provider === 'meta_cloud' ? 'meta_cloud' : 'evolution')
+      : 'unknown';
 
     setContacts(prev => {
       let exists = false;
@@ -79,7 +141,7 @@ export const CrmProvider = ({ children }) => {
         if (c.id === newMsg.contact_id) {
           exists = true;
           
-          // Look for matching optimistic temp message to replace (robust lookback without strict timestamp)
+          // Look for matching optimistic temp message to replace
           const optIdx = c.messages.findIndex(m => 
             typeof m.id === 'string' && m.id.startsWith('temp-') &&
             m.sender === newMsg.sender &&
@@ -91,7 +153,8 @@ export const CrmProvider = ({ children }) => {
             newMsgs[optIdx] = newMsg;
             return {
               ...c,
-              messages: newMsgs
+              messages: newMsgs,
+              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider
             };
           }
 
@@ -100,7 +163,8 @@ export const CrmProvider = ({ children }) => {
             return {
               ...c,
               unread: newMsg.sender === 'client',
-              messages: [...c.messages, newMsg]
+              messages: [...c.messages, newMsg],
+              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider
             };
           }
         }
@@ -113,8 +177,14 @@ export const CrmProvider = ({ children }) => {
           const freshC = dbContacts.find(dc => dc.id === newMsg.contact_id);
           if (freshC) {
             setContacts(prev2 => {
-              if (prev2.find(c => c.id === freshC.id)) return prev2;
-              return [{ ...freshC, messages: [newMsg], unread: true }, ...prev2];
+              const existing = prev2.find(c => c.id === freshC.id);
+              if (existing) {
+                if (existing.name === 'Novo Contato') {
+                   return prev2.map(c => c.id === freshC.id ? { ...freshC, messages: c.messages, provider: resolvedProvider, unread: true } : c);
+                }
+                return prev2;
+              }
+              return [{ ...freshC, messages: [newMsg], provider: resolvedProvider, unread: true }, ...prev2];
             });
           }
         });
@@ -131,23 +201,52 @@ export const CrmProvider = ({ children }) => {
           unread: true,
           avatarColor: `hsl(200, 80%, 65%)`,
           notes: [],
-          messages: [newMsg]
+          messages: [newMsg],
+          provider: resolvedProvider
         };
         return [freshContact, ...updated];
       }
       return updated;
     });
-  }, []);
+  }, [channels]);
 
-  // Listen to realtime messages (Supabase Realtime subscription)
+  // Robust direct realtime subscription (bypasses hook state-array batching)
   useEffect(() => {
-    if (realtimeMessages.length > 0) {
-      const newMsg = realtimeMessages[realtimeMessages.length - 1];
-      mergeMessage(newMsg);
-    }
-  }, [realtimeMessages, mergeMessage]);
+    if (!supabase) return;
 
-  // Polling fallback: fetch new messages every 5 seconds
+    const channel = supabase
+      .channel('public:messages:direct')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const newMsg = payload.new;
+          console.log('[Supabase Realtime] Direct message insert received:', newMsg);
+          
+          mergeMessage({
+            id: newMsg.id,
+            sender: newMsg.direction === 'in' ? 'client' : 'agent',
+            text: newMsg.content,
+            time: new Date(newMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: new Date(newMsg.timestamp),
+            channel_id: newMsg.channel_id,
+            contact_id: newMsg.contact_id,
+            content_type: newMsg.content_type,
+            media_url: newMsg.media_url,
+            status: newMsg.status
+          });
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Supabase Realtime] Direct channel status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [mergeMessage]);
+
+  // Polling fallback: fetch new messages every 5 seconds (uses DB created_at to avoid clock skew)
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -158,7 +257,9 @@ export const CrmProvider = ({ children }) => {
           .order('timestamp', { ascending: true });
 
         if (newMsgs && newMsgs.length > 0) {
-          lastPollRef.current = new Date().toISOString();
+          // Update lastPollRef to the database-generated timestamp of the last message
+          lastPollRef.current = newMsgs[newMsgs.length - 1].created_at;
+
           for (const m of newMsgs) {
             mergeMessage({
               id: m.id,
@@ -168,6 +269,8 @@ export const CrmProvider = ({ children }) => {
               timestamp: new Date(m.timestamp),
               channel_id: m.channel_id,
               contact_id: m.contact_id,
+              content_type: m.content_type,
+              media_url: m.media_url,
               status: m.direction === 'out' ? 'sent' : undefined
             });
           }
@@ -350,7 +453,18 @@ export const CrmProvider = ({ children }) => {
     }
   };
 
-  const activeContact = contacts.find(c => c.id === activeContactId) || contacts[0];
+  // Sort contacts by the most recent message timestamp descending (WhatsApp-like order)
+  const sortedContacts = [...contacts].sort((a, b) => {
+    const lastMsgA = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
+    const lastMsgB = b.messages && b.messages.length > 0 ? b.messages[b.messages.length - 1] : null;
+    
+    const timeA = lastMsgA ? new Date(lastMsgA.timestamp).getTime() : 0;
+    const timeB = lastMsgB ? new Date(lastMsgB.timestamp).getTime() : 0;
+    
+    return timeB - timeA;
+  });
+
+  const activeContact = sortedContacts.find(c => c.id === activeContactId) || sortedContacts[0];
 
   const updateNodePosition = (id, dx, dy) => setFlowNodes(prev => prev.map(n => (n.id === id ? { ...n, x: n.x + dx, y: n.y + dy } : n)));
   const updateNodeData = (id, field, value) => setFlowNodes(prev => prev.map(n => (n.id === id ? { ...n, data: { ...n.data, [field]: value } } : n)));
@@ -369,7 +483,7 @@ export const CrmProvider = ({ children }) => {
 
   return (
     <CrmContext.Provider value={{
-      activeScreen, setActiveScreen, contacts, activeContactId, setActiveContactId, activeContact,
+      activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
       updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel
