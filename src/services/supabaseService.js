@@ -23,7 +23,16 @@ class SupabaseService {
       tags: c.tags || [],
       unread: false,
       avatarColor: `hsl(${Math.abs(this._hashCode(c.phone)) % 360}, 75%, 60%)`,
-      notes: c.notes ? [{ id: 1, text: c.notes, date: c.updated_at }] : [],
+      notes: (function() {
+        if (!c.notes) return [];
+        try {
+          const parsed = JSON.parse(c.notes);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {
+          // not json, fallback
+        }
+        return [{ id: 1, text: c.notes, date: c.updated_at }];
+      })(),
       messages: []
     }));
   }

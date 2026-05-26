@@ -6,7 +6,8 @@ import N8nService from '../services/n8nService';
 
 const CrmContext = createContext();
 
-const CHANNEL_ID = '4886443e-4996-4d2a-83e1-d96f503e1a28'; // WhatsApp Oficial (Meta)
+const META_CHANNEL_ID = '4886443e-4996-4d2a-83e1-d96f503e1a28';
+const EVO_CHANNEL_ID = '50df1e49-8f4c-4f90-b3c5-e9b95e37d8ed';
 
 const initialFlowNodes = [
   { id: '1', type: 'trigger', label: 'Mensagem Recebida', x: 80, y: 150, data: { condition: 'Qualquer palavra' } },
@@ -255,12 +256,18 @@ export const CrmProvider = ({ children }) => {
   const addNoteToContact = async (contactId, text) => {
     if (!text.trim()) return;
     
-    // Save note to database
-    const success = await SupabaseService.updateContactNotes(contactId, text);
-    if (success) {
+    setContacts(prev => {
+      const contact = prev.find(c => c.id === contactId);
+      if (!contact) return prev;
+      
       const newNote = { id: Date.now(), text, date: new Date().toISOString().replace('T', ' ').substring(0, 16) };
-      setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, notes: [newNote] } : c)));
-    }
+      const updatedNotes = [...contact.notes, newNote];
+      
+      // Save note to database asynchronously
+      SupabaseService.updateContactNotes(contactId, JSON.stringify(updatedNotes));
+      
+      return prev.map(c => (c.id === contactId ? { ...c, notes: updatedNotes } : c));
+    });
   };
 
   const updateContactTags = (contactId, tags) => {
@@ -305,8 +312,12 @@ export const CrmProvider = ({ children }) => {
       const activeC = contacts.find(c => c.id === contactId);
       if (activeC) {
         try {
+          // Determine channel from the contact's most recent message, or default to Meta
+          const lastMsg = activeC.messages?.findLast(m => m.channel_id);
+          const channelId = lastMsg?.channel_id || META_CHANNEL_ID;
+
           await N8nService.sendOutboundMessage(
-            CHANNEL_ID,
+            channelId,
             activeC.id,
             activeC.phone,
             text
