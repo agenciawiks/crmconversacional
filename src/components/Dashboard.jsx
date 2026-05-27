@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useCrm } from '../context/CrmContext';
 
 export default function Dashboard() {
@@ -9,6 +9,18 @@ export default function Dashboard() {
   const newLeads = contacts.filter(c => c.status === 'new').length;
   const proposalLeads = contacts.filter(c => c.status === 'proposal').length;
   const wonLeadsTotal = contacts.filter(c => c.status === 'won').reduce((sum, c) => sum + c.value, 0);
+  const proposalContacts = contacts.filter(c => c.status === 'proposal');
+  const wonCount = contacts.filter(c => c.status === 'won').length;
+
+  // Render a 3-column animated chart, so we need max value for scale
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  useEffect(() => {
+    // Trigger the rising animation on mount
+    setIsAnimating(true);
+  }, []);
+
+  const maxFunnelCount = Math.max(newLeads, proposalLeads, wonCount, 1);
 
   const kpis = [
     {
@@ -169,95 +181,41 @@ export default function Dashboard() {
 
       {/* DYNAMIC CHARTS & TIMELINE SECTION */}
       <div className="charts-grid">
-        {/* SVG Sales & Leads Growth Chart */}
-        <div className="glass-panel chart-card">
+        {/* Animated 3-Column Funnel Chart */}
+        <div className="glass-panel chart-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: '340px' }}>
           <div>
-            <span className="chart-title">Desempenho Comercial</span>
-            <span className="chart-subtitle">Evolução do valor total em negociações e leads gerados</span>
-          </div>
-
-          <div className="svg-chart-container">
-            {/* Custom High-Fidelity SVG Line Graph */}
-            <svg width="100%" height="100%" viewBox="0 0 600 240" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="gradient-area" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="var(--accent-primary)" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="gradient-secondary" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--accent-secondary)" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="var(--accent-secondary)" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {/* Grid Horizontal Guidelines */}
-              <line x1="50" y1="40" x2="560" y2="40" stroke="var(--border-glass)" strokeWidth="1" />
-              <line x1="50" y1="100" x2="560" y2="100" stroke="var(--border-glass)" strokeWidth="1" />
-              <line x1="50" y1="160" x2="560" y2="160" stroke="var(--border-glass)" strokeWidth="1" />
-              <line x1="50" y1="220" x2="560" y2="220" stroke="var(--border-glass)" strokeWidth="2" />
-
-              {/* Y Axis Labels */}
-              <text x="15" y="45" fill="var(--text-muted)" fontSize="10" fontFamily="var(--font-sans)">R$ 20k</text>
-              <text x="15" y="105" fill="var(--text-muted)" fontSize="10" fontFamily="var(--font-sans)">R$ 10k</text>
-              <text x="15" y="165" fill="var(--text-muted)" fontSize="10" fontFamily="var(--font-sans)">R$ 5k</text>
-              <text x="15" y="225" fill="var(--text-muted)" fontSize="10" fontFamily="var(--font-sans)">R$ 0</text>
-
-              {/* Fill Area Chart */}
-              <path
-                d="M 50 220 L 120 180 L 200 130 L 290 145 L 380 90 L 470 120 L 560 50 L 560 220 Z"
-                fill="url(#gradient-area)"
-              />
-              <path
-                d="M 50 220 L 120 200 L 200 170 L 290 190 L 380 140 L 470 160 L 560 110 L 560 220 Z"
-                fill="url(#gradient-secondary)"
-              />
-
-              {/* Grid Lines Chart paths */}
-              <path
-                d="M 50 220 L 120 180 L 200 130 L 290 145 L 380 90 L 470 120 L 560 50"
-                fill="none"
-                stroke="var(--accent-primary)"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M 50 220 L 120 200 L 200 170 L 290 190 L 380 140 L 470 160 L 560 110"
-                fill="none"
-                stroke="var(--accent-secondary)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              {/* Interactive nodes circles markers */}
-              <circle cx="120" cy="180" r="4" fill="#fff" stroke="var(--accent-primary)" strokeWidth="2.5" />
-              <circle cx="200" cy="130" r="4" fill="#fff" stroke="var(--accent-primary)" strokeWidth="2.5" />
-              <circle cx="290" cy="145" r="4" fill="#fff" stroke="var(--accent-primary)" strokeWidth="2.5" />
-              <circle cx="380" cy="90" r="4" fill="#fff" stroke="var(--accent-primary)" strokeWidth="2.5" />
-              <circle cx="470" cy="120" r="4" fill="#fff" stroke="var(--accent-primary)" strokeWidth="2.5" />
-              <circle cx="560" cy="50" r="5" fill="var(--accent-primary)" stroke="#fff" strokeWidth="2" />
-
-              <circle cx="560" cy="110" r="4" fill="var(--accent-secondary)" stroke="#fff" strokeWidth="2" />
-
-              {/* X Axis labels */}
-              <text x="110" y="235" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-sans)">Seg</text>
-              <text x="190" y="235" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-sans)">Ter</text>
-              <text x="280" y="235" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-sans)">Qua</text>
-              <text x="370" y="235" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-sans)">Qui</text>
-              <text x="460" y="235" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-sans)">Sex</text>
-              <text x="550" y="235" fill="var(--text-muted)" fontSize="9" fontFamily="var(--font-sans)">Hoje</text>
-            </svg>
-          </div>
-          
-          <div style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-primary)' }}></div>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Faturamento Ganho (Won)</span>
+            <span className="chart-title" style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>Funil de Vendas</span>
+            <div className="chart-subtitle" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              Acompanhamento em tempo real das etapas de conversão
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-secondary)' }}></div>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Leads em Negociação (Pipeline)</span>
+          </div>
+
+          <div className="funnel-chart-container">
+            <div className="funnel-column-wrapper">
+              <div className="funnel-value">{newLeads}</div>
+              <div 
+                className={`funnel-column funnel-col-new ${isAnimating ? 'animate-rise' : ''}`}
+                style={{ height: `${Math.max((newLeads / maxFunnelCount) * 100, 10)}%`, animationDelay: '0s' }}
+              ></div>
+              <div className="funnel-label">Novos Leads</div>
+            </div>
+            
+            <div className="funnel-column-wrapper">
+              <div className="funnel-value">{proposalLeads}</div>
+              <div 
+                className={`funnel-column funnel-col-progress ${isAnimating ? 'animate-rise' : ''}`}
+                style={{ height: `${Math.max((proposalLeads / maxFunnelCount) * 100, 10)}%`, animationDelay: '0.2s' }}
+              ></div>
+              <div className="funnel-label">Em Atendimento</div>
+            </div>
+
+            <div className="funnel-column-wrapper">
+              <div className="funnel-value">{wonCount}</div>
+              <div 
+                className={`funnel-column funnel-col-won ${isAnimating ? 'animate-rise' : ''}`}
+                style={{ height: `${Math.max((wonCount / maxFunnelCount) * 100, 10)}%`, animationDelay: '0.4s' }}
+              ></div>
+              <div className="funnel-label">Vendas Fechadas</div>
             </div>
           </div>
         </div>
@@ -286,41 +244,107 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* QUICK CHATS SHORTCUT ROW */}
-      <div className="glass-panel" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>Clientes Aguardando Resposta</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {contacts.filter(c => c.unread).slice(0, 3).map(contact => (
-            <div key={contact.id} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 16px',
-              background: 'var(--bg-surface-hover)',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-glass)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className="avatar" style={{ background: contact.avatarColor }}>
-                  {contact.name.substring(0, 2).toUpperCase()}
+      {/* LOWER GRID: PROPOSAL LEADS TABLE & QUICK CHATS */}
+      <div className="dashboard-footer-grid" style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '24px', marginTop: '24px' }}>
+        {/* LEADS IN PROPOSAL STAGE TABLE */}
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: '700' }}>🔥 Negociações em Proposta</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Leads quentes na fase decisiva do funil</p>
+            </div>
+            <span className="tag status-proposal" style={{ background: 'rgba(217, 70, 239, 0.15)', color: 'var(--color-status-proposal)', fontWeight: '700', border: '1px solid rgba(217, 70, 239, 0.3)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
+              {proposalContacts.length} ativos
+            </span>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                  <th style={{ padding: '12px 8px', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Lead</th>
+                  <th style={{ padding: '12px 8px', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Canal</th>
+                  <th style={{ padding: '12px 8px', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Valor</th>
+                  <th style={{ padding: '12px 8px', fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', textAlign: 'right' }}>Ação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposalContacts.map(contact => (
+                  <tr key={contact.id} className="proposal-table-row" style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                    <td style={{ padding: '14px 8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div className="avatar" style={{ background: contact.avatarColor, width: '28px', height: '28px', fontSize: '11px' }}>
+                        {contact.name.substring(0, 2).toUpperCase()}
+                      </div>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{contact.name}</span>
+                    </td>
+                    <td style={{ padding: '14px 8px' }}>
+                      <span className={`kanban-card-channel-icon ${contact.channel}`} style={{ width: '20px', height: '20px', fontSize: '9px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', color: '#fff' }}>
+                        {contact.channel === 'whatsapp' && 'W'}
+                        {contact.channel === 'telegram' && 'I'}
+                        {contact.channel === 'webchat' && 'T'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 8px', fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)' }}>
+                      {contact.value > 0 ? `R$ ${contact.value.toLocaleString('pt-BR')}` : 'R$ ---'}
+                    </td>
+                    <td style={{ padding: '14px 8px', textAlign: 'right' }}>
+                      <button onClick={() => handleStartChat(contact.id)} className="glass-btn" style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(7, 167, 225, 0.1)', color: 'var(--accent-primary)', border: '1px solid rgba(7, 167, 225, 0.2)', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: 'none' }}>
+                        Negociar ➔
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {proposalContacts.length === 0 && (
+                  <tr>
+                    <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      Nenhum lead na fase de proposta no momento. 💼
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* QUICK CHATS SHORTCUT ROW */}
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '18px', fontWeight: '700' }}>⚡ Respostas Pendentes</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Clientes aguardando atendimento humano</p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, justifyContent: 'center' }}>
+            {contacts.filter(c => c.unread).slice(0, 3).map(contact => (
+              <div key={contact.id} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '12px',
+                background: 'var(--bg-surface-hover)',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--border-glass)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <div className="avatar" style={{ background: contact.avatarColor, width: '28px', height: '28px', fontSize: '11px', flexShrink: 0 }}>
+                    {contact.name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontWeight: '600', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {contact.messages[contact.messages.length - 1]?.text}
+                    </span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontWeight: '600', fontSize: '14px' }}>{contact.name}</span>
-                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Última msg: "{contact.messages[contact.messages.length - 1]?.text}"
-                  </span>
-                </div>
+                <button onClick={() => handleStartChat(contact.id)} className="glass-btn" style={{ padding: '6px 10px', fontSize: '11px', height: '28px', flexShrink: 0 }}>
+                  Responder
+                </button>
               </div>
-              <button onClick={() => handleStartChat(contact.id)} className="glass-btn" style={{ padding: '8px 12px', fontSize: '12px' }}>
-                Responder
-              </button>
-            </div>
-          ))}
-          {contacts.filter(c => c.unread).length === 0 && (
-            <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '12px' }}>
-              Nenhuma mensagem pendente de atendimento humano. 🎉
-            </div>
-          )}
+            ))}
+            {contacts.filter(c => c.unread).length === 0 && (
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '12px' }}>
+                Nenhuma mensagem pendente. 🎉
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

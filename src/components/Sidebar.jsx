@@ -93,19 +93,28 @@ export default function Sidebar() {
         borderBottom: '1px solid var(--border-glass)'
       }}>
         <div style={{
-          width: '36px',
-          height: '36px',
+          width: '38px',
+          height: '38px',
           borderRadius: 'var(--radius-md)',
-          background: 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)',
+          background: '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#fff',
-          boxShadow: '0 4px 12px var(--accent-glow)'
+          overflow: 'hidden',
+          padding: '4px',
+          boxShadow: '0 4px 12px var(--accent-glow)',
+          border: '1px solid var(--border-glass)'
         }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          </svg>
+          <img 
+            src="/logo.jpg" 
+            alt="Wiks Logo" 
+            style={{ 
+              width: '100%', 
+              height: '100%', 
+              objectFit: 'contain',
+              borderRadius: '6px'
+            }} 
+          />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{
@@ -144,23 +153,31 @@ export default function Sidebar() {
                 alignItems: 'center',
                 gap: '12px',
                 width: '100%',
-                padding: '12px 16px',
-                background: isActive ? 'var(--bg-surface-hover)' : 'transparent',
-                border: isActive ? '1px solid var(--border-glass)' : '1px solid transparent',
+                padding: '10px 14px',
+                background: isActive ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(6, 182, 212, 0.02) 100%)' : 'transparent',
+                border: isActive ? '1px solid rgba(168, 85, 247, 0.2)' : '1px solid transparent',
                 borderRadius: 'var(--radius-md)',
-                color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
                 cursor: 'pointer',
                 fontFamily: 'var(--font-sans)',
                 fontSize: '14px',
                 fontWeight: isActive ? '600' : '500',
                 transition: 'all var(--transition-fast)',
-                textAlign: 'left'
+                textAlign: 'left',
+                boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
               }}
             >
               <span style={{
-                color: isActive ? 'var(--accent-primary)' : 'var(--text-muted)',
+                color: isActive ? '#fff' : 'var(--text-muted)',
+                background: isActive ? 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)' : 'rgba(255,255,255,0.02)',
+                padding: '6px',
+                borderRadius: '8px',
                 display: 'flex',
-                alignItems: 'center'
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: isActive ? '0 4px 8px rgba(168, 85, 247, 0.25)' : 'none',
+                transition: 'all var(--transition-fast)',
+                border: isActive ? 'none' : '1px solid var(--border-glass)'
               }}>
                 {item.icon}
               </span>

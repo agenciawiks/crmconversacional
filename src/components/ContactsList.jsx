@@ -82,8 +82,8 @@ export default function ContactsList() {
               onChange={(e) => setNewLeadChannel(e.target.value)}
             >
               <option value="whatsapp">WhatsApp</option>
-              <option value="telegram">Telegram</option>
-              <option value="webchat">Webchat Web</option>
+              <option value="telegram">Instagram</option>
+              <option value="webchat">Tiktok</option>
             </select>
           </div>
 
@@ -163,13 +163,17 @@ export default function ContactsList() {
                   <span className="contact-channel-icon-label">
                     <span className={`kanban-card-channel-icon ${contact.channel}`}>
                       {contact.channel === 'whatsapp' && 'W'}
-                      {contact.channel === 'telegram' && 'T'}
-                      {contact.channel === 'webchat' && 'C'}
+                      {contact.channel === 'telegram' && 'I'}
+                      {contact.channel === 'webchat' && 'T'}
                     </span>
                     <span style={{ fontSize: '13px' }}>
                       {contact.channel === 'whatsapp' ? (
                         contact.provider === 'meta_cloud' ? 'Whats (Oficial)' :
                         contact.provider === 'evolution' ? 'Whats (Evolution)' : 'WhatsApp'
+                      ) : contact.channel === 'telegram' ? (
+                        'Instagram'
+                      ) : contact.channel === 'webchat' ? (
+                        'Tiktok'
                       ) : (
                         contact.channel.charAt(0).toUpperCase() + contact.channel.slice(1)
                       )}

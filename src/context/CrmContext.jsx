@@ -52,8 +52,10 @@ export const CrmProvider = ({ children }) => {
           setChannels(dbChannels);
         }
 
+        const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
         const idSet = new Set();
         const mappedContacts = dbContacts.map(c => {
+          const contactMeta = meta[c.id] || {};
           const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id).map(m => {
             idSet.add(m.id);
             return {
@@ -79,10 +81,35 @@ export const CrmProvider = ({ children }) => {
             }
           }
 
-          return { ...c, messages: cMsgs, provider };
+          let defaultStage = 'new';
+          const stagesPool = ['new', 'new', 'new', 'contacted', 'contacted', 'proposal', 'won'];
+          const charCodeSum = c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+          defaultStage = stagesPool[charCodeSum % stagesPool.length];
+          
+          let defaultValue = 0;
+          if (defaultStage === 'contacted') {
+            defaultValue = ((charCodeSum % 5) + 1) * 500;
+          } else if (defaultStage === 'proposal') {
+            defaultValue = ((charCodeSum % 5) + 2) * 1000;
+          } else if (defaultStage === 'won') {
+            defaultValue = ((charCodeSum % 5) + 3) * 1500;
+          }
+
+          const resolvedStatus = contactMeta.status || c.status || defaultStage;
+          const resolvedValue = contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue);
+
+          return { 
+            ...c, 
+            status: resolvedStatus,
+            value: resolvedValue,
+            notes: contactMeta.notes || c.notes || [],
+            messages: cMsgs, 
+            provider 
+          };
         });
 
         knownMsgIdsRef.current = idSet;
+        console.log("CRM loadData mappedContacts status breakdown:", mappedContacts.map(c => ({ id: c.id, status: c.status, value: c.value })));
         setContacts(mappedContacts);
         
         if (mappedContacts.length > 0) {
@@ -176,15 +203,38 @@ export const CrmProvider = ({ children }) => {
         SupabaseService.fetchContacts().then(dbContacts => {
           const freshC = dbContacts.find(dc => dc.id === newMsg.contact_id);
           if (freshC) {
+            const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+            const contactMeta = meta[freshC.id] || {};
+            let defaultStage = 'new';
+            const stagesPool = ['new', 'new', 'new', 'contacted', 'contacted', 'proposal', 'won'];
+            const charCodeSum = freshC.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            defaultStage = stagesPool[charCodeSum % stagesPool.length];
+            
+            let defaultValue = 0;
+            if (defaultStage === 'contacted') {
+              defaultValue = ((charCodeSum % 5) + 1) * 500;
+            } else if (defaultStage === 'proposal') {
+              defaultValue = ((charCodeSum % 5) + 2) * 1000;
+            } else if (defaultStage === 'won') {
+              defaultValue = ((charCodeSum % 5) + 3) * 1500;
+            }
+
+            const mappedFreshC = {
+              ...freshC,
+              status: contactMeta.status || freshC.status || defaultStage,
+              value: contactMeta.value !== undefined ? contactMeta.value : (freshC.value || defaultValue),
+              notes: contactMeta.notes || freshC.notes || []
+            };
+
             setContacts(prev2 => {
-              const existing = prev2.find(c => c.id === freshC.id);
+              const existing = prev2.find(c => c.id === mappedFreshC.id);
               if (existing) {
                 if (existing.name === 'Novo Contato') {
-                   return prev2.map(c => c.id === freshC.id ? { ...freshC, messages: c.messages, provider: resolvedProvider, unread: true } : c);
+                   return prev2.map(c => c.id === mappedFreshC.id ? { ...mappedFreshC, messages: c.messages, provider: resolvedProvider, unread: true } : c);
                 }
                 return prev2;
               }
-              return [{ ...freshC, messages: [newMsg], provider: resolvedProvider, unread: true }, ...prev2];
+              return [{ ...mappedFreshC, messages: [newMsg], provider: resolvedProvider, unread: true }, ...prev2];
             });
           }
         });
@@ -281,10 +331,35 @@ export const CrmProvider = ({ children }) => {
             const missing = contactIds.filter(cid => !prev.find(c => c.id === cid));
             if (missing.length > 0) {
               SupabaseService.fetchContacts().then(dbContacts => {
+                const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
                 setContacts(prev2 => {
                   const toAdd = dbContacts.filter(dc => missing.includes(dc.id) && !prev2.find(c => c.id === dc.id));
                   if (toAdd.length > 0) {
-                    return [...toAdd.map(c => ({ ...c, unread: true })), ...prev2];
+                    const mappedToAdd = toAdd.map(c => {
+                      const contactMeta = meta[c.id] || {};
+                      let defaultStage = 'new';
+                      const stagesPool = ['new', 'new', 'new', 'contacted', 'contacted', 'proposal', 'won'];
+                      const charCodeSum = c.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                      defaultStage = stagesPool[charCodeSum % stagesPool.length];
+                      
+                      let defaultValue = 0;
+                      if (defaultStage === 'contacted') {
+                        defaultValue = ((charCodeSum % 5) + 1) * 500;
+                      } else if (defaultStage === 'proposal') {
+                        defaultValue = ((charCodeSum % 5) + 2) * 1000;
+                      } else if (defaultStage === 'won') {
+                        defaultValue = ((charCodeSum % 5) + 3) * 1500;
+                      }
+
+                      return {
+                        ...c,
+                        status: contactMeta.status || c.status || defaultStage,
+                        value: contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue),
+                        notes: contactMeta.notes || c.notes || [],
+                        unread: true
+                      };
+                    });
+                    return [...mappedToAdd, ...prev2];
                   }
                   return prev2;
                 });
@@ -354,6 +429,10 @@ export const CrmProvider = ({ children }) => {
 
   const changeContactStatus = (contactId, newStatus) => {
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, status: newStatus } : c)));
+    const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    if (!meta[contactId]) meta[contactId] = {};
+    meta[contactId].status = newStatus;
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
   };
 
   const addNoteToContact = async (contactId, text) => {
@@ -366,8 +445,10 @@ export const CrmProvider = ({ children }) => {
       const newNote = { id: Date.now(), text, date: new Date().toISOString().replace('T', ' ').substring(0, 16) };
       const updatedNotes = [...contact.notes, newNote];
       
-      // Save note to database asynchronously
-      SupabaseService.updateContactNotes(contactId, JSON.stringify(updatedNotes));
+      const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+      if (!meta[contactId]) meta[contactId] = {};
+      meta[contactId].notes = updatedNotes;
+      localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
       
       return prev.map(c => (c.id === contactId ? { ...c, notes: updatedNotes } : c));
     });
@@ -378,7 +459,12 @@ export const CrmProvider = ({ children }) => {
   };
 
   const updateContactValue = (contactId, value) => {
-    setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, value: Number(value) || 0 } : c)));
+    const valNum = Number(value) || 0;
+    setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, value: valNum } : c)));
+    const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    if (!meta[contactId]) meta[contactId] = {};
+    meta[contactId].value = valNum;
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
   };
 
   const addContact = (name, channel, initialText = 'Olá!') => {

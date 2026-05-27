@@ -82,7 +82,52 @@ async function fixAll() {
   let r = await apiCall("PUT","/workflows/88zOQbdJAT7DOaET", {
     name:"WhatsApp Meta Official – Inbound Webhook",
     nodes: [
-      {parameters:{httpMethod:"POST",path:"webhook/meta",responseMode:"onReceived",options:{}},id:"1d6629ba-7d5d-4e0e-b942-c0d0b82fe845",name:"Meta Webhook Trigger",type:"n8n-nodes-base.webhook",typeVersion:1,position:[240,300]},
+      {
+        parameters: {
+          httpMethod: "GET",
+          path: "webhook/meta",
+          responseMode: "responseNode",
+          options: {}
+        },
+        id: "meta-get-webhook-trigger",
+        name: "Meta GET Webhook Trigger",
+        type: "n8n-nodes-base.webhook",
+        typeVersion: 1,
+        position: [240, 100],
+        webhookId: "3718acc1-dff3-4f27-b56d-73b35b67d1a6"
+      },
+      {
+        parameters: {
+          jsCode: `const query = $input.first().json.query || {};\nif (query['hub.verify_token'] === 'MetaToken2026') {\n  return [{ json: { challenge: query['hub.challenge'] } }];\n} else {\n  return [{ json: { challenge: 'Invalid token' } }];\n}`
+        },
+        id: "meta-get-challenge-response",
+        name: "Meta GET Challenge Response",
+        type: "n8n-nodes-base.code",
+        typeVersion: 2,
+        position: [480, 100]
+      },
+      {
+        parameters: {
+          respondWith: "text",
+          responseBody: "={{ $json.challenge }}",
+          options: {
+            responseHeaders: {
+              entries: [
+                {
+                  name: "Content-Type",
+                  value: "text/plain"
+                }
+              ]
+            }
+          }
+        },
+        id: "meta-respond-to-webhook",
+        name: "Respond to Webhook",
+        type: "n8n-nodes-base.respondToWebhook",
+        typeVersion: 1,
+        position: [700, 100]
+      },
+      {parameters:{httpMethod:"POST",path:"webhook/meta",responseMode:"onReceived",options:{}},id:"1d6629ba-7d5d-4e0e-b942-c0d0b82fe845",name:"Meta Webhook Trigger",type:"n8n-nodes-base.webhook",typeVersion:1,position:[240,300],webhookId:"3718acc1-dff3-4f27-b56d-73b35b67d1a5"},
       {parameters:{jsCode:metaParseCode},id:"261d6387-b099-4a21-a289-76b8c758aaa8",name:"Parse Meta Payload",type:"n8n-nodes-base.code",typeVersion:2,position:[480,300]},
       // IF: event_type equals "message.received" -> TRUE=process, FALSE=skip
       makeIfEquals("d9c2d088-ac0d-42ce-b58e-ab11dc919585","Has Message?",[700,300],"={{ $json.event_type }}","message.received"),
@@ -90,12 +135,21 @@ async function fixAll() {
       {parameters:{method:"POST",url:`${supabaseUrl}/rest/v1/messages`,sendHeaders:true,headerParameters:{parameters:[{name:"apikey",value:serviceKey},{name:"Authorization",value:`Bearer ${serviceKey}`},{name:"Content-Type",value:"application/json"},{name:"Prefer",value:"return=representation"}]},sendBody:true,bodyParameters:{parameters:[{name:"channel_id",value:metaChannelId},{name:"contact_id",value:"={{ $json.id }}"},{name:"direction",value:"in"},{name:"content",value:`={{ $('Parse Meta Payload').item.json.content }}`},{name:"content_type",value:`={{ $('Parse Meta Payload').item.json.content_type }}`},{name:"media_url",value:`={{ $('Parse Meta Payload').item.json.media_url }}`},{name:"whatsapp_msg_id",value:`={{ $('Parse Meta Payload').item.json.whatsapp_msg_id }}`},{name:"timestamp",value:`={{ $('Parse Meta Payload').item.json.timestamp }}`}]},options:{}},id:"768d3699-117b-4346-bfb1-5fd614054dbf",name:"Insert Message to Supabase",type:"n8n-nodes-base.httpRequest",typeVersion:3,position:[1160,200]},
       {parameters:{method:"POST",url:`${supabaseUrl}/rest/v1/webhook_logs`,sendHeaders:true,headerParameters:{parameters:[{name:"apikey",value:serviceKey},{name:"Authorization",value:`Bearer ${serviceKey}`},{name:"Content-Type",value:"application/json"}]},sendBody:true,bodyParameters:{parameters:[{name:"channel_id",value:metaChannelId},{name:"event_type",value:"message.received"},{name:"source",value:"meta"},{name:"status",value:"processed"}]},options:{}},id:"e682408c-9bf6-41f9-87a7-5436642d4ec5",name:"Log Webhook Event",type:"n8n-nodes-base.httpRequest",typeVersion:3,position:[1400,200]}
     ],
-    connections:{"Meta Webhook Trigger":{main:[[{node:"Parse Meta Payload",type:"main",index:0}]]},"Parse Meta Payload":{main:[[{node:"Has Message?",type:"main",index:0}]]},"Has Message?":{main:[[{node:"Upsert Contact",type:"main",index:0}],[]]},"Upsert Contact":{main:[[{node:"Insert Message to Supabase",type:"main",index:0}]]},"Insert Message to Supabase":{main:[[{node:"Log Webhook Event",type:"main",index:0}]]}},
+    connections:{
+      "Meta GET Webhook Trigger":{main:[[{node:"Meta GET Challenge Response",type:"main",index:0}]]},
+      "Meta GET Challenge Response":{main:[[{node:"Respond to Webhook",type:"main",index:0}]]},
+      "Meta Webhook Trigger":{main:[[{node:"Parse Meta Payload",type:"main",index:0}]]},
+      "Parse Meta Payload":{main:[[{node:"Has Message?",type:"main",index:0}]]},
+      "Has Message?":{main:[[{node:"Upsert Contact",type:"main",index:0}],[]]},
+      "Upsert Contact":{main:[[{node:"Insert Message to Supabase",type:"main",index:0}]]},
+      "Insert Message to Supabase":{main:[[{node:"Log Webhook Event",type:"main",index:0}]]}
+    },
     settings:{}
   });
   console.log("Update:", r.statusCode);
   if(r.statusCode!==200){console.error(JSON.stringify(r.data));return;}
   r=await apiCall("POST","/workflows/88zOQbdJAT7DOaET/activate");
+  if(r.statusCode!==200) console.error("Activate Error:", JSON.stringify(r.data));
   console.log("Activate:", r.statusCode, r.statusCode===200?"OK":"FAIL");
 
   // ===== EVOLUTION =====
@@ -107,7 +161,7 @@ async function fixAll() {
       {parameters:{httpMethod:"POST",path:"webhook/evolution",options:{}},id:"f79aec30-2f4a-4a5f-be76-a73d28679181",name:"Evolution Webhook Trigger",type:"n8n-nodes-base.webhook",typeVersion:1,position:[-512,1168]},
       {parameters:{jsCode:evoParseCode},id:"588f5a8e-3d98-4ff8-b3d1-562a62415367",name:"Parse Evolution Payload",type:"n8n-nodes-base.code",typeVersion:2,position:[-272,1168]},
       makeIfEquals("91b9cbe2-6116-42e3-a45e-82eee5ae48f5","Is Message?",[-32,1168],"={{ $json.event_type }}","message.received"),
-      {parameters:{method:"POST",url:`${supabaseUrl}/rest/v1/contacts?on_conflict=phone`,sendHeaders:true,headerParameters:{parameters:[{name:"apikey",value:serviceKey},{name:"Authorization",value:`Bearer ${serviceKey}`},{name:"Content-Type",value:"application/json"},{name:"Prefer",value:"resolution=merge-duplicates,return=representation"}]},sendBody:true,specifyBody:"json",jsonBody:`={\n  "phone":"{{ $('Parse Evolution Payload').item.json.phone }}",\n  "name":"{{ $('Parse Evolution Payload').item.json.contact_name }}"\n}`,options:{}},id:"b4cf8e34-093a-419f-a13a-0a01ebb1c654",name:"Upsert Contact",type:"n8n-nodes-base.httpRequest",typeVersion:3,position:[208,1024]},
+      {parameters:{method:"POST",url:`${supabaseUrl}/rest/v1/contacts?on_conflict=phone`,sendHeaders:true,headerParameters:{parameters:[{name:"apikey",value:serviceKey},{name:"Authorization",value:`Bearer ${serviceKey}`},{name:"Content-Type",value:"application/json"},{name:"Prefer",value:"resolution=merge-duplicates,return=representation"}]},sendBody:true,specifyBody:"json",jsonBody:`={{ JSON.stringify(Object.assign({ phone: $('Parse Evolution Payload').item.json.phone }, $('Parse Evolution Payload').item.json.direction === 'in' && $('Parse Evolution Payload').item.json.contact_name ? { name: $('Parse Evolution Payload').item.json.contact_name } : {})) }}`,options:{}},id:"b4cf8e34-093a-419f-a13a-0a01ebb1c654",name:"Upsert Contact",type:"n8n-nodes-base.httpRequest",typeVersion:3,position:[208,1024]},
       {parameters:{method:"POST",url:`${supabaseUrl}/rest/v1/messages`,sendHeaders:true,headerParameters:{parameters:[{name:"apikey",value:serviceKey},{name:"Authorization",value:`Bearer ${serviceKey}`},{name:"Content-Type",value:"application/json"},{name:"Prefer",value:"return=representation"}]},sendBody:true,bodyParameters:{parameters:[{name:"channel_id",value:evoChannelId},{name:"contact_id",value:"={{ $json.id }}"},{name:"direction",value:`={{ $('Parse Evolution Payload').item.json.direction }}`},{name:"content",value:`={{ $('Parse Evolution Payload').item.json.content }}`},{name:"content_type",value:`={{ $('Parse Evolution Payload').item.json.content_type }}`},{name:"media_url",value:`={{ $('Parse Evolution Payload').item.json.media_url }}`},{name:"whatsapp_msg_id",value:`={{ $('Parse Evolution Payload').item.json.whatsapp_msg_id }}`},{name:"timestamp",value:`={{ $('Parse Evolution Payload').item.json.timestamp }}`}]},options:{}},id:"617b8bc9-e5b8-4846-8b9a-447c34e11687",name:"Insert Message to Supabase",type:"n8n-nodes-base.httpRequest",typeVersion:3,position:[448,1024]},
       {parameters:{method:"POST",url:`${supabaseUrl}/rest/v1/webhook_logs`,sendHeaders:true,headerParameters:{parameters:[{name:"apikey",value:serviceKey},{name:"Authorization",value:`Bearer ${serviceKey}`},{name:"Content-Type",value:"application/json"}]},sendBody:true,bodyParameters:{parameters:[{name:"channel_id",value:evoChannelId},{name:"event_type",value:`={{ $('Parse Evolution Payload').item.json.event_type }}`},{name:"source",value:"evolution"},{name:"status",value:"processed"}]},options:{}},id:"d10f51fa-a406-4955-8b86-f20527bb1822",name:"Log Webhook Event",type:"n8n-nodes-base.httpRequest",typeVersion:3,position:[688,1024]}
     ],

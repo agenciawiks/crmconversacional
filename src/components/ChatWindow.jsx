@@ -101,7 +101,16 @@ export default function ChatWindow() {
   };
 
   return (
-    <div className="chat-workspace animated-fade-in" style={{ margin: '24px' }}>
+    <div className="chat-workspace animated-fade-in" style={{ 
+      position: 'absolute', 
+      top: '24px', 
+      bottom: '24px', 
+      left: '24px', 
+      right: '24px',
+      margin: 0,
+      height: 'auto',
+      width: 'auto'
+    }}>
       
       {/* COLUMN 1: CHATS DIRECTORY */}
       <div className="chat-list-panel">
@@ -130,19 +139,19 @@ export default function ChatWindow() {
               onClick={() => setChannelFilter('whatsapp')}
               className={`channel-tab-btn ${channelFilter === 'whatsapp' ? 'active' : ''}`}
             >
-              Whats
+              Whatsapp
             </button>
             <button
               onClick={() => setChannelFilter('telegram')}
               className={`channel-tab-btn ${channelFilter === 'telegram' ? 'active' : ''}`}
             >
-              Tele
+              Instagram
             </button>
             <button
               onClick={() => setChannelFilter('webchat')}
               className={`channel-tab-btn ${channelFilter === 'webchat' ? 'active' : ''}`}
             >
-              Web
+              Tiktok
             </button>
           </div>
         </div>
@@ -166,8 +175,8 @@ export default function ChatWindow() {
                   </div>
                   <span className={`channel-icon-badge ${contact.channel}`}>
                     {contact.channel === 'whatsapp' && 'W'}
-                    {contact.channel === 'telegram' && 'T'}
-                    {contact.channel === 'webchat' && 'C'}
+                    {contact.channel === 'telegram' && 'I'}
+                    {contact.channel === 'webchat' && 'T'}
                   </span>
                 </div>
 
@@ -208,7 +217,8 @@ export default function ChatWindow() {
                   {activeContact.channel === 'whatsapp' ? (
                     activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' :
                     activeContact.provider === 'evolution' ? 'Evolution API' : 'WhatsApp'
-                  ) : activeContact.channel}
+                  ) : activeContact.channel === 'telegram' ? 'Instagram' :
+                      activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
                 </span>
                 <span className={`tag status-${activeContact.status}`}>
                   {activeContact.status}
@@ -372,7 +382,8 @@ export default function ChatWindow() {
               {activeContact.channel === 'whatsapp' ? (
                 activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' :
                 activeContact.provider === 'evolution' ? 'Evolution API' : 'WhatsApp'
-              ) : activeContact.channel}
+              ) : activeContact.channel === 'telegram' ? 'Instagram' :
+                  activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
             </span>
             <span className={`tag status-${activeContact.status}`}>{activeContact.status}</span>
           </div>
