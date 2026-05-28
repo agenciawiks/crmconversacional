@@ -90,9 +90,13 @@ export const CrmProvider = ({ children }) => {
 
           const resolvedStatus = contactMeta.status || c.status || defaultStage;
           const resolvedValue = contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue);
+          const resolvedName = contactMeta.name || c.name;
+          const resolvedTags = contactMeta.tags || c.tags || [];
 
           return { 
             ...c, 
+            name: resolvedName,
+            tags: resolvedTags,
             status: resolvedStatus,
             value: resolvedValue,
             notes: contactMeta.notes || c.notes || [],
@@ -207,6 +211,8 @@ export const CrmProvider = ({ children }) => {
 
             const mappedFreshC = {
               ...freshC,
+              name: contactMeta.name || freshC.name,
+              tags: contactMeta.tags || freshC.tags || [],
               status: contactMeta.status || freshC.status || defaultStage,
               value: contactMeta.value !== undefined ? contactMeta.value : (freshC.value || defaultValue),
               notes: contactMeta.notes || freshC.notes || []
@@ -332,6 +338,8 @@ export const CrmProvider = ({ children }) => {
 
                       return {
                         ...c,
+                        name: contactMeta.name || c.name,
+                        tags: contactMeta.tags || c.tags || [],
                         status: contactMeta.status || c.status || defaultStage,
                         value: contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue),
                         notes: contactMeta.notes || c.notes || [],
@@ -435,6 +443,19 @@ export const CrmProvider = ({ children }) => {
 
   const updateContactTags = (contactId, tags) => {
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, tags } : c)));
+    const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    if (!meta[contactId]) meta[contactId] = {};
+    meta[contactId].tags = tags;
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+  };
+
+  const updateContactName = (contactId, name) => {
+    if (!name.trim()) return;
+    setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, name } : c)));
+    const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    if (!meta[contactId]) meta[contactId] = {};
+    meta[contactId].name = name;
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
   };
 
   const updateContactValue = (contactId, value) => {
@@ -549,7 +570,7 @@ export const CrmProvider = ({ children }) => {
   return (
     <CrmContext.Provider value={{
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
-      flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags,
+      flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
       updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel
     }}>

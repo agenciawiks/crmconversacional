@@ -2,13 +2,32 @@ import React, { useState } from 'react';
 import { useCrm } from '../context/CrmContext';
 
 export default function ContactsList() {
-  const { contacts, addContact, setActiveContactId, setActiveScreen } = useCrm();
+  const { 
+    contacts, 
+    addContact, 
+    setActiveContactId, 
+    setActiveScreen,
+    changeContactStatus,
+    addNoteToContact,
+    updateContactTags,
+    updateContactName,
+    updateContactValue
+  } = useCrm();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLeadName, setNewLeadName] = useState('');
   const [newLeadChannel, setNewLeadChannel] = useState('whatsapp');
   const [newLeadMsg, setNewLeadMsg] = useState('Olá, gostaria de saber mais informações.');
+
+  // Editing drawer state
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editStatus, setEditStatus] = useState('');
+  const [editValue, setEditValue] = useState(0);
+  const [editTags, setEditTags] = useState([]);
+  const [newTagText, setNewTagText] = useState('');
+  const [newNoteText, setNewNoteText] = useState('');
 
   // Financial sum metrics
   const totalLeads = contacts.length;
@@ -39,8 +58,56 @@ export default function ContactsList() {
     setActiveScreen('chat');
   };
 
+  // Open editing drawer
+  const handleEditContact = (contact) => {
+    setSelectedContact(contact);
+    setEditName(contact.name);
+    setEditStatus(contact.status);
+    setEditValue(contact.value || 0);
+    setEditTags(contact.tags || []);
+    setNewTagText('');
+    setNewNoteText('');
+  };
+
+  // Save details back to context
+  const handleSaveContact = () => {
+    if (!selectedContact) return;
+    
+    updateContactName(selectedContact.id, editName);
+    changeContactStatus(selectedContact.id, editStatus);
+    updateContactValue(selectedContact.id, editValue);
+    updateContactTags(selectedContact.id, editTags);
+    
+    setSelectedContact(null);
+  };
+
+  // Tag helper functions
+  const handleAddTag = (e) => {
+    e.preventDefault();
+    if (!newTagText.trim()) return;
+    if (editTags.includes(newTagText.trim())) return;
+    setEditTags([...editTags, newTagText.trim()]);
+    setNewTagText('');
+  };
+
+  const handleRemoveTag = (tagToRemove) => {
+    setEditTags(editTags.filter(t => t !== tagToRemove));
+  };
+
+  // Note helper function
+  const handleAddNote = (e) => {
+    e.preventDefault();
+    if (!newNoteText.trim()) return;
+    addNoteToContact(selectedContact.id, newNoteText);
+    setNewNoteText('');
+  };
+
+  // Fetch reactive live contact details from CRM Context
+  const liveContact = selectedContact ? contacts.find(c => c.id === selectedContact.id) : null;
+  const notesList = liveContact ? liveContact.notes || [] : [];
+
   return (
-    <div className="content-wrapper animated-fade-in">
+    <div className="content-wrapper animated-fade-in" style={{ position: 'relative' }}>
       <div className="page-header">
         <div className="page-title">
           <h1>Lista de Contatos</h1>
@@ -60,7 +127,8 @@ export default function ContactsList() {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)) 100px',
           gap: '16px',
-          alignItems: 'end'
+          alignItems: 'end',
+          marginBottom: '20px'
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Nome do Lead</span>
@@ -105,7 +173,7 @@ export default function ContactsList() {
       )}
 
       {/* SEARCH AND METRICS SLIDER BAR */}
-      <div className="contacts-toolbar">
+      <div className="contacts-toolbar" style={{ marginBottom: '20px' }}>
         <div className="search-field-wrapper">
           <input
             type="text"
@@ -144,7 +212,11 @@ export default function ContactsList() {
           </thead>
           <tbody>
             {filteredContacts.map(contact => (
-              <tr key={contact.id}>
+              <tr 
+                key={contact.id}
+                onClick={() => handleEditContact(contact)}
+                style={{ cursor: 'pointer', transition: 'background 0.2s' }}
+              >
                 {/* Visual profile detail */}
                 <td>
                   <div className="contact-profile-cell">
@@ -214,7 +286,10 @@ export default function ContactsList() {
                 <td style={{ textAlign: 'right' }}>
                   <div className="contact-action-btn-row" style={{ justifyContent: 'flex-end' }}>
                     <button
-                      onClick={() => handleOpenChat(contact.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenChat(contact.id);
+                      }}
                       className="table-action-btn"
                     >
                       💬 Conversar
@@ -233,6 +308,323 @@ export default function ContactsList() {
           </tbody>
         </table>
       </div>
+
+      {/* ========================================================= */}
+      {/* PREMIUM DETAILS DRAWER (SLIDE-IN MODAL PANEL) */}
+      {/* ========================================================= */}
+      {selectedContact && (
+        <>
+          {/* Blur backdrop cover */}
+          <div 
+            onClick={() => setSelectedContact(null)} 
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(5px)',
+              webkitBackdropFilter: 'blur(5px)',
+              zIndex: 999,
+              animation: 'fadeIn 0.2s ease-out'
+            }}
+          />
+
+          {/* Slide-out Panel container */}
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            width: '440px',
+            height: '100%',
+            background: 'rgba(12, 12, 18, 0.9)',
+            backdropFilter: 'blur(25px)',
+            webkitBackdropFilter: 'blur(25px)',
+            borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+            boxShadow: '-10px 0 35px rgba(0, 0, 0, 0.6)',
+            zIndex: 1000,
+            display: 'flex',
+            flexDirection: 'column',
+            animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            padding: '28px',
+            color: 'var(--text-primary)',
+            fontFamily: 'var(--font-sans)'
+          }}>
+            
+            {/* Header section */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, letterSpacing: '-0.3px', background: 'linear-gradient(90deg, #fff, #9ca3af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                Ficha do Lead
+              </h2>
+              <button 
+                onClick={() => setSelectedContact(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  color: 'var(--text-secondary)',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                  e.currentTarget.style.color = '#ef4444';
+                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Profile Summary Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '12px', marginBottom: '24px' }}>
+              <div style={{ 
+                width: '54px', 
+                height: '54px', 
+                borderRadius: '50%', 
+                background: selectedContact.avatarColor, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                fontWeight: '700', 
+                fontSize: '20px',
+                color: '#fff',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+              }}>
+                {selectedContact.name.substring(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '16px', color: '#fff' }}>{editName || selectedContact.name}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📞 {selectedContact.phone}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
+                  <span style={{ textTransform: 'capitalize' }}>{selectedContact.channel}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Scrollable Fields area */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '4px', marginBottom: '20px' }}>
+              
+              {/* Field: Client Name */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Nome do Lead</label>
+                <input 
+                  type="text" 
+                  className="glass-input" 
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)' }}
+                />
+              </div>
+
+              {/* Fields: Value & Status Stage */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Valor Comercial</label>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.3)' }}>R$</span>
+                    <input 
+                      type="number" 
+                      className="glass-input" 
+                      value={editValue}
+                      onChange={(e) => setEditValue(Number(e.target.value) || 0)}
+                      style={{ paddingLeft: '32px', background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Fase no Funil</label>
+                  <select 
+                    className="crm-status-dropdown" 
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)', width: '100%', height: '42px' }}
+                  >
+                    <option value="new">Novo Lead</option>
+                    <option value="contacted">Em Contato</option>
+                    <option value="proposal">Proposta</option>
+                    <option value="won">Vendido</option>
+                    <option value="lost">Perdido</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tags Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  🏷️ Etiquetas (Tags)
+                </label>
+                
+                {/* Active tags visual lists */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '30px', padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px dashed rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+                  {editTags.map(tag => (
+                    <span 
+                      key={tag} 
+                      className="kanban-card-tag"
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px', 
+                        padding: '4px 10px', 
+                        background: 'rgba(7, 167, 225, 0.08)', 
+                        border: '1px solid rgba(7, 167, 225, 0.15)', 
+                        color: '#07a7e1', 
+                        fontSize: '12px' 
+                      }}
+                    >
+                      {tag}
+                      <span 
+                        onClick={() => handleRemoveTag(tag)}
+                        style={{ cursor: 'pointer', fontWeight: '700', color: 'rgba(255,255,255,0.4)', transition: 'color 0.2s' }}
+                        onMouseEnter={(e) => e.target.style.color = '#ef4444'}
+                        onMouseLeave={(e) => e.target.style.color = 'rgba(255,255,255,0.4)'}
+                      >
+                        ✕
+                      </span>
+                    </span>
+                  ))}
+                  {editTags.length === 0 && (
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>Sem etiquetas ainda</span>
+                  )}
+                </div>
+
+                {/* Add Tag field inline */}
+                <form onSubmit={handleAddTag} style={{ display: 'flex', gap: '8px' }}>
+                  <input 
+                    type="text" 
+                    className="glass-input" 
+                    placeholder="Adicionar nova etiqueta..." 
+                    value={newTagText}
+                    onChange={(e) => setNewTagText(e.target.value)}
+                    style={{ flex: 1, height: '36px', fontSize: '13px' }}
+                  />
+                  <button 
+                    type="submit" 
+                    className="glass-btn" 
+                    style={{ height: '36px', padding: '0 14px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    ＋ Add
+                  </button>
+                </form>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '4px 0' }} />
+
+              {/* Notes (Observações) Section */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  📝 Anotações & Observações
+                </label>
+
+                {/* Live Notes Timeline list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '200px', overflowY: 'auto', paddingRight: '2px' }}>
+                  {notesList.map(note => (
+                    <div 
+                      key={note.id} 
+                      style={{ 
+                        padding: '12px', 
+                        background: 'rgba(255, 255, 255, 0.02)', 
+                        border: '1px solid rgba(255, 255, 255, 0.04)', 
+                        borderRadius: '8px', 
+                        fontSize: '13px',
+                        lineHeight: '1.4'
+                      }}
+                    >
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Anotado</span>
+                        <span>{note.date}</span>
+                      </div>
+                      <div style={{ color: 'var(--text-secondary)' }}>{note.text}</div>
+                    </div>
+                  ))}
+                  {notesList.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic', background: 'rgba(255,255,255,0.01)', border: '1px dashed rgba(255,255,255,0.04)', borderRadius: '8px' }}>
+                      Nenhuma anotação registrada ainda.
+                    </div>
+                  )}
+                </div>
+
+                {/* Add new note input box */}
+                <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                  <textarea 
+                    className="glass-input" 
+                    rows="2" 
+                    placeholder="Escrever observações sobre o cliente..." 
+                    value={newNoteText}
+                    onChange={(e) => setNewNoteText(e.target.value)}
+                    style={{ resize: 'none', padding: '10px', fontSize: '13px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}
+                  />
+                  <button 
+                    type="submit" 
+                    className="glass-btn secondary"
+                    style={{ height: '34px', fontSize: '12px', width: 'fit-content', alignSelf: 'flex-end', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    Salvar Observação
+                  </button>
+                </form>
+              </div>
+
+            </div>
+
+            {/* Save / Footer actions */}
+            <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '20px' }}>
+              <button 
+                onClick={() => setSelectedContact(null)}
+                className="glass-btn secondary"
+                style={{ flex: 1, height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleSaveContact}
+                className="glass-btn"
+                style={{ 
+                  flex: 2, 
+                  height: '44px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  background: 'var(--accent-primary)',
+                  border: 'none',
+                  color: '#fff',
+                  boxShadow: '0 0 16px rgba(7, 167, 225, 0.35)',
+                  fontWeight: '600'
+                }}
+              >
+                Salvar Alterações
+              </button>
+            </div>
+
+          </div>
+        </>
+      )}
+
+      {/* Sliding and fading keyframes inline stylesheet */}
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
     </div>
   );
 }
