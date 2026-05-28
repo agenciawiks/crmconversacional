@@ -87,13 +87,6 @@ export const CrmProvider = ({ children }) => {
           defaultStage = stagesPool[charCodeSum % stagesPool.length];
           
           let defaultValue = 0;
-          if (defaultStage === 'contacted') {
-            defaultValue = ((charCodeSum % 5) + 1) * 500;
-          } else if (defaultStage === 'proposal') {
-            defaultValue = ((charCodeSum % 5) + 2) * 1000;
-          } else if (defaultStage === 'won') {
-            defaultValue = ((charCodeSum % 5) + 3) * 1500;
-          }
 
           const resolvedStatus = contactMeta.status || c.status || defaultStage;
           const resolvedValue = contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue);
@@ -211,13 +204,6 @@ export const CrmProvider = ({ children }) => {
             defaultStage = stagesPool[charCodeSum % stagesPool.length];
             
             let defaultValue = 0;
-            if (defaultStage === 'contacted') {
-              defaultValue = ((charCodeSum % 5) + 1) * 500;
-            } else if (defaultStage === 'proposal') {
-              defaultValue = ((charCodeSum % 5) + 2) * 1000;
-            } else if (defaultStage === 'won') {
-              defaultValue = ((charCodeSum % 5) + 3) * 1500;
-            }
 
             const mappedFreshC = {
               ...freshC,
@@ -343,13 +329,6 @@ export const CrmProvider = ({ children }) => {
                       defaultStage = stagesPool[charCodeSum % stagesPool.length];
                       
                       let defaultValue = 0;
-                      if (defaultStage === 'contacted') {
-                        defaultValue = ((charCodeSum % 5) + 1) * 500;
-                      } else if (defaultStage === 'proposal') {
-                        defaultValue = ((charCodeSum % 5) + 2) * 1000;
-                      } else if (defaultStage === 'won') {
-                        defaultValue = ((charCodeSum % 5) + 3) * 1500;
-                      }
 
                       return {
                         ...c,
