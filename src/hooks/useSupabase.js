@@ -136,7 +136,7 @@ export async function fetchChannels() {
   return (data || []).map(ch => ({
     id: ch.id,
     name: ch.name,
-    provider: ch.provider === 'meta' ? 'meta_cloud' : 'evolution',
+    provider: ch.provider === 'meta' ? 'meta_cloud' : (ch.provider === 'instagram' ? 'instagram' : 'evolution'),
     status: ch.status,
     url: ch.url,
     instance: ch.instance,
@@ -214,7 +214,7 @@ export async function addChannelToSupabase(channelData) {
 
   const row = {
     name: channelData.name,
-    provider: channelData.provider === 'meta_cloud' ? 'meta' : 'evolution',
+    provider: channelData.provider === 'meta_cloud' ? 'meta' : (channelData.provider === 'instagram' ? 'instagram' : 'evolution'),
     status: 'connected',
     url: channelData.url || null,
     instance: channelData.instance || null,

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-26T17:11:20.486Z",
+  "updatedAt": "2026-06-01T22:31:01.797Z",
   "createdAt": "2026-05-21T22:06:17.786Z",
   "id": "88zOQbdJAT7DOaET",
   "name": "WhatsApp Meta Official – Inbound Webhook",
@@ -9,12 +9,12 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
+        "httpMethod": "ALL",
         "path": "webhook/meta",
-        "responseMode": "onReceived",
+        "responseMode": "responseNode",
         "options": {}
       },
-      "id": "1d6629ba-7d5d-4e0e-b942-c0d0b82fe845",
+      "id": "node-webhook-meta",
       "name": "Meta Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
@@ -22,19 +22,79 @@
         240,
         300
       ],
-      "webhookId": "3718acc1-dff3-4f27-b56d-73b35b67d1a5"
+      "webhookId": "c43634d2-9930-4181-82d3-05a306f7d46f"
     },
     {
       "parameters": {
-        "jsCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nif (body['hub.mode'] === 'subscribe') {\n  return [{ json: { challenge: body['hub.challenge'] } }];\n}\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.query?.['hub.mode'] }}",
+              "operation": "equals",
+              "value2": "subscribe"
+            }
+          ]
+        }
       },
-      "id": "261d6387-b099-4a21-a289-76b8c758aaa8",
+      "id": "node-if-verification",
+      "name": "Is Verification?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query?.['hub.challenge'] || '' }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-verify-meta-challenge",
+      "name": "Respond with Challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        680,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"ok\"\n}",
+        "options": {}
+      },
+      "id": "node-instant-post-response",
+      "name": "Instant Response for POST",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        680,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
+      },
+      "id": "node-parse-meta",
       "name": "Parse Meta Payload",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 1,
       "position": [
-        480,
-        300
+        900,
+        420
       ]
     },
     {
@@ -48,27 +108,53 @@
           ]
         }
       },
-      "id": "d9c2d088-ac0d-42ce-b58e-ab11dc919585",
+      "id": "node-filter-skip",
       "name": "Has Message?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        700,
-        300
+        1120,
+        420
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Check for duplicate message (idempotency)\nconst msgId = $json.whatsapp_msg_id;\n\n// Upsert contact\nconst contactResult = await $helpers.httpRequest({\n  method: 'POST',\n  url: \"https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?on_conflict=phone\",\n  headers: {\n    'apikey': \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\",\n    'Authorization': \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\",\n    'Content-Type': 'application/json',\n    'Prefer': 'resolution=merge-duplicates,return=representation'\n  },\n  body: JSON.stringify({\n    phone: $json.phone,\n    name: $json.contact_name\n  })\n});\n\nconst contactId = contactResult?.[0]?.id;\n\nreturn [{\n  json: {\n    ...$json,\n    contact_id: contactId\n  }\n}];"
+        "method": "POST",
+        "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?on_conflict=phone",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $json.phone }}\",\n  \"name\": \"{{ $json.contact_name }}\"\n}",
+        "options": {}
       },
-      "id": "767892d0-6059-45ba-be6f-30f96025ca32",
       "name": "Upsert Contact",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
       "position": [
-        920,
-        200
-      ]
+        1340,
+        320
+      ],
+      "id": "node-upsert-contact"
     },
     {
       "parameters": {
@@ -104,7 +190,7 @@
             },
             {
               "name": "contact_id",
-              "value": "={{ $json.contact_id }}"
+              "value": "={{ $json.id }}"
             },
             {
               "name": "direction",
@@ -112,35 +198,41 @@
             },
             {
               "name": "content",
-              "value": "={{ $json.content }}"
+              "value": "={{ $('Parse Meta Payload').item.json.content }}"
             },
             {
               "name": "content_type",
-              "value": "={{ $json.content_type }}"
+              "value": "={{ $('Parse Meta Payload').item.json.content_type }}"
             },
             {
               "name": "media_url",
-              "value": "={{ $json.media_url }}"
+              "value": "={{ $('Parse Meta Payload').item.json.media_url }}"
             },
             {
               "name": "whatsapp_msg_id",
-              "value": "={{ $json.whatsapp_msg_id }}"
+              "value": "={{ $('Parse Meta Payload').item.json.whatsapp_msg_id }}"
             },
             {
               "name": "timestamp",
-              "value": "={{ $json.timestamp }}"
+              "value": "={{ $('Parse Meta Payload').item.json.timestamp }}"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "retry": {
+            "maxRetries": 5,
+            "retryInterval": 2000,
+            "retryIntervalMultiplier": 2
+          }
+        }
       },
-      "id": "768d3699-117b-4346-bfb1-5fd614054dbf",
+      "id": "node-insert-msg",
       "name": "Insert Message to Supabase",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        1160,
-        200
+        1580,
+        320
       ]
     },
     {
@@ -184,16 +276,15 @@
               "value": "processed"
             }
           ]
-        },
-        "options": {}
+        }
       },
-      "id": "e682408c-9bf6-41f9-87a7-5436642d4ec5",
+      "id": "node-log-success",
       "name": "Log Webhook Event",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        1400,
-        200
+        1820,
+        320
       ]
     },
     {
@@ -233,21 +324,49 @@
               "value": "={{ $json.error?.message || 'Unknown error' }}"
             }
           ]
-        },
-        "options": {}
+        }
       },
-      "id": "c2149d80-0a6f-480e-8b6c-f32e2b8f3fab",
+      "id": "node-dead-letter",
       "name": "Dead Letter Queue",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        1160,
-        440
+        1580,
+        560
       ]
     }
   ],
   "connections": {
     "Meta Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Is Verification?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Verification?": {
+      "main": [
+        [
+          {
+            "node": "Respond with Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Instant Response for POST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instant Response for POST": {
       "main": [
         [
           {
@@ -271,14 +390,14 @@
     },
     "Has Message?": {
       "main": [
+        [],
         [
           {
             "node": "Upsert Contact",
             "type": "main",
             "index": 0
           }
-        ],
-        []
+        ]
       ]
     },
     "Upsert Contact": {
@@ -311,9 +430,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "57abcfec-cbba-4027-8db1-9ecf8626e322",
-  "activeVersionId": "57abcfec-cbba-4027-8db1-9ecf8626e322",
-  "versionCounter": 119,
+  "versionId": "1f777ea6-a756-4407-933c-239697866866",
+  "activeVersionId": "1f777ea6-a756-4407-933c-239697866866",
+  "versionCounter": 220,
   "triggerCount": 1,
   "shared": [
     {
@@ -336,19 +455,19 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-05-26T17:11:20.488Z",
-    "createdAt": "2026-05-26T17:11:20.488Z",
-    "versionId": "57abcfec-cbba-4027-8db1-9ecf8626e322",
+    "updatedAt": "2026-06-01T22:31:01.828Z",
+    "createdAt": "2026-06-01T22:31:01.828Z",
+    "versionId": "1f777ea6-a756-4407-933c-239697866866",
     "workflowId": "88zOQbdJAT7DOaET",
     "nodes": [
       {
         "parameters": {
-          "httpMethod": "POST",
+          "httpMethod": "ALL",
           "path": "webhook/meta",
-          "responseMode": "onReceived",
+          "responseMode": "responseNode",
           "options": {}
         },
-        "id": "1d6629ba-7d5d-4e0e-b942-c0d0b82fe845",
+        "id": "node-webhook-meta",
         "name": "Meta Webhook Trigger",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 1,
@@ -356,19 +475,79 @@
           240,
           300
         ],
-        "webhookId": "3718acc1-dff3-4f27-b56d-73b35b67d1a5"
+        "webhookId": "c43634d2-9930-4181-82d3-05a306f7d46f"
       },
       {
         "parameters": {
-          "jsCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nif (body['hub.mode'] === 'subscribe') {\n  return [{ json: { challenge: body['hub.challenge'] } }];\n}\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.query?.['hub.mode'] }}",
+                "operation": "equals",
+                "value2": "subscribe"
+              }
+            ]
+          }
         },
-        "id": "261d6387-b099-4a21-a289-76b8c758aaa8",
+        "id": "node-if-verification",
+        "name": "Is Verification?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          460,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "text",
+          "responseBody": "={{ $json.query?.['hub.challenge'] || '' }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain"
+                }
+              ]
+            }
+          }
+        },
+        "id": "node-verify-meta-challenge",
+        "name": "Respond with Challenge",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          680,
+          180
+        ]
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "{\n  \"status\": \"ok\"\n}",
+          "options": {}
+        },
+        "id": "node-instant-post-response",
+        "name": "Instant Response for POST",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1,
+        "position": [
+          680,
+          420
+        ]
+      },
+      {
+        "parameters": {
+          "functionCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
+        },
+        "id": "node-parse-meta",
         "name": "Parse Meta Payload",
         "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
+        "typeVersion": 1,
         "position": [
-          480,
-          300
+          900,
+          420
         ]
       },
       {
@@ -382,27 +561,53 @@
             ]
           }
         },
-        "id": "d9c2d088-ac0d-42ce-b58e-ab11dc919585",
+        "id": "node-filter-skip",
         "name": "Has Message?",
         "type": "n8n-nodes-base.if",
         "typeVersion": 1,
         "position": [
-          700,
-          300
+          1120,
+          420
         ]
       },
       {
         "parameters": {
-          "jsCode": "// Check for duplicate message (idempotency)\nconst msgId = $json.whatsapp_msg_id;\n\n// Upsert contact\nconst contactResult = await $helpers.httpRequest({\n  method: 'POST',\n  url: \"https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?on_conflict=phone\",\n  headers: {\n    'apikey': \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\",\n    'Authorization': \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\",\n    'Content-Type': 'application/json',\n    'Prefer': 'resolution=merge-duplicates,return=representation'\n  },\n  body: JSON.stringify({\n    phone: $json.phone,\n    name: $json.contact_name\n  })\n});\n\nconst contactId = contactResult?.[0]?.id;\n\nreturn [{\n  json: {\n    ...$json,\n    contact_id: contactId\n  }\n}];"
+          "method": "POST",
+          "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?on_conflict=phone",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Prefer",
+                "value": "resolution=merge-duplicates,return=representation"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"phone\": \"{{ $json.phone }}\",\n  \"name\": \"{{ $json.contact_name }}\"\n}",
+          "options": {}
         },
-        "id": "767892d0-6059-45ba-be6f-30f96025ca32",
         "name": "Upsert Contact",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
         "position": [
-          920,
-          200
-        ]
+          1340,
+          320
+        ],
+        "id": "node-upsert-contact"
       },
       {
         "parameters": {
@@ -438,7 +643,7 @@
               },
               {
                 "name": "contact_id",
-                "value": "={{ $json.contact_id }}"
+                "value": "={{ $json.id }}"
               },
               {
                 "name": "direction",
@@ -446,35 +651,41 @@
               },
               {
                 "name": "content",
-                "value": "={{ $json.content }}"
+                "value": "={{ $('Parse Meta Payload').item.json.content }}"
               },
               {
                 "name": "content_type",
-                "value": "={{ $json.content_type }}"
+                "value": "={{ $('Parse Meta Payload').item.json.content_type }}"
               },
               {
                 "name": "media_url",
-                "value": "={{ $json.media_url }}"
+                "value": "={{ $('Parse Meta Payload').item.json.media_url }}"
               },
               {
                 "name": "whatsapp_msg_id",
-                "value": "={{ $json.whatsapp_msg_id }}"
+                "value": "={{ $('Parse Meta Payload').item.json.whatsapp_msg_id }}"
               },
               {
                 "name": "timestamp",
-                "value": "={{ $json.timestamp }}"
+                "value": "={{ $('Parse Meta Payload').item.json.timestamp }}"
               }
             ]
           },
-          "options": {}
+          "options": {
+            "retry": {
+              "maxRetries": 5,
+              "retryInterval": 2000,
+              "retryIntervalMultiplier": 2
+            }
+          }
         },
-        "id": "768d3699-117b-4346-bfb1-5fd614054dbf",
+        "id": "node-insert-msg",
         "name": "Insert Message to Supabase",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
-          1160,
-          200
+          1580,
+          320
         ]
       },
       {
@@ -518,16 +729,15 @@
                 "value": "processed"
               }
             ]
-          },
-          "options": {}
+          }
         },
-        "id": "e682408c-9bf6-41f9-87a7-5436642d4ec5",
+        "id": "node-log-success",
         "name": "Log Webhook Event",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
-          1400,
-          200
+          1820,
+          320
         ]
       },
       {
@@ -567,21 +777,49 @@
                 "value": "={{ $json.error?.message || 'Unknown error' }}"
               }
             ]
-          },
-          "options": {}
+          }
         },
-        "id": "c2149d80-0a6f-480e-8b6c-f32e2b8f3fab",
+        "id": "node-dead-letter",
         "name": "Dead Letter Queue",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
-          1160,
-          440
+          1580,
+          560
         ]
       }
     ],
     "connections": {
       "Meta Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Is Verification?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Verification?": {
+        "main": [
+          [
+            {
+              "node": "Respond with Challenge",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Instant Response for POST",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Instant Response for POST": {
         "main": [
           [
             {
@@ -605,14 +843,14 @@
       },
       "Has Message?": {
         "main": [
+          [],
           [
             {
               "node": "Upsert Contact",
               "type": "main",
               "index": 0
             }
-          ],
-          []
+          ]
         ]
       },
       "Upsert Contact": {
@@ -644,11 +882,35 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-05-26T17:11:20.620Z",
-        "id": 550,
+        "createdAt": "2026-06-01T22:31:02.416Z",
+        "id": 768,
         "workflowId": "88zOQbdJAT7DOaET",
-        "versionId": "57abcfec-cbba-4027-8db1-9ecf8626e322",
+        "versionId": "1f777ea6-a756-4407-933c-239697866866",
         "event": "activated",
+        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
+      },
+      {
+        "createdAt": "2026-06-01T22:31:02.691Z",
+        "id": 770,
+        "workflowId": "88zOQbdJAT7DOaET",
+        "versionId": "1f777ea6-a756-4407-933c-239697866866",
+        "event": "activated",
+        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
+      },
+      {
+        "createdAt": "2026-06-01T22:31:02.369Z",
+        "id": 767,
+        "workflowId": "88zOQbdJAT7DOaET",
+        "versionId": "1f777ea6-a756-4407-933c-239697866866",
+        "event": "deactivated",
+        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
+      },
+      {
+        "createdAt": "2026-06-01T22:31:02.628Z",
+        "id": 769,
+        "workflowId": "88zOQbdJAT7DOaET",
+        "versionId": "1f777ea6-a756-4407-933c-239697866866",
+        "event": "deactivated",
         "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
       }
     ]

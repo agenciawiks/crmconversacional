@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-05-28T14:44:35.588Z",
+  "updatedAt": "2026-06-01T16:43:16.875Z",
   "createdAt": "2026-05-21T21:59:30.185Z",
   "id": "NFkf4R8DDJ2o7Sqx",
   "name": "WhatsApp – Outbound Send Message",
@@ -10,31 +10,31 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "send",
+        "path": "webhook/send",
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "f5cc9383-b694-4e74-9248-ba5d41f0231d",
+      "id": "node-webhook-send",
       "name": "Send Message Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        960,
-        928
+        240,
+        300
       ],
-      "webhookId": "234e67bc-2680-4e6a-918e-82d113afd202"
+      "webhookId": "ff5092f9-a4b9-4c6c-8051-e3248c3fee2f"
     },
     {
       "parameters": {
-        "jsCode": "// Fetch channel details from Supabase to determine provider\nconst channelId = $json.body?.channel_id || $json.channel_id;\nconst content = $json.body?.content || $json.content;\nconst phone = $json.body?.phone || $json.phone;\nconst contactId = $json.body?.contact_id || $json.contact_id;\n\nconst supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\nconst serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n\nconst channelResp = await this.helpers.httpRequest({\n  method: 'GET',\n  url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=*`,\n  headers: {\n    'apikey': serviceKey,\n    'Authorization': `Bearer ${serviceKey}`\n  }\n});\n\nconst channel = channelResp?.[0];\nif (!channel) {\n  throw new Error(`Channel ${channelId} not found`);\n}\n\nreturn [{\n  json: {\n    channel_id: channelId,\n    contact_id: contactId,\n    provider: channel.provider,\n    content: content,\n    phone: phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
+        "functionCode": "// Fetch channel details from Supabase to determine provider\nconst channelId = $json.body?.channel_id || $json.channel_id;\nconst content = $json.body?.content || $json.content;\nconst phone = $json.body?.phone || $json.phone;\nconst contactId = $json.body?.contact_id || $json.contact_id;\n\nconst supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\nconst serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n\nconst channelResp = await $helpers.httpRequest({\n  method: 'GET',\n  url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=*`,\n  headers: {\n    'apikey': serviceKey,\n    'Authorization': `Bearer ${serviceKey}`\n  }\n});\n\nconst channel = channelResp?.[0];\nif (!channel) {\n  throw new Error(`Channel ${channelId} not found`);\n}\n\nreturn [{\n  json: {\n    channel_id: channelId,\n    contact_id: contactId,\n    provider: channel.provider,\n    content: content,\n    phone: phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
       },
-      "id": "36a82d05-75ba-4e5a-bff4-201382e2fd6e",
+      "id": "node-resolve-channel",
       "name": "Resolve Channel",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 1,
       "position": [
-        1200,
-        928
+        480,
+        300
       ]
     },
     {
@@ -43,19 +43,19 @@
           "string": [
             {
               "value1": "={{ $json.provider }}",
-              "operation": "equal",
+              "operation": "equals",
               "value2": "meta"
             }
           ]
         }
       },
-      "id": "7ee5a4e9-db7b-4331-82dd-bf8b938158db",
-      "name": "Which Provider?1",
+      "id": "node-switch-provider",
+      "name": "Which Provider?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        1440,
-        928
+        720,
+        300
       ]
     },
     {
@@ -67,7 +67,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $json.access_token }}"
+              "value": "Bearer {{ $json.access_token }}"
             },
             {
               "name": "Content-Type",
@@ -79,16 +79,21 @@
         "specifyBody": "json",
         "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.content }}\"\n  }\n}",
         "options": {
+          "retry": {
+            "maxRetries": 3,
+            "retryInterval": 3000,
+            "retryIntervalMultiplier": 2
+          },
           "timeout": 15000
         }
       },
-      "id": "3a5db98f-770f-4fbc-b4a2-dea74a35a623",
-      "name": "Send via Meta API1",
+      "id": "node-send-meta",
+      "name": "Send via Meta API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        1696,
-        800
+        980,
+        180
       ]
     },
     {
@@ -112,16 +117,21 @@
         "specifyBody": "json",
         "jsonBody": "={\n  \"number\": \"{{ $json.phone }}@s.whatsapp.net\",\n  \"text\": \"{{ $json.content }}\"\n}",
         "options": {
+          "retry": {
+            "maxRetries": 3,
+            "retryInterval": 2000,
+            "retryIntervalMultiplier": 2
+          },
           "timeout": 15000
         }
       },
-      "id": "3100315a-c6ec-45f0-8294-e4cc73047a34",
-      "name": "Send via Evolution API1",
+      "id": "node-send-evo",
+      "name": "Send via Evolution API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        1696,
-        1040
+        980,
+        420
       ]
     },
     {
@@ -154,11 +164,11 @@
           "parameters": [
             {
               "name": "channel_id",
-              "value": "={{ $('Resolve Channel').first().json.channel_id }}"
+              "value": "={{ $json.channel_id || $input.first().json.channel_id }}"
             },
             {
               "name": "contact_id",
-              "value": "={{ $('Resolve Channel').first().json.contact_id }}"
+              "value": "={{ $json.contact_id || $input.first().json.contact_id }}"
             },
             {
               "name": "direction",
@@ -166,44 +176,98 @@
             },
             {
               "name": "content",
-              "value": "={{ $('Resolve Channel').first().json.content }}"
+              "value": "={{ $json.content || $input.first().json.content }}"
             },
             {
               "name": "content_type",
               "value": "text"
             },
             {
-              "name": "status",
-              "value": "sent"
-            },
-            {
               "name": "timestamp",
               "value": "={{ new Date().toISOString() }}"
             }
           ]
-        },
-        "options": {}
+        }
       },
-      "id": "8f054d66-7182-4dfb-bcb9-5c2b9617b361",
-      "name": "Log Outgoing Message1",
+      "id": "node-log-outgoing",
+      "name": "Log Outgoing Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        1968,
-        928
+        1240,
+        300
       ]
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
+        "functionCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
       },
-      "id": "cf9b8f69-3960-4a69-a4de-214830b2d082",
-      "name": "Response OK1",
+      "id": "node-respond",
+      "name": "Response OK",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 1,
       "position": [
-        2208,
-        928
+        1480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.provider }}",
+              "operation": "equals",
+              "value2": "instagram"
+            }
+          ]
+        }
+      },
+      "id": "node-if-instagram",
+      "name": "Is Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        720,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/{{ $json.phone_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \\\"recipient\\\": {\\n    \\\"id\\\": \\\"{{ $json.phone }}\\\"\\n  },\\n  \\\"message\\\": {\\n    \\\"text\\\": \\\"{{ $json.content }}\\\"\\n  }\\n}",
+        "options": {
+          "retry": {
+            "maxRetries": 3,
+            "retryInterval": 3000,
+            "retryIntervalMultiplier": 2
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "node-send-instagram",
+      "name": "Send via Instagram API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        980,
+        660
       ]
     }
   ],
@@ -223,58 +287,87 @@
       "main": [
         [
           {
-            "node": "Which Provider?1",
+            "node": "Which Provider?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Which Provider?1": {
+    "Which Provider?": {
       "main": [
         [
           {
-            "node": "Send via Meta API1",
+            "node": "Send via Meta API",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Send via Evolution API1",
+            "node": "Is Instagram?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send via Meta API1": {
+    "Send via Meta API": {
       "main": [
         [
           {
-            "node": "Log Outgoing Message1",
+            "node": "Log Outgoing Message",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send via Evolution API1": {
+    "Send via Evolution API": {
       "main": [
         [
           {
-            "node": "Log Outgoing Message1",
+            "node": "Log Outgoing Message",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Log Outgoing Message1": {
+    "Log Outgoing Message": {
       "main": [
         [
           {
-            "node": "Response OK1",
+            "node": "Response OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Instagram?": {
+      "main": [
+        [
+          {
+            "node": "Send via Instagram API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send via Evolution API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Instagram API": {
+      "main": [
+        [
+          {
+            "node": "Log Outgoing Message",
             "type": "main",
             "index": 0
           }
@@ -289,9 +382,9 @@
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "e545ec18-63e6-41a7-80c9-c0dc569985ac",
-  "activeVersionId": "e545ec18-63e6-41a7-80c9-c0dc569985ac",
-  "versionCounter": 160,
+  "versionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
+  "activeVersionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
+  "versionCounter": 174,
   "triggerCount": 1,
   "shared": [
     {
@@ -314,39 +407,39 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-05-28T14:44:35.589Z",
-    "createdAt": "2026-05-28T14:44:35.589Z",
-    "versionId": "e545ec18-63e6-41a7-80c9-c0dc569985ac",
+    "updatedAt": "2026-06-01T16:43:16.877Z",
+    "createdAt": "2026-06-01T16:43:16.877Z",
+    "versionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
     "workflowId": "NFkf4R8DDJ2o7Sqx",
     "nodes": [
       {
         "parameters": {
           "httpMethod": "POST",
-          "path": "send",
+          "path": "webhook/send",
           "responseMode": "lastNode",
           "options": {}
         },
-        "id": "f5cc9383-b694-4e74-9248-ba5d41f0231d",
+        "id": "node-webhook-send",
         "name": "Send Message Trigger",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 1,
         "position": [
-          960,
-          928
+          240,
+          300
         ],
-        "webhookId": "234e67bc-2680-4e6a-918e-82d113afd202"
+        "webhookId": "ff5092f9-a4b9-4c6c-8051-e3248c3fee2f"
       },
       {
         "parameters": {
-          "jsCode": "// Fetch channel details from Supabase to determine provider\nconst channelId = $json.body?.channel_id || $json.channel_id;\nconst content = $json.body?.content || $json.content;\nconst phone = $json.body?.phone || $json.phone;\nconst contactId = $json.body?.contact_id || $json.contact_id;\n\nconst supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\nconst serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n\nconst channelResp = await this.helpers.httpRequest({\n  method: 'GET',\n  url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=*`,\n  headers: {\n    'apikey': serviceKey,\n    'Authorization': `Bearer ${serviceKey}`\n  }\n});\n\nconst channel = channelResp?.[0];\nif (!channel) {\n  throw new Error(`Channel ${channelId} not found`);\n}\n\nreturn [{\n  json: {\n    channel_id: channelId,\n    contact_id: contactId,\n    provider: channel.provider,\n    content: content,\n    phone: phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
+          "functionCode": "// Fetch channel details from Supabase to determine provider\nconst channelId = $json.body?.channel_id || $json.channel_id;\nconst content = $json.body?.content || $json.content;\nconst phone = $json.body?.phone || $json.phone;\nconst contactId = $json.body?.contact_id || $json.contact_id;\n\nconst supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\nconst serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n\nconst channelResp = await $helpers.httpRequest({\n  method: 'GET',\n  url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=*`,\n  headers: {\n    'apikey': serviceKey,\n    'Authorization': `Bearer ${serviceKey}`\n  }\n});\n\nconst channel = channelResp?.[0];\nif (!channel) {\n  throw new Error(`Channel ${channelId} not found`);\n}\n\nreturn [{\n  json: {\n    channel_id: channelId,\n    contact_id: contactId,\n    provider: channel.provider,\n    content: content,\n    phone: phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
         },
-        "id": "36a82d05-75ba-4e5a-bff4-201382e2fd6e",
+        "id": "node-resolve-channel",
         "name": "Resolve Channel",
         "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
+        "typeVersion": 1,
         "position": [
-          1200,
-          928
+          480,
+          300
         ]
       },
       {
@@ -355,19 +448,19 @@
             "string": [
               {
                 "value1": "={{ $json.provider }}",
-                "operation": "equal",
+                "operation": "equals",
                 "value2": "meta"
               }
             ]
           }
         },
-        "id": "7ee5a4e9-db7b-4331-82dd-bf8b938158db",
-        "name": "Which Provider?1",
+        "id": "node-switch-provider",
+        "name": "Which Provider?",
         "type": "n8n-nodes-base.if",
         "typeVersion": 1,
         "position": [
-          1440,
-          928
+          720,
+          300
         ]
       },
       {
@@ -379,7 +472,7 @@
             "parameters": [
               {
                 "name": "Authorization",
-                "value": "=Bearer {{ $json.access_token }}"
+                "value": "Bearer {{ $json.access_token }}"
               },
               {
                 "name": "Content-Type",
@@ -391,16 +484,21 @@
           "specifyBody": "json",
           "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.content }}\"\n  }\n}",
           "options": {
+            "retry": {
+              "maxRetries": 3,
+              "retryInterval": 3000,
+              "retryIntervalMultiplier": 2
+            },
             "timeout": 15000
           }
         },
-        "id": "3a5db98f-770f-4fbc-b4a2-dea74a35a623",
-        "name": "Send via Meta API1",
+        "id": "node-send-meta",
+        "name": "Send via Meta API",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
-          1696,
-          800
+          980,
+          180
         ]
       },
       {
@@ -424,16 +522,21 @@
           "specifyBody": "json",
           "jsonBody": "={\n  \"number\": \"{{ $json.phone }}@s.whatsapp.net\",\n  \"text\": \"{{ $json.content }}\"\n}",
           "options": {
+            "retry": {
+              "maxRetries": 3,
+              "retryInterval": 2000,
+              "retryIntervalMultiplier": 2
+            },
             "timeout": 15000
           }
         },
-        "id": "3100315a-c6ec-45f0-8294-e4cc73047a34",
-        "name": "Send via Evolution API1",
+        "id": "node-send-evo",
+        "name": "Send via Evolution API",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
-          1696,
-          1040
+          980,
+          420
         ]
       },
       {
@@ -466,11 +569,11 @@
             "parameters": [
               {
                 "name": "channel_id",
-                "value": "={{ $('Resolve Channel').first().json.channel_id }}"
+                "value": "={{ $json.channel_id || $input.first().json.channel_id }}"
               },
               {
                 "name": "contact_id",
-                "value": "={{ $('Resolve Channel').first().json.contact_id }}"
+                "value": "={{ $json.contact_id || $input.first().json.contact_id }}"
               },
               {
                 "name": "direction",
@@ -478,44 +581,98 @@
               },
               {
                 "name": "content",
-                "value": "={{ $('Resolve Channel').first().json.content }}"
+                "value": "={{ $json.content || $input.first().json.content }}"
               },
               {
                 "name": "content_type",
                 "value": "text"
               },
               {
-                "name": "status",
-                "value": "sent"
-              },
-              {
                 "name": "timestamp",
                 "value": "={{ new Date().toISOString() }}"
               }
             ]
-          },
-          "options": {}
+          }
         },
-        "id": "8f054d66-7182-4dfb-bcb9-5c2b9617b361",
-        "name": "Log Outgoing Message1",
+        "id": "node-log-outgoing",
+        "name": "Log Outgoing Message",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
-          1968,
-          928
+          1240,
+          300
         ]
       },
       {
         "parameters": {
-          "jsCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
+          "functionCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
         },
-        "id": "cf9b8f69-3960-4a69-a4de-214830b2d082",
-        "name": "Response OK1",
+        "id": "node-respond",
+        "name": "Response OK",
         "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
+        "typeVersion": 1,
         "position": [
-          2208,
-          928
+          1480,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.provider }}",
+                "operation": "equals",
+                "value2": "instagram"
+              }
+            ]
+          }
+        },
+        "id": "node-if-instagram",
+        "name": "Is Instagram?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          720,
+          500
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "=https://graph.facebook.com/v20.0/{{ $json.phone_id }}/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "Bearer {{ $json.access_token }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\\n  \\\"recipient\\\": {\\n    \\\"id\\\": \\\"{{ $json.phone }}\\\"\\n  },\\n  \\\"message\\\": {\\n    \\\"text\\\": \\\"{{ $json.content }}\\\"\\n  }\\n}",
+          "options": {
+            "retry": {
+              "maxRetries": 3,
+              "retryInterval": 3000,
+              "retryIntervalMultiplier": 2
+            },
+            "timeout": 15000
+          }
+        },
+        "id": "node-send-instagram",
+        "name": "Send via Instagram API",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          980,
+          660
         ]
       }
     ],
@@ -535,58 +692,87 @@
         "main": [
           [
             {
-              "node": "Which Provider?1",
+              "node": "Which Provider?",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Which Provider?1": {
+      "Which Provider?": {
         "main": [
           [
             {
-              "node": "Send via Meta API1",
+              "node": "Send via Meta API",
               "type": "main",
               "index": 0
             }
           ],
           [
             {
-              "node": "Send via Evolution API1",
+              "node": "Is Instagram?",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Send via Meta API1": {
+      "Send via Meta API": {
         "main": [
           [
             {
-              "node": "Log Outgoing Message1",
+              "node": "Log Outgoing Message",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Send via Evolution API1": {
+      "Send via Evolution API": {
         "main": [
           [
             {
-              "node": "Log Outgoing Message1",
+              "node": "Log Outgoing Message",
               "type": "main",
               "index": 0
             }
           ]
         ]
       },
-      "Log Outgoing Message1": {
+      "Log Outgoing Message": {
         "main": [
           [
             {
-              "node": "Response OK1",
+              "node": "Response OK",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is Instagram?": {
+        "main": [
+          [
+            {
+              "node": "Send via Instagram API",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Send via Evolution API",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Send via Instagram API": {
+        "main": [
+          [
+            {
+              "node": "Log Outgoing Message",
               "type": "main",
               "index": 0
             }
@@ -600,11 +786,35 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-05-28T14:44:35.665Z",
-        "id": 695,
+        "createdAt": "2026-06-01T16:43:17.014Z",
+        "id": 712,
         "workflowId": "NFkf4R8DDJ2o7Sqx",
-        "versionId": "e545ec18-63e6-41a7-80c9-c0dc569985ac",
+        "versionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
         "event": "activated",
+        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
+      },
+      {
+        "createdAt": "2026-06-01T16:43:17.251Z",
+        "id": 714,
+        "workflowId": "NFkf4R8DDJ2o7Sqx",
+        "versionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
+        "event": "activated",
+        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
+      },
+      {
+        "createdAt": "2026-06-01T16:43:16.984Z",
+        "id": 711,
+        "workflowId": "NFkf4R8DDJ2o7Sqx",
+        "versionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
+        "event": "deactivated",
+        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
+      },
+      {
+        "createdAt": "2026-06-01T16:43:17.203Z",
+        "id": 713,
+        "workflowId": "NFkf4R8DDJ2o7Sqx",
+        "versionId": "71e0ff29-0773-4619-a00b-8bfb8c5a55d5",
+        "event": "deactivated",
         "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
       }
     ]

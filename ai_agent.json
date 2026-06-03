@@ -1,0 +1,821 @@
+{
+  "updatedAt": "2026-06-03T14:19:50.237Z",
+  "createdAt": "2026-06-02T23:47:17.227Z",
+  "id": "qzJptf3XgjdxpZG5",
+  "name": "Central AI Agent",
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-agent",
+        "options": {}
+      },
+      "id": "444bc62b-f62e-4bbe-9497-216bff7172a5",
+      "name": "AI Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "cd0b1d89-7f6f-410e-b83a-3e142748360f"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5b156098-b677-424e-9394-bc7f77ebd64d",
+      "name": "Fetch AI Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $('AI Webhook Trigger').item.json.body.contact_id }}&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bc7e862a-9357-4101-8b92-3ca84e451849",
+      "name": "Fetch Contact",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst settings = $('Fetch AI Settings').first()?.json || {};\nconst contactArray = $('Fetch Contact').first()?.json || [];\nconst contact = contactArray[0] || {};\nconst inputBody = $('AI Webhook Trigger').first()?.json?.body || {};\n\nif (!settings.is_enabled) {\n  return [{ json: { run_ai: false, reason: 'No settings found or disabled globally' } }];\n}\n\nconst tags = contact.tags || [];\nconst isPausedByTag = tags.includes('IA Inativa');\n\nconst systemPrompt = settings.system_prompt || '';\nconst negativePrompt = settings.negative_prompt || '';\nconst apiKey = settings.api_key || '';\nconst model = settings.model || 'gpt-4o-mini';\nconst temperature = settings.temperature ?? 0.7;\n\nconst msgText = inputBody.user_message || '';\nconst phone = inputBody.phone || contact.phone || '';\nconst direction = inputBody.direction || 'in';\n\nif (direction !== 'in') {\n  return [{ json: { run_ai: false, reason: 'Message is outbound' } }];\n}\n\nconst pausePhrases = settings.pause_trigger_phrases || [];\nconst matchedPhrase = pausePhrases.find(p => msgText.toLowerCase().includes(p.toLowerCase()));\n\nlet pauseBot = false;\nlet runAi = false;\nlet reason = '';\n\nif (isPausedByTag) {\n  reason = 'AI is paused for this contact (IA Inativa tag present)';\n} else if (matchedPhrase) {\n  pauseBot = true;\n  reason = `AI paused by trigger phrase: \"${matchedPhrase}\"`;\n} else {\n  runAi = true;\n  reason = 'All checks passed, running AI';\n}\n\nconst updatedTags = isPausedByTag ? tags : [...tags, 'IA Inativa'];\n\nreturn [{\n  json: {\n    run_ai: runAi,\n    pause_bot: pauseBot,\n    reason: reason,\n    contact_id: inputBody.contact_id,\n    phone: phone,\n    channel_id: inputBody.channel_id,\n    user_message: msgText,\n    system_prompt: systemPrompt,\n    negative_prompt: negativePrompt,\n    api_key: apiKey,\n    model: model,\n    temperature: temperature,\n    updated_tags: updatedTags\n  }\n}];\n"
+      },
+      "id": "c2f33391-f578-4de1-8e22-6b14d2c7a14f",
+      "name": "AI Routing Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.pause_bot }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "c6b44347-b1cf-4845-818a-98013c10ad3f",
+      "name": "If Pause AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $json.contact_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"tags\": {{ JSON.stringify($json.updated_tags) }} }",
+        "options": {}
+      },
+      "id": "60599b87-da61-4542-8c67-d518938f6f62",
+      "name": "Pause Contact AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.run_ai }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "7affaec4-68a8-449b-859f-27a531945a77",
+      "name": "If Run AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages?contact_id=eq.{{ $json.contact_id }}&order=timestamp.desc&limit=10",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2b6a0562-a5ad-4541-90ff-e6c21025489f",
+      "name": "Fetch Conversation History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst msgs = $input.all().map(item => item.json);\nmsgs.reverse();\n\nconst historyMessages = msgs.map(m => ({\n  role: m.direction === 'in' ? 'user' : 'assistant',\n  content: m.content || ''\n}));\n\nconst routerData = $('AI Routing Decision').first().json;\n\nconst systemContent = `${routerData.system_prompt}\\n\\nRESTRIS��ES IMPORTANTES (O QUE NUNCA FAZER):\\n${routerData.negative_prompt}`;\n\nconst finalMessages = [\n  { role: 'system', content: systemContent },\n  ...historyMessages,\n  { role: 'user', content: routerData.user_message }\n];\n\nreturn [{\n  json: {\n    api_key: routerData.api_key,\n    model: routerData.model,\n    temperature: routerData.temperature,\n    messages: finalMessages,\n    contact_id: routerData.contact_id,\n    phone: routerData.phone,\n    channel_id: routerData.channel_id\n  }\n}];\n"
+      },
+      "id": "5f5921e8-6945-4ab9-9dbe-4320c9588b74",
+      "name": "Format Prompt & History",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"{{ $json.model }}\", \"temperature\": {{ $json.temperature }}, \"messages\": {{ JSON.stringify($json.messages) }} }",
+        "options": {}
+      },
+      "id": "c4e943d8-dfc0-466f-a435-913ba4e7e4f3",
+      "name": "Call OpenAI API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst resp = $input.first().json;\nconst answer = resp.choices?.[0]?.message?.content || '';\nconst inputData = $('Format Prompt & History').first().json;\nreturn [{\n  json: {\n    contact_id: inputData.contact_id,\n    phone: inputData.phone,\n    channel_id: inputData.channel_id,\n    content: answer\n  }\n}];\n"
+      },
+      "id": "104fc9be-87d7-45a4-a7e4-ce85fb72128a",
+      "name": "Extract AI Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-n8n.rh3fr2.easypanel.host/webhook/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"channel_id\": \"{{ $json.channel_id }}\", \"contact_id\": \"{{ $json.contact_id }}\", \"phone\": \"{{ $json.phone }}\", \"content\": \"{{ $json.content }}\"}",
+        "options": {}
+      },
+      "id": "45004d66-bd9d-47a1-8dd9-9857abf4de4d",
+      "name": "Send AI Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1800,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "AI Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch AI Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch AI Settings": {
+      "main": [
+        [
+          {
+            "node": "Fetch Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contact": {
+      "main": [
+        [
+          {
+            "node": "AI Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Routing Decision": {
+      "main": [
+        [
+          {
+            "node": "If Pause AI?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Run AI?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Pause AI?": {
+      "main": [
+        [
+          {
+            "node": "Pause Contact AI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "If Run AI?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Fetch Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Format Prompt & History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Prompt & History": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI API": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AI Answer": {
+      "main": [
+        [
+          {
+            "node": "Send AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "a4f1c3ce-5ceb-4fed-b88d-568b66702d2b",
+  "activeVersionId": "a4f1c3ce-5ceb-4fed-b88d-568b66702d2b",
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-06-02T23:47:17.231Z",
+      "createdAt": "2026-06-02T23:47:17.231Z",
+      "role": "workflow:owner",
+      "workflowId": "qzJptf3XgjdxpZG5",
+      "projectId": "fIrNrWww8GxwH38w"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-06-03T14:19:50.239Z",
+    "createdAt": "2026-06-03T14:19:50.239Z",
+    "versionId": "a4f1c3ce-5ceb-4fed-b88d-568b66702d2b",
+    "workflowId": "qzJptf3XgjdxpZG5",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "ai-agent",
+          "options": {}
+        },
+        "id": "444bc62b-f62e-4bbe-9497-216bff7172a5",
+        "name": "AI Webhook Trigger",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          0,
+          300
+        ],
+        "webhookId": "cd0b1d89-7f6f-410e-b83a-3e142748360f"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?limit=1",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "5b156098-b677-424e-9394-bc7f77ebd64d",
+        "name": "Fetch AI Settings",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          200,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $('AI Webhook Trigger').item.json.body.contact_id }}&limit=1",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "bc7e862a-9357-4101-8b92-3ca84e451849",
+        "name": "Fetch Contact",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          400,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst settings = $('Fetch AI Settings').first()?.json || {};\nconst contactArray = $('Fetch Contact').first()?.json || [];\nconst contact = contactArray[0] || {};\nconst inputBody = $('AI Webhook Trigger').first()?.json?.body || {};\n\nif (!settings.is_enabled) {\n  return [{ json: { run_ai: false, reason: 'No settings found or disabled globally' } }];\n}\n\nconst tags = contact.tags || [];\nconst isPausedByTag = tags.includes('IA Inativa');\n\nconst systemPrompt = settings.system_prompt || '';\nconst negativePrompt = settings.negative_prompt || '';\nconst apiKey = settings.api_key || '';\nconst model = settings.model || 'gpt-4o-mini';\nconst temperature = settings.temperature ?? 0.7;\n\nconst msgText = inputBody.user_message || '';\nconst phone = inputBody.phone || contact.phone || '';\nconst direction = inputBody.direction || 'in';\n\nif (direction !== 'in') {\n  return [{ json: { run_ai: false, reason: 'Message is outbound' } }];\n}\n\nconst pausePhrases = settings.pause_trigger_phrases || [];\nconst matchedPhrase = pausePhrases.find(p => msgText.toLowerCase().includes(p.toLowerCase()));\n\nlet pauseBot = false;\nlet runAi = false;\nlet reason = '';\n\nif (isPausedByTag) {\n  reason = 'AI is paused for this contact (IA Inativa tag present)';\n} else if (matchedPhrase) {\n  pauseBot = true;\n  reason = `AI paused by trigger phrase: \"${matchedPhrase}\"`;\n} else {\n  runAi = true;\n  reason = 'All checks passed, running AI';\n}\n\nconst updatedTags = isPausedByTag ? tags : [...tags, 'IA Inativa'];\n\nreturn [{\n  json: {\n    run_ai: runAi,\n    pause_bot: pauseBot,\n    reason: reason,\n    contact_id: inputBody.contact_id,\n    phone: phone,\n    channel_id: inputBody.channel_id,\n    user_message: msgText,\n    system_prompt: systemPrompt,\n    negative_prompt: negativePrompt,\n    api_key: apiKey,\n    model: model,\n    temperature: temperature,\n    updated_tags: updatedTags\n  }\n}];\n"
+        },
+        "id": "c2f33391-f578-4de1-8e22-6b14d2c7a14f",
+        "name": "AI Routing Decision",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.pause_bot }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "c6b44347-b1cf-4845-818a-98013c10ad3f",
+        "name": "If Pause AI?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          800,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $json.contact_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"tags\": {{ JSON.stringify($json.updated_tags) }} }",
+          "options": {}
+        },
+        "id": "60599b87-da61-4542-8c67-d518938f6f62",
+        "name": "Pause Contact AI",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          1000,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.run_ai }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "7affaec4-68a8-449b-859f-27a531945a77",
+        "name": "If Run AI?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          800,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages?contact_id=eq.{{ $json.contact_id }}&order=timestamp.desc&limit=10",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "2b6a0562-a5ad-4541-90ff-e6c21025489f",
+        "name": "Fetch Conversation History",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          1000,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst msgs = $input.all().map(item => item.json);\nmsgs.reverse();\n\nconst historyMessages = msgs.map(m => ({\n  role: m.direction === 'in' ? 'user' : 'assistant',\n  content: m.content || ''\n}));\n\nconst routerData = $('AI Routing Decision').first().json;\n\nconst systemContent = `${routerData.system_prompt}\\n\\nRESTRIS��ES IMPORTANTES (O QUE NUNCA FAZER):\\n${routerData.negative_prompt}`;\n\nconst finalMessages = [\n  { role: 'system', content: systemContent },\n  ...historyMessages,\n  { role: 'user', content: routerData.user_message }\n];\n\nreturn [{\n  json: {\n    api_key: routerData.api_key,\n    model: routerData.model,\n    temperature: routerData.temperature,\n    messages: finalMessages,\n    contact_id: routerData.contact_id,\n    phone: routerData.phone,\n    channel_id: routerData.channel_id\n  }\n}];\n"
+        },
+        "id": "5f5921e8-6945-4ab9-9dbe-4320c9588b74",
+        "name": "Format Prompt & History",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1200,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/chat/completions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $json.api_key }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"model\": \"{{ $json.model }}\", \"temperature\": {{ $json.temperature }}, \"messages\": {{ JSON.stringify($json.messages) }} }",
+          "options": {}
+        },
+        "id": "c4e943d8-dfc0-466f-a435-913ba4e7e4f3",
+        "name": "Call OpenAI API",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          1400,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst resp = $input.first().json;\nconst answer = resp.choices?.[0]?.message?.content || '';\nconst inputData = $('Format Prompt & History').first().json;\nreturn [{\n  json: {\n    contact_id: inputData.contact_id,\n    phone: inputData.phone,\n    channel_id: inputData.channel_id,\n    content: answer\n  }\n}];\n"
+        },
+        "id": "104fc9be-87d7-45a4-a7e4-ce85fb72128a",
+        "name": "Extract AI Answer",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1600,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n-n8n.rh3fr2.easypanel.host/webhook/send",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"channel_id\": \"{{ $json.channel_id }}\", \"contact_id\": \"{{ $json.contact_id }}\", \"phone\": \"{{ $json.phone }}\", \"content\": \"{{ $json.content }}\"}",
+          "options": {}
+        },
+        "id": "45004d66-bd9d-47a1-8dd9-9857abf4de4d",
+        "name": "Send AI Response",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          1800,
+          400
+        ]
+      }
+    ],
+    "connections": {
+      "AI Webhook Trigger": {
+        "main": [
+          [
+            {
+              "node": "Fetch AI Settings",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch AI Settings": {
+        "main": [
+          [
+            {
+              "node": "Fetch Contact",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch Contact": {
+        "main": [
+          [
+            {
+              "node": "AI Routing Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Routing Decision": {
+        "main": [
+          [
+            {
+              "node": "If Pause AI?",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "If Run AI?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Pause AI?": {
+        "main": [
+          [
+            {
+              "node": "Pause Contact AI",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "If Run AI?": {
+        "main": [
+          [
+            {
+              "node": "Fetch Conversation History",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Fetch Conversation History": {
+        "main": [
+          [
+            {
+              "node": "Format Prompt & History",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format Prompt & History": {
+        "main": [
+          [
+            {
+              "node": "Call OpenAI API",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call OpenAI API": {
+        "main": [
+          [
+            {
+              "node": "Extract AI Answer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract AI Answer": {
+        "main": [
+          [
+            {
+              "node": "Send AI Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "Wilker Amaral",
+    "name": null,
+    "description": null,
+    "autosaved": false
+  },
+  "tags": []
+}

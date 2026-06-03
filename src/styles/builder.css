@@ -36,7 +36,7 @@
   align-items: center;
   gap: 12px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface-solid);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
   cursor: grab;
@@ -44,9 +44,9 @@
 }
 
 .node-template-card:hover {
-  border-color: var(--accent-primary);
+  border-color: var(--border-focus);
   transform: translateY(-1.5px);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-surface-hover);
 }
 
 .node-icon-circle {
@@ -109,8 +109,8 @@
 }
 
 .canvas-node:hover {
-  box-shadow: 0 10px 25px rgba(168, 85, 247, 0.15);
-  border-color: var(--accent-primary);
+  box-shadow: 0 10px 25px var(--accent-glow);
+  border-color: var(--border-focus);
   transform: translateY(-2px);
 }
 

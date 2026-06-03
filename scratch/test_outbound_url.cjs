@@ -30,10 +30,10 @@ function sendPost(url, body) {
 async function run() {
   console.log("Testing outbound webhook /webhook/send with valid contact_id");
   const payload = {
-    channel_id: "4886443e-4996-4d2a-83e1-d96f503e1a28",
-    contact_id: "69c52004-a487-474f-a2cc-529f1a1b3505",
-    phone: "5512991960679",
-    content: "Teste de envio Meta API por Antigravity às " + new Date().toLocaleTimeString()
+    channel_id: "15d09eea-b9b9-42f5-8231-8248dbb5fe7a",
+    contact_id: "5043d582-64a6-4f98-8f5e-c0e1b4260943",
+    phone: "1530247715083924",
+    content: "Teste final de outbound Instagram via Webhook n8n às " + new Date().toLocaleTimeString()
   };
   
   console.log("Payload:", JSON.stringify(payload, null, 2));

@@ -77,7 +77,7 @@ class SupabaseService {
     return (data || []).map(ch => ({
       id: ch.id,
       name: ch.name,
-      provider: ch.provider === 'meta' ? 'meta_cloud' : 'evolution',
+      provider: ch.provider === 'meta' ? 'meta_cloud' : (ch.provider === 'instagram' ? 'instagram' : 'evolution'),
       status: ch.status,
       url: ch.url,
       instance: ch.instance,
@@ -92,7 +92,7 @@ class SupabaseService {
   static async addChannel(channelData) {
     const row = {
       name: channelData.name,
-      provider: channelData.provider === 'meta_cloud' ? 'meta' : 'evolution',
+      provider: channelData.provider === 'meta_cloud' ? 'meta' : (channelData.provider === 'instagram' ? 'instagram' : 'evolution'),
       status: 'connected',
       url: channelData.url || null,
       instance: channelData.instance || null,
@@ -127,6 +127,110 @@ class SupabaseService {
       return false;
     }
     return true;
+  }
+
+  static async updateContactTags(contactId, tags) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ tags: tags })
+      .eq('id', contactId)
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] updateContactTags error:', error);
+      return false;
+    }
+    return true;
+  }
+
+  static async fetchAiSettings() {
+    const serviceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8";
+    try {
+      const response = await fetch("https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?limit=1", {
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`
+        }
+      });
+      if (response.ok) {
+        const list = await response.json();
+        if (list && list.length > 0) {
+          const row = list[0];
+          let parsedPrompt = {};
+          try {
+            parsedPrompt = JSON.parse(row.system_prompt || '{}');
+          } catch(e) {
+            parsedPrompt = { system_prompt: row.system_prompt };
+          }
+          return {
+            id: row.id,
+            tenant_id: row.tenant_id,
+            temperature: row.temperature ?? 0.7,
+            pause_trigger_phrases: row.pause_trigger_phrases ?? [],
+            agent_name: parsedPrompt.agent_name ?? 'Agente de IA',
+            model: parsedPrompt.model ?? 'gpt-4o-mini',
+            api_key: parsedPrompt.api_key ?? '',
+            system_prompt: parsedPrompt.system_prompt ?? '',
+            negative_prompt: parsedPrompt.negative_prompt ?? '',
+            is_enabled: parsedPrompt.is_enabled ?? false
+          };
+        }
+      }
+    } catch(e) {
+      console.error('[SupabaseService] fetchAiSettings error:', e);
+    }
+    return null;
+  }
+
+  static async saveAiSettings(settings) {
+    const serviceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8";
+    
+    const systemPromptJson = JSON.stringify({
+      agent_name: settings.agent_name,
+      model: settings.model,
+      api_key: settings.api_key,
+      system_prompt: settings.system_prompt,
+      negative_prompt: settings.negative_prompt,
+      is_enabled: settings.is_enabled
+    });
+
+    const body = {
+      tenant_id: settings.tenant_id || "11111111-1111-1111-1111-111111111111",
+      system_prompt: systemPromptJson,
+      temperature: Number(settings.temperature) ?? 0.7,
+      pause_trigger_phrases: settings.pause_trigger_phrases || []
+    };
+
+    if (settings.id) {
+      body.id = settings.id;
+    }
+
+    try {
+      const url = settings.id 
+        ? `https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?id=eq.${settings.id}`
+        : `https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings`;
+
+      const response = await fetch(url, {
+        method: settings.id ? 'PATCH' : 'POST',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data?.[0] || true;
+      } else {
+        console.error('[SupabaseService] saveAiSettings response error:', await response.text());
+      }
+    } catch(e) {
+      console.error('[SupabaseService] saveAiSettings error:', e);
+    }
+    return false;
   }
 
   static _hashCode(str) {

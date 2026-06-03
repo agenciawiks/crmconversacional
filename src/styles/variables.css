@@ -5,77 +5,83 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-display: 'Outfit', sans-serif;
   
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
   --radius-round: 50%;
   
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   
   /* Channels color values */
   --color-whatsapp: #25d366;
-  --color-telegram: #e1306c;   /* Instagram Brand Pink/Red */
-  --color-webchat: #fe2c55;    /* TikTok Brand Neon Red */
+  --color-telegram: #e1306c;   /* Instagram Pink/Red */
+  --color-webchat: #fe2c55;    /* TikTok Red */
   
   /* Status colors mapping */
-  --color-status-new: #07a7e1;      /* Vivid Sky Blue */
+  --color-status-new: #07a7e1;      /* Sky Blue */
   --color-status-contacted: #f59e0b;/* Yellow */
-  --color-status-proposal: #d946ef; /* Purple/Magenta */
-  --color-status-won: #71bf45;      /* Lime/Grass Green */
+  --color-status-proposal: #d946ef; /* Magenta */
+  --color-status-won: #10b981;      /* Green */
   --color-status-lost: #ef4444;     /* Red */
 }
 
-/* Dark Theme (Default) */
+/* Dark Theme (Default) - Leyton Graves Aesthetic */
 .dark-theme {
-  --bg-app: #06050b;
-  --bg-surface: rgba(12, 10, 22, 0.55);
-  --bg-surface-solid: #0A0813;
-  --bg-surface-hover: rgba(255, 255, 255, 0.05);
-  --bg-sidebar: #07050e;
+  --bg-app: #08080C;
+  --bg-surface: #12121A;
+  --bg-surface-solid: #0E0E14;
+  --bg-surface-hover: rgba(139, 92, 246, 0.08);
+  --bg-sidebar: #08080C;
   
-  --border-glass: rgba(255, 255, 255, 0.06);
-  --border-focus: rgba(7, 167, 225, 0.5);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-focus: #8B5CF6;
   
-  --text-primary: #F3F4F6;
-  --text-secondary: #9CA3AF;
-  --text-muted: #6B7280;
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
   
-  --accent-primary: #07a7e1; /* Vivid Sky Blue from Logo */
-  --accent-secondary: #71bf45; /* Lime/Grass Green from Logo */
-  --accent-glow: rgba(7, 167, 225, 0.22);
+  --accent-primary: #8B5CF6; /* Premium Purple */
+  --accent-secondary: #A78BFA;
+  --accent-glow: rgba(139, 92, 246, 0.25);
   
-  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 20px 50px rgba(0, 0, 0, 0.7);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.8);
   
   --glass-blur: blur(24px);
+  --bg-glow-1: rgba(139, 92, 246, 0.08);
+  --bg-glow-2: rgba(6, 182, 212, 0.04);
+  --bg-grid-color: rgba(255, 255, 255, 0.005);
 }
 
-/* Light Theme */
+/* Light Theme - High-Contrast Outline Aesthetic */
 .light-theme {
-  --bg-app: #F3F4F6;
-  --bg-surface: rgba(255, 255, 255, 0.65);
+  --bg-app: #F8FAFC;
+  --bg-surface: #FFFFFF;
   --bg-surface-solid: #FFFFFF;
-  --bg-surface-hover: rgba(0, 0, 0, 0.03);
-  --bg-sidebar: #F9FAFB;
+  --bg-surface-hover: #F1F5F9;
+  --bg-sidebar: #FFFFFF;
   
-  --border-glass: rgba(0, 0, 0, 0.08);
-  --border-focus: rgba(7, 167, 225, 0.4);
+  --border-glass: #64748B; /* Strong Contour Outline */
+  --border-focus: #7C3AED; /* Accent Outline */
   
-  --text-primary: #111827;
-  --text-secondary: #4B5563;
-  --text-muted: #9CA3AF;
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #475569;
   
-  --accent-primary: #07a7e1; /* Vivid Sky Blue */
-  --accent-secondary: #71bf45; /* Lime/Grass Green */
-  --accent-glow: rgba(7, 167, 225, 0.12);
+  --accent-primary: #7C3AED;
+  --accent-secondary: #A78BFA;
+  --accent-glow: rgba(124, 58, 237, 0.15);
   
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 10px 24px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.15), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
   
-  --glass-blur: blur(24px);
+  --glass-blur: blur(0px);
+  --bg-glow-1: rgba(124, 58, 237, 0.05);
+  --bg-glow-2: rgba(6, 182, 212, 0.03);
+  --bg-grid-color: rgba(15, 23, 42, 0.03);
 }

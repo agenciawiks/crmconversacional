@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle } from 'lucide-react';
 
 export default function ChatWindow() {
   const {
@@ -215,8 +216,7 @@ export default function ChatWindow() {
               <div className="active-contact-channel">
                 <span className={`tag tag-${activeContact.channel}`}>
                   {activeContact.channel === 'whatsapp' ? (
-                    activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' :
-                    activeContact.provider === 'evolution' ? 'Evolution API' : 'WhatsApp'
+                    activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' : 'WhatsApp'
                   ) : activeContact.channel === 'telegram' ? 'Instagram' :
                       activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
                 </span>
@@ -230,10 +230,11 @@ export default function ChatWindow() {
           <button
             onClick={handleSimulateClient}
             className="glass-btn secondary"
-            style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px' }}
+            style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center' }}
             title="Simula uma nova mensagem chegando do cliente"
           >
-            <span>💬</span> Simular Cliente
+            <MessageSquare size={12} strokeWidth={2.5} />
+            Simular Cliente
           </button>
         </div>
 
@@ -269,7 +270,8 @@ export default function ChatWindow() {
                       rel="noopener noreferrer" 
                       style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-color)', textDecoration: 'underline' }}
                     >
-                      📁 {msg.text || 'Documento'}
+                      <FileText size={14} strokeWidth={2.5} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                      {msg.text || 'Documento'}
                     </a>
                   </div>
                 ) : (
@@ -284,28 +286,17 @@ export default function ChatWindow() {
                   <span className={`msg-status msg-status-${msg.status}`}>
                     {msg.status === 'sending' && (
                       <span className="status-sending" title="Enviando...">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" strokeDasharray="30" strokeDashoffset="10">
-                            <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
-                          </circle>
-                        </svg>
+                        <Loader2 size={12} strokeWidth={2.5} className="spin-animation" />
                       </span>
                     )}
                     {msg.status === 'sent' && (
                       <span className="status-sent" title="Enviado">
-                        <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="2 8 7 13 14 3" />
-                          <polyline points="8 8 13 13 20 3" />
-                        </svg>
+                        <CheckCheck size={14} strokeWidth={2.5} />
                       </span>
                     )}
                     {msg.status === 'failed' && (
                       <span className="status-failed" title="Falha ao enviar. Tente novamente.">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" />
-                          <line x1="15" y1="9" x2="9" y2="15" />
-                          <line x1="9" y1="9" x2="15" y2="15" />
-                        </svg>
+                        <XCircle size={12} strokeWidth={2.5} />
                       </span>
                     )}
                   </span>
@@ -321,26 +312,34 @@ export default function ChatWindow() {
             <button
               onClick={() => handleInjectTemplate('Olá! Como posso te ajudar hoje?')}
               className="quick-reply-pill"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              👋 Saudação
+              <MessageSquare size={12} strokeWidth={2.5} />
+              Saudação
             </button>
             <button
               onClick={() => handleInjectTemplate('Aqui está a nossa proposta comercial para o seu plano.')}
               className="quick-reply-pill"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              📄 Proposta
+              <FileText size={12} strokeWidth={2.5} />
+              Proposta
             </button>
             <button
               onClick={() => handleInjectTemplate('Podemos agendar uma demonstração por vídeo amanhã às 14h?')}
               className="quick-reply-pill"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              📅 Agendar Call
+              <Calendar size={12} strokeWidth={2.5} />
+              Agendar Call
             </button>
             <button
               onClick={() => handleInjectTemplate('Perfeito! Seu contrato foi gerado. Estou enviando por e-mail.')}
               className="quick-reply-pill"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              ✍️ Fechamento
+              <PenLine size={12} strokeWidth={2.5} />
+              Fechamento
             </button>
           </div>
 
@@ -355,10 +354,7 @@ export default function ChatWindow() {
             />
             <button onClick={handleSend} className="glass-btn" style={{ padding: '12px 20px' }}>
               <span>Enviar</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
+              <Send size={14} strokeWidth={2.5} />
             </button>
           </div>
         </div>
@@ -380,8 +376,7 @@ export default function ChatWindow() {
           <div className="profile-meta-chips">
             <span className={`tag tag-${activeContact.channel}`}>
               {activeContact.channel === 'whatsapp' ? (
-                activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' :
-                activeContact.provider === 'evolution' ? 'Evolution API' : 'WhatsApp'
+                activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' : 'WhatsApp'
               ) : activeContact.channel === 'telegram' ? 'Instagram' :
                   activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
             </span>
@@ -396,10 +391,32 @@ export default function ChatWindow() {
             <span className="profile-field-label">E-mail</span>
             <span className="profile-field-value">{activeContact.email}</span>
           </div>
-          <div className="profile-field">
-            <span className="profile-field-label">Telefone</span>
-            <span className="profile-field-value">{activeContact.phone}</span>
-          </div>
+          {activeContact.channel === 'telegram' ? (
+            <>
+              {activeContact.username ? (
+                <div className="profile-field">
+                  <span className="profile-field-label">Username</span>
+                  <span className="profile-field-value">@{activeContact.username}</span>
+                </div>
+              ) : (
+                <div className="profile-field">
+                  <span className="profile-field-label">Username / Instagram ID</span>
+                  <span className="profile-field-value">{activeContact.phone}</span>
+                </div>
+              )}
+              {activeContact.username && (
+                <div className="profile-field">
+                  <span className="profile-field-label">Instagram ID</span>
+                  <span className="profile-field-value">{activeContact.phone}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="profile-field">
+              <span className="profile-field-label">Telefone</span>
+              <span className="profile-field-value">{activeContact.phone}</span>
+            </div>
+          )}
         </div>
 
         {/* PIPELINE & FINANCIAL DETAILS */}

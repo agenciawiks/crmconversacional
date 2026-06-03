@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCrm } from '../context/CrmContext';
+import { MessageSquare, Tag, StickyNote, Phone } from 'lucide-react';
 
 export default function ContactsList() {
   const { 
@@ -291,8 +292,10 @@ export default function ContactsList() {
                         handleOpenChat(contact.id);
                       }}
                       className="table-action-btn"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      💬 Conversar
+                      <MessageSquare size={14} strokeWidth={2.5} />
+                      Conversar
                     </button>
                   </div>
                 </td>
@@ -338,11 +341,11 @@ export default function ContactsList() {
             right: 0,
             width: '440px',
             height: '100%',
-            background: 'rgba(12, 12, 18, 0.9)',
-            backdropFilter: 'blur(25px)',
-            webkitBackdropFilter: 'blur(25px)',
-            borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
-            boxShadow: '-10px 0 35px rgba(0, 0, 0, 0.6)',
+            background: 'var(--bg-surface-solid)',
+            backdropFilter: 'var(--glass-blur)',
+            webkitBackdropFilter: 'var(--glass-blur)',
+            borderLeft: '1px solid var(--border-glass)',
+            boxShadow: 'var(--shadow-lg)',
             zIndex: 1000,
             display: 'flex',
             flexDirection: 'column',
@@ -354,14 +357,14 @@ export default function ContactsList() {
             
             {/* Header section */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, letterSpacing: '-0.3px', background: 'linear-gradient(90deg, #fff, #9ca3af)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, letterSpacing: '-0.3px', background: 'linear-gradient(90deg, var(--text-primary), var(--text-secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 Ficha do Lead
               </h2>
               <button 
                 onClick={() => setSelectedContact(null)}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
+                  background: 'var(--bg-surface-hover)',
+                  border: '1px solid var(--border-glass)',
                   color: 'var(--text-secondary)',
                   borderRadius: '50%',
                   width: '32px',
@@ -379,9 +382,9 @@ export default function ContactsList() {
                   e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                  e.currentTarget.style.background = 'var(--bg-surface-hover)';
                   e.currentTarget.style.color = 'var(--text-secondary)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                  e.currentTarget.style.borderColor = 'var(--border-glass)';
                 }}
               >
                 ✕
@@ -389,7 +392,7 @@ export default function ContactsList() {
             </div>
 
             {/* Profile Summary Badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.04)', borderRadius: '12px', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'var(--bg-surface-hover)', border: '1px solid var(--border-glass)', borderRadius: '12px', marginBottom: '24px' }}>
               <div style={{ 
                 width: '54px', 
                 height: '54px', 
@@ -406,11 +409,20 @@ export default function ContactsList() {
                 {selectedContact.name.substring(0, 2).toUpperCase()}
               </div>
               <div>
-                <div style={{ fontWeight: '700', fontSize: '16px', color: '#fff' }}>{editName || selectedContact.name}</div>
+                <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{editName || selectedContact.name}</div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>📞 {selectedContact.phone}</span>
-                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>|</span>
-                  <span style={{ textTransform: 'capitalize' }}>{selectedContact.channel}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    {selectedContact.channel === 'telegram' ? '@' : (
+                      <Phone size={12} strokeWidth={2.5} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                    )}
+                    {selectedContact.phone}
+                  </span>
+                  <span style={{ color: 'var(--border-glass)' }}>|</span>
+                  <span style={{ textTransform: 'capitalize' }}>
+                    {selectedContact.channel === 'telegram' ? 'Instagram' : 
+                     selectedContact.channel === 'whatsapp' ? 'WhatsApp' : 
+                     selectedContact.channel === 'webchat' ? 'Tiktok' : selectedContact.channel}
+                  </span>
                 </div>
               </div>
             </div>
@@ -426,7 +438,6 @@ export default function ContactsList() {
                   className="glass-input" 
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)' }}
                 />
               </div>
 
@@ -435,13 +446,13 @@ export default function ContactsList() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Valor Comercial</label>
                   <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'rgba(255,255,255,0.3)' }}>R$</span>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>R$</span>
                     <input 
                       type="number" 
                       className="glass-input" 
                       value={editValue}
                       onChange={(e) => setEditValue(Number(e.target.value) || 0)}
-                      style={{ paddingLeft: '32px', background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)' }}
+                      style={{ paddingLeft: '32px' }}
                     />
                   </div>
                 </div>
@@ -452,7 +463,7 @@ export default function ContactsList() {
                     className="crm-status-dropdown" 
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
-                    style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.06)', width: '100%', height: '42px' }}
+                    style={{ width: '100%', height: '42px' }}
                   >
                     <option value="new">Novo Lead</option>
                     <option value="contacted">Em Contato</option>
@@ -465,12 +476,13 @@ export default function ContactsList() {
 
               {/* Tags Section */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  🏷️ Etiquetas (Tags)
+                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Tag size={12} strokeWidth={2.5} style={{ color: 'var(--accent-primary)' }} />
+                  Etiquetas (Tags)
                 </label>
                 
                 {/* Active tags visual lists */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '30px', padding: '10px', background: 'rgba(255,255,255,0.01)', border: '1px dashed rgba(255,255,255,0.06)', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '30px', padding: '10px', background: 'var(--bg-app)', border: '1px dashed var(--border-glass)', borderRadius: '8px' }}>
                   {editTags.map(tag => (
                     <span 
                       key={tag} 
@@ -489,9 +501,9 @@ export default function ContactsList() {
                       {tag}
                       <span 
                         onClick={() => handleRemoveTag(tag)}
-                        style={{ cursor: 'pointer', fontWeight: '700', color: 'rgba(255,255,255,0.4)', transition: 'color 0.2s' }}
+                        style={{ cursor: 'pointer', fontWeight: '700', color: 'var(--text-muted)', transition: 'color 0.2s' }}
                         onMouseEnter={(e) => e.target.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.target.style.color = 'rgba(255,255,255,0.4)'}
+                        onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
                       >
                         ✕
                       </span>
@@ -523,12 +535,13 @@ export default function ContactsList() {
               </div>
 
               {/* Divider */}
-              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '4px 0' }} />
+              <div style={{ height: '1px', background: 'var(--border-glass)', margin: '4px 0' }} />
 
               {/* Notes (Observações) Section */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  📝 Anotações & Observações
+                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <StickyNote size={12} strokeWidth={2.5} style={{ color: 'var(--accent-primary)' }} />
+                  Anotações & Observações
                 </label>
 
                 {/* Live Notes Timeline list */}
@@ -538,8 +551,8 @@ export default function ContactsList() {
                       key={note.id} 
                       style={{ 
                         padding: '12px', 
-                        background: 'rgba(255, 255, 255, 0.02)', 
-                        border: '1px solid rgba(255, 255, 255, 0.04)', 
+                        background: 'var(--bg-app)', 
+                        border: '1px solid var(--border-glass)', 
                         borderRadius: '8px', 
                         fontSize: '13px',
                         lineHeight: '1.4'
@@ -553,7 +566,7 @@ export default function ContactsList() {
                     </div>
                   ))}
                   {notesList.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic', background: 'rgba(255,255,255,0.01)', border: '1px dashed rgba(255,255,255,0.04)', borderRadius: '8px' }}>
+                    <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic', background: 'var(--bg-app)', border: '1px dashed var(--border-glass)', borderRadius: '8px' }}>
                       Nenhuma anotação registrada ainda.
                     </div>
                   )}
@@ -567,7 +580,7 @@ export default function ContactsList() {
                     placeholder="Escrever observações sobre o cliente..." 
                     value={newNoteText}
                     onChange={(e) => setNewNoteText(e.target.value)}
-                    style={{ resize: 'none', padding: '10px', fontSize: '13px', background: 'rgba(255,255,255,0.01)', borderRadius: '8px' }}
+                    style={{ resize: 'none', padding: '10px', fontSize: '13px', borderRadius: '8px' }}
                   />
                   <button 
                     type="submit" 
@@ -582,7 +595,7 @@ export default function ContactsList() {
             </div>
 
             {/* Save / Footer actions */}
-            <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '20px' }}>
+            <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-glass)', paddingTop: '20px' }}>
               <button 
                 onClick={() => setSelectedContact(null)}
                 className="glass-btn secondary"
@@ -602,7 +615,7 @@ export default function ContactsList() {
                   background: 'var(--accent-primary)',
                   border: 'none',
                   color: '#fff',
-                  boxShadow: '0 0 16px rgba(7, 167, 225, 0.35)',
+                  boxShadow: '0 0 16px var(--accent-glow)',
                   fontWeight: '600'
                 }}
               >

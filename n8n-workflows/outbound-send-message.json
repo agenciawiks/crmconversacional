@@ -4,7 +4,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "webhook/send",
+        "path": "send",
         "responseMode": "lastNode",
         "options": {}
       },
@@ -12,17 +12,51 @@
       "name": "Send Message Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
-        "functionCode": "// Fetch channel details from Supabase to determine provider\nconst channelId = $json.body?.channel_id || $json.channel_id;\nconst content = $json.body?.content || $json.content;\nconst phone = $json.body?.phone || $json.phone;\nconst contactId = $json.body?.contact_id || $json.contact_id;\n\nconst supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\nconst serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n\nconst channelResp = await $helpers.httpRequest({\n  method: 'GET',\n  url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=*`,\n  headers: {\n    'apikey': serviceKey,\n    'Authorization': `Bearer ${serviceKey}`\n  }\n});\n\nconst channel = channelResp?.[0];\nif (!channel) {\n  throw new Error(`Channel ${channelId} not found`);\n}\n\nreturn [{\n  json: {\n    channel_id: channelId,\n    contact_id: contactId,\n    provider: channel.provider,\n    content: content,\n    phone: phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
+        "method": "GET",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/channels?id=eq.{{ $json.body?.channel_id || $json.channel_id }}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "node-resolve-channel",
-      "name": "Resolve Channel",
+      "id": "node-fetch-channel",
+      "name": "Fetch Channel from DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const channelList = $input.first().json;\nconst channel = Array.isArray(channelList) ? channelList[0] : channelList;\n\nconst trigger = $('Send Message Trigger').first().json;\nconst body = trigger.body || trigger;\n\nif (!channel) {\n  throw new Error(\"Channel not found in Supabase\");\n}\n\nreturn [{\n  json: {\n    channel_id: body.channel_id,\n    contact_id: body.contact_id,\n    provider: channel.provider,\n    content: body.content,\n    phone: body.phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
+      },
+      "id": "node-map-channel",
+      "name": "Map Channel Data",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
-      "position": [480, 300]
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
     },
     {
       "parameters": {
@@ -30,7 +64,7 @@
           "string": [
             {
               "value1": "={{ $json.provider }}",
-              "operation": "equals",
+              "operation": "equal",
               "value2": "meta"
             }
           ]
@@ -40,7 +74,31 @@
       "name": "Which Provider?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [720, 300]
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.provider }}",
+              "operation": "equal",
+              "value2": "instagram"
+            }
+          ]
+        }
+      },
+      "id": "node-if-instagram",
+      "name": "Is Instagram?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        920,
+        500
+      ]
     },
     {
       "parameters": {
@@ -49,19 +107,20 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer {{ $json.access_token }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.content }}\"\n  }\n}",
         "options": {
-          "retry": {
-            "maxRetries": 3,
-            "retryInterval": 3000,
-            "retryIntervalMultiplier": 2
-          },
           "timeout": 15000
         }
       },
@@ -69,7 +128,43 @@
       "name": "Send via Meta API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [980, 180]
+      "position": [
+        1180,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v20.0/me/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $json.phone }}\"\n  },\n  \"message\": {\n    \"text\": \"{{ $json.content }}\"\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "node-send-instagram",
+      "name": "Send via Instagram API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        1180,
+        420
+      ]
     },
     {
       "parameters": {
@@ -78,19 +173,20 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "={{ $json.evo_api_key }}" },
-            { "name": "Content-Type", "value": "application/json" }
+            {
+              "name": "apikey",
+              "value": "={{ $json.evo_api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"number\": \"{{ $json.phone }}@s.whatsapp.net\",\n  \"text\": \"{{ $json.content }}\"\n}",
         "options": {
-          "retry": {
-            "maxRetries": 3,
-            "retryInterval": 2000,
-            "retryIntervalMultiplier": 2
-          },
           "timeout": 15000
         }
       },
@@ -98,7 +194,10 @@
       "name": "Send via Evolution API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [980, 420]
+      "position": [
+        1180,
+        660
+      ]
     },
     {
       "parameters": {
@@ -107,65 +206,192 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey", "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8" },
-            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8" },
-            { "name": "Content-Type", "value": "application/json" },
-            { "name": "Prefer", "value": "return=representation" }
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
           ]
         },
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "channel_id", "value": "={{ $json.channel_id || $input.first().json.channel_id }}" },
-            { "name": "contact_id", "value": "={{ $json.contact_id || $input.first().json.contact_id }}" },
-            { "name": "direction", "value": "out" },
-            { "name": "content", "value": "={{ $json.content || $input.first().json.content }}" },
-            { "name": "content_type", "value": "text" },
-            { "name": "timestamp", "value": "={{ new Date().toISOString() }}" }
+            {
+              "name": "channel_id",
+              "value": "={{ $('Map Channel Data').first().json.channel_id }}"
+            },
+            {
+              "name": "contact_id",
+              "value": "={{ $('Map Channel Data').first().json.contact_id }}"
+            },
+            {
+              "name": "direction",
+              "value": "out"
+            },
+            {
+              "name": "content",
+              "value": "={{ $('Map Channel Data').first().json.content }}"
+            },
+            {
+              "name": "content_type",
+              "value": "text"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
           ]
-        }
+        },
+        "options": {}
       },
       "id": "node-log-outgoing",
       "name": "Log Outgoing Message",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [1240, 300]
+      "position": [
+        1460,
+        300
+      ]
     },
     {
       "parameters": {
-        "functionCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
+        "jsCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
       },
       "id": "node-respond",
       "name": "Response OK",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
-      "position": [1480, 300]
+      "typeVersion": 2,
+      "position": [
+        1700,
+        300
+      ]
     }
   ],
   "connections": {
     "Send Message Trigger": {
-      "main": [[{ "node": "Resolve Channel", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Channel from DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Resolve Channel": {
-      "main": [[{ "node": "Which Provider?", "type": "main", "index": 0 }]]
+    "Fetch Channel from DB": {
+      "main": [
+        [
+          {
+            "node": "Map Channel Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Channel Data": {
+      "main": [
+        [
+          {
+            "node": "Which Provider?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Which Provider?": {
       "main": [
-        [{ "node": "Send via Meta API", "type": "main", "index": 0 }],
-        [{ "node": "Send via Evolution API", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Send via Meta API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Instagram?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Instagram?": {
+      "main": [
+        [
+          {
+            "node": "Send via Instagram API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send via Evolution API",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send via Meta API": {
-      "main": [[{ "node": "Log Outgoing Message", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Log Outgoing Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Instagram API": {
+      "main": [
+        [
+          {
+            "node": "Log Outgoing Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Send via Evolution API": {
-      "main": [[{ "node": "Log Outgoing Message", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Log Outgoing Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Log Outgoing Message": {
-      "main": [[{ "node": "Response OK", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Response OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": {
-    "executionTimeout": 30
-  }
+  "settings": {}
 }

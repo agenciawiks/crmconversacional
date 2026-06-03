@@ -81,6 +81,15 @@
 
 .contacts-table tr:hover td {
   background: var(--bg-surface-hover);
+  transition: background 0.2s ease;
+}
+
+.contacts-table tbody tr {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.contacts-table tbody tr:hover {
+  transform: scale(1.005);
 }
 
 /* Specific Columns Styles */
@@ -135,7 +144,7 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -145,4 +154,11 @@
   background: var(--accent-primary);
   color: #fff;
   border-color: transparent;
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.table-action-btn:active {
+  transform: translateY(0) scale(0.95);
+  transition-duration: 0.1s;
 }

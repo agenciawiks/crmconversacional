@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 scripts/
 exec.json
+
+workflows.json
+outbound.json
+upload_payload.json

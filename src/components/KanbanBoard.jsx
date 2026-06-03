@@ -70,7 +70,11 @@ export default function KanbanBoard() {
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
         <CardHeader style={{ padding: '24px 24px 0px 24px' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
-            <span>📐</span> Conversão do Funil (Leads)
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+            Conversão do Funil (Leads)
           </CardTitle>
           <CardDescription style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             Fluxo de conversão linear das etapas do CRM
@@ -170,7 +174,11 @@ export default function KanbanBoard() {
         <CardHeader className="pb-0" style={{ padding: '24px 24px 0px 24px' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '16px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>📐</span> Distribuição do Funil
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+                <path d="M22 12A10 10 0 0 0 12 2v10z" />
+              </svg>
+              Distribuição do Funil
             </span>
             <Badge
               variant="outline"
@@ -259,10 +267,10 @@ export default function KanbanBoard() {
               width: '144px',
               height: '144px',
               borderRadius: '50%',
-              background: 'rgba(10, 10, 15, 0.4)',
-              backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255, 255, 255, 0.02)',
-              boxShadow: 'inset 0 4px 20px rgba(0, 0, 0, 0.4)'
+              background: 'var(--bg-surface-solid)',
+              backdropFilter: 'var(--glass-blur)',
+              border: '1px solid var(--border-glass)',
+              boxShadow: 'var(--shadow-sm)'
             }}>
               <span style={{ 
                 fontSize: '32px', 
@@ -314,16 +322,50 @@ export default function KanbanBoard() {
     const total = whatsappCount + telegramCount + webchatCount || 1;
 
     const channels = [
-      { name: 'Whatsapp', count: whatsappCount, color: 'var(--color-whatsapp)', pct: (whatsappCount / total) * 100, icon: '💬' },
-      { name: 'Instagram', count: telegramCount, color: 'var(--color-telegram)', pct: (telegramCount / total) * 100, icon: '📸' },
-      { name: 'Tiktok', count: webchatCount, color: 'var(--color-webchat)', pct: (webchatCount / total) * 100, icon: '🎵' }
+      { 
+        name: 'Whatsapp', 
+        count: whatsappCount, 
+        color: 'var(--color-whatsapp)', 
+        pct: (whatsappCount / total) * 100, 
+        icon: (
+          <span className="kanban-card-channel-icon whatsapp" style={{ display: 'inline-flex', width: '18px', height: '18px', fontSize: '8px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', color: '#fff', fontWeight: 'bold' }}>
+            W
+          </span>
+        ) 
+      },
+      { 
+        name: 'Instagram', 
+        count: telegramCount, 
+        color: 'var(--color-telegram)', 
+        pct: (telegramCount / total) * 100, 
+        icon: (
+          <span className="kanban-card-channel-icon telegram" style={{ display: 'inline-flex', width: '18px', height: '18px', fontSize: '8px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', color: '#fff', fontWeight: 'bold' }}>
+            I
+          </span>
+        ) 
+      },
+      { 
+        name: 'Tiktok', 
+        count: webchatCount, 
+        color: 'var(--color-webchat)', 
+        pct: (webchatCount / total) * 100, 
+        icon: (
+          <span className="kanban-card-channel-icon webchat" style={{ display: 'inline-flex', width: '18px', height: '18px', fontSize: '8px', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', color: '#fff', fontWeight: 'bold' }}>
+            T
+          </span>
+        ) 
+      }
     ];
 
     return (
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
         <CardHeader style={{ padding: '24px 24px 0px 24px' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
-            <span>🔌</span> Desempenho de Canais
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            Desempenho de Canais
           </CardTitle>
           <CardDescription style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             Origem e engajamento dos leads ativos por canal
@@ -340,7 +382,7 @@ export default function KanbanBoard() {
                   {ch.count} leads ({Math.round(ch.pct)}%)
                 </span>
               </div>
-              <div style={{ height: '8px', background: 'rgba(255,255,255,0.02)', borderRadius: '100px', overflow: 'hidden', border: '1px solid var(--border-glass)' }}>
+              <div style={{ height: '8px', background: 'var(--bg-app)', borderRadius: '100px', overflow: 'hidden', border: '1px solid var(--border-glass)' }}>
                 <div style={{
                   height: '100%',
                   width: `${ch.pct}%`,
@@ -368,7 +410,12 @@ export default function KanbanBoard() {
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
         <CardHeader style={{ padding: '24px 24px 0px 24px' }}>
           <CardTitle style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px' }}>
-            <span>🤖</span> Automação e IA
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent-primary)' }}>
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <rect x="9" y="9" width="6" height="6" />
+              <path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 15h3M1 9h3M1 15h3" />
+            </svg>
+            Automação e IA
           </CardTitle>
           <CardDescription style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             Métricas de engajamento do Assistente de Inteligência Artificial
@@ -389,7 +436,7 @@ export default function KanbanBoard() {
                 cy="60"
                 r="45"
                 fill="transparent"
-                stroke="rgba(255, 255, 255, 0.02)"
+                stroke="var(--border-glass)"
                 strokeWidth="10"
               />
               <circle
@@ -429,7 +476,12 @@ export default function KanbanBoard() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Tempo de Resposta IA</span>
-              <span style={{ fontSize: '18px', fontWeight: '700', color: '#10b981' }}>⚡ &lt; 2s</span>
+              <span style={{ fontSize: '18px', fontWeight: '700', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline-block' }}>
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                &lt; 2s
+              </span>
             </div>
           </div>
 
@@ -458,16 +510,27 @@ export default function KanbanBoard() {
             <button 
               onClick={() => setViewMode('board')} 
               className={`glass-btn ${viewMode === 'board' ? '' : 'secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px', boxShadow: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px', boxShadow: 'none' }}
             >
-              📋 Quadro
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="9" y1="9" x2="15" y2="9" />
+                <line x1="9" y1="13" x2="15" y2="13" />
+                <line x1="9" y1="17" x2="13" y2="17" />
+              </svg>
+              Quadro
             </button>
             <button 
               onClick={() => setViewMode('charts')} 
               className={`glass-btn ${viewMode === 'charts' ? '' : 'secondary'}`}
-              style={{ padding: '6px 14px', fontSize: '12px', boxShadow: 'none' }}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px', boxShadow: 'none' }}
             >
-              📊 Gráficos
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              Gráficos
             </button>
           </div>
         </div>
@@ -540,8 +603,13 @@ export default function KanbanBoard() {
                         <button
                           onClick={() => handleOpenChat(contact.id)}
                           className="kanban-card-action-btn"
+                          style={{ display: 'flex', alignItems: 'center', gap: '2px' }}
                         >
-                          Chat ➔
+                          Chat
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                            <polyline points="12 5 19 12 12 19" />
+                          </svg>
                         </button>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
+import { LayoutDashboard, MessageSquare, Kanban, Bot, Users, Link2, Sun, Moon } from 'lucide-react';
 
 export default function Sidebar() {
   const { activeScreen, setActiveScreen, theme, toggleTheme } = useCrm();
@@ -8,68 +9,32 @@ export default function Sidebar() {
     {
       id: 'dashboard',
       label: 'Painel Geral',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="7" height="9" rx="1" />
-          <rect x="14" y="3" width="7" height="5" rx="1" />
-          <rect x="14" y="12" width="7" height="9" rx="1" />
-          <rect x="3" y="16" width="7" height="5" rx="1" />
-        </svg>
-      )
+      icon: <LayoutDashboard size={20} strokeWidth={2} />
     },
     {
       id: 'chat',
       label: 'Chat Ao Vivo',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      )
+      icon: <MessageSquare size={20} strokeWidth={2} />
     },
     {
       id: 'pipeline',
       label: 'Funil Comercial',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" />
-          <path d="M11 3v18" />
-          <path d="M15 3v18" />
-          <path d="M7 3v18" />
-        </svg>
-      )
+      icon: <Kanban size={20} strokeWidth={2} />
     },
     {
       id: 'builder',
-      label: 'Automações Bot',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-          <circle cx="12" cy="2" r="1" />
-          <circle cx="12" cy="22" r="1" />
-        </svg>
-      )
+      label: 'Agente de IA',
+      icon: <Bot size={20} strokeWidth={2} />
     },
     {
       id: 'contacts',
       label: 'Leads & Contatos',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      )
+      icon: <Users size={20} strokeWidth={2} />
     },
     {
       id: 'channels',
       label: 'Conectar Canais',
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      )
+      icon: <Link2 size={20} strokeWidth={2} />
     }
   ];
 
@@ -148,37 +113,9 @@ export default function Sidebar() {
             <button
               key={item.id}
               onClick={() => setActiveScreen(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                width: '100%',
-                padding: '10px 14px',
-                background: isActive ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(6, 182, 212, 0.02) 100%)' : 'transparent',
-                border: isActive ? '1px solid rgba(168, 85, 247, 0.2)' : '1px solid transparent',
-                borderRadius: 'var(--radius-md)',
-                color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-                fontSize: '14px',
-                fontWeight: isActive ? '600' : '500',
-                transition: 'all var(--transition-fast)',
-                textAlign: 'left',
-                boxShadow: isActive ? 'inset 0 1px 1px rgba(255,255,255,0.05)' : 'none'
-              }}
+              className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
             >
-              <span style={{
-                color: isActive ? '#fff' : 'var(--text-muted)',
-                background: isActive ? 'linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)' : 'rgba(255,255,255,0.02)',
-                padding: '6px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: isActive ? '0 4px 8px rgba(168, 85, 247, 0.25)' : 'none',
-                transition: 'all var(--transition-fast)',
-                border: isActive ? 'none' : '1px solid var(--border-glass)'
-              }}>
+              <span className="sidebar-nav-icon">
                 {item.icon}
               </span>
               {item.label}
@@ -198,37 +135,17 @@ export default function Sidebar() {
         {/* Theme Switcher Toggle */}
         <button
           onClick={toggleTheme}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            background: 'var(--bg-surface-hover)',
-            border: '1px solid var(--border-glass)',
-            padding: '10px 14px',
-            borderRadius: 'var(--radius-md)',
-            color: 'var(--text-primary)',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-sans)',
-            fontSize: '13px',
-            fontWeight: '500',
-            transition: 'all var(--transition-fast)'
-          }}
+          className="sidebar-theme-btn"
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {theme === 'dark' ? (
               <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
+                <Moon size={16} strokeWidth={2} />
                 Modo Escuro
               </>
             ) : (
               <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="5" />
-                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-                </svg>
+                <Sun size={16} strokeWidth={2} />
                 Modo Claro
               </>
             )}

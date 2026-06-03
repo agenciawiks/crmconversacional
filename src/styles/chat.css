@@ -65,13 +65,15 @@
   color: var(--text-secondary);
   border: 1px solid var(--border-glass);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: center;
 }
 
 .channel-tab-btn:hover {
   color: var(--text-primary);
   background: var(--border-glass);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .channel-tab-btn.active {
@@ -97,20 +99,21 @@
   padding: 12px;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   border: 1px solid transparent;
 }
 
 .chat-item-row:hover {
-  background: rgba(255, 255, 255, 0.02);
-  border-color: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-glass);
+  transform: translateX(4px);
 }
 
 .chat-item-row.active {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(6, 182, 212, 0.02) 100%);
-  border-color: rgba(168, 85, 247, 0.2);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-focus);
+  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .chat-item-row.active::before {
@@ -285,12 +288,10 @@
 }
 
 .message-bubble-wrapper.client .message-bubble {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-surface);
   color: var(--text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-sm);
   border-bottom-left-radius: 4px;
 }
 
@@ -299,16 +300,14 @@
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom-right-radius: 4px;
-  box-shadow: 0 6px 16px rgba(168, 85, 247, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 16px var(--accent-glow), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .message-bubble-wrapper.bot .message-bubble {
-  background: rgba(6, 182, 212, 0.04);
-  color: var(--text-primary);
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.05);
+  background: var(--bg-surface-solid);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-focus);
+  box-shadow: var(--shadow-sm);
   border-bottom-left-radius: 4px;
 }
 
@@ -383,12 +382,20 @@
   border-radius: 100px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all var(--transition-fast);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .quick-reply-pill:hover {
   border-color: var(--accent-primary);
   color: var(--text-primary);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 4px 12px var(--accent-glow);
+  background: var(--bg-surface);
+}
+
+.quick-reply-pill:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: 0.1s;
 }
 
 /* RIGHT COLUMN - CONTACT PROFILE DETAILS */
@@ -460,7 +467,7 @@
 
 .crm-status-dropdown {
   width: 100%;
-  background: var(--bg-surface-hover);
+  background: var(--bg-surface-solid);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
   padding: 10px 14px;
@@ -475,6 +482,12 @@
 
 .crm-status-dropdown:focus {
   border-color: var(--accent-primary);
+}
+
+.crm-status-dropdown option {
+  background: var(--bg-surface-solid);
+  color: var(--text-primary);
+  padding: 8px;
 }
 
 .notes-input-wrapper {

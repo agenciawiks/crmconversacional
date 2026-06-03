@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { useRealtimeMessages } from '../hooks/useSupabase';
@@ -42,11 +43,13 @@ export const CrmProvider = ({ children }) => {
   useEffect(() => {
     async function loadData() {
       try {
-        const [dbContacts, { data: dbMessages }, dbChannels] = await Promise.all([
+        const [dbContacts, { data: dbMessagesRaw }, dbChannels] = await Promise.all([
           SupabaseService.fetchContacts(),
-          supabase.from('messages').select('*').order('timestamp', { ascending: true }),
+          supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
           SupabaseService.fetchChannels()
         ]);
+
+        const dbMessages = (dbMessagesRaw || []).reverse();
 
         if (dbChannels && dbChannels.length > 0) {
           setChannels(dbChannels);
@@ -71,13 +74,23 @@ export const CrmProvider = ({ children }) => {
             };
           });
 
-          // Compute provider from last message channel_id
+          // Compute provider and channel type from last message channel_id
           const lastMsgWithChannel = [...cMsgs].reverse().find(m => m.channel_id);
           let provider = 'unknown';
+          let channelType = 'whatsapp';
           if (lastMsgWithChannel) {
             const channel = dbChannels?.find(ch => ch.id === lastMsgWithChannel.channel_id);
             if (channel) {
-              provider = channel.provider === 'meta' || channel.provider === 'meta_cloud' ? 'meta_cloud' : 'evolution';
+              if (channel.provider === 'instagram') {
+                provider = 'instagram';
+                channelType = 'telegram'; // Renders as Instagram in the UI
+              } else if (channel.provider === 'meta' || channel.provider === 'meta_cloud') {
+                provider = 'meta_cloud';
+                channelType = 'whatsapp';
+              } else {
+                provider = 'evolution';
+                channelType = 'whatsapp';
+              }
             }
           }
 
@@ -90,18 +103,32 @@ export const CrmProvider = ({ children }) => {
 
           const resolvedStatus = contactMeta.status || c.status || defaultStage;
           const resolvedValue = contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue);
-          const resolvedName = contactMeta.name || c.name;
+          const rawName = contactMeta.name || c.name;
           const resolvedTags = contactMeta.tags || c.tags || [];
+
+          let displayName = rawName;
+          let username = '';
+          if (rawName) {
+            if (rawName.includes(' | @')) {
+              const parts = rawName.split(' | @');
+              username = parts[parts.length - 1];
+              displayName = parts.slice(0, -1).join(' | @');
+            } else if (channelType === 'telegram' && !rawName.includes(' ')) {
+              username = rawName;
+            }
+          }
 
           return { 
             ...c, 
-            name: resolvedName,
+            name: displayName,
+            username: username,
             tags: resolvedTags,
             status: resolvedStatus,
             value: resolvedValue,
             notes: contactMeta.notes || c.notes || [],
             messages: cMsgs, 
-            provider 
+            provider,
+            channel: channelType
           };
         });
 
@@ -148,16 +175,101 @@ export const CrmProvider = ({ children }) => {
     localStorage.setItem('crm_theme', theme);
   }, [theme]);
 
+  // Load full message history for active contact on selection
+  useEffect(() => {
+    if (!activeContactId) return;
+
+    let active = true;
+    async function loadActiveMessages() {
+      try {
+        const { data: dbMessages, error } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('contact_id', activeContactId)
+          .order('timestamp', { ascending: true });
+
+        if (error) throw error;
+        if (!active) return;
+
+        const cMsgs = (dbMessages || []).map(m => {
+          knownMsgIdsRef.current.add(m.id);
+          return {
+            id: m.id,
+            sender: m.direction === 'in' ? 'client' : 'agent',
+            text: m.content,
+            time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            timestamp: new Date(m.timestamp),
+            channel_id: m.channel_id,
+            content_type: m.content_type,
+            media_url: m.media_url,
+            status: m.direction === 'out' ? 'sent' : undefined
+          };
+        });
+
+        // Determine contact channel and provider
+        const channelId = dbMessages && dbMessages.length > 0
+          ? dbMessages[dbMessages.length - 1].channel_id
+          : null;
+        const channel = channelId ? channels.find(ch => ch.id === channelId) : null;
+
+        let resolvedProvider = 'unknown';
+        let resolvedChannel = 'whatsapp';
+        if (channel) {
+          if (channel.provider === 'instagram') {
+            resolvedProvider = 'instagram';
+            resolvedChannel = 'telegram';
+          } else if (channel.provider === 'meta' || channel.provider === 'meta_cloud') {
+            resolvedProvider = 'meta_cloud';
+            resolvedChannel = 'whatsapp';
+          } else {
+            resolvedProvider = 'evolution';
+            resolvedChannel = 'whatsapp';
+          }
+        }
+
+        setContacts(prev => prev.map(c => {
+          if (c.id === activeContactId) {
+            return {
+              ...c,
+              messages: cMsgs,
+              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
+              channel: resolvedChannel
+            };
+          }
+          return c;
+        }));
+      } catch (e) {
+        console.error("[CrmContext] Error loading active messages:", e);
+      }
+    }
+
+    loadActiveMessages();
+    return () => {
+      active = false;
+    };
+  }, [activeContactId, channels]);
+
   // Merge a new message into contacts state (deduplicating by id)
   const mergeMessage = useCallback((newMsg) => {
     if (knownMsgIdsRef.current.has(newMsg.id)) return; // Already known
     knownMsgIdsRef.current.add(newMsg.id);
 
-    // Resolve provider for the incoming message
+    // Resolve provider and channel type for the incoming message
     const channel = channels.find(ch => ch.id === newMsg.channel_id);
-    const resolvedProvider = channel 
-      ? (channel.provider === 'meta' || channel.provider === 'meta_cloud' ? 'meta_cloud' : 'evolution')
-      : 'unknown';
+    let resolvedProvider = 'unknown';
+    let resolvedChannel = 'whatsapp';
+    if (channel) {
+      if (channel.provider === 'instagram') {
+        resolvedProvider = 'instagram';
+        resolvedChannel = 'telegram';
+      } else if (channel.provider === 'meta' || channel.provider === 'meta_cloud') {
+        resolvedProvider = 'meta_cloud';
+        resolvedChannel = 'whatsapp';
+      } else {
+        resolvedProvider = 'evolution';
+        resolvedChannel = 'whatsapp';
+      }
+    }
 
     setContacts(prev => {
       let exists = false;
@@ -178,7 +290,8 @@ export const CrmProvider = ({ children }) => {
             return {
               ...c,
               messages: newMsgs,
-              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider
+              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
+              channel: resolvedChannel
             };
           }
 
@@ -188,7 +301,8 @@ export const CrmProvider = ({ children }) => {
               ...c,
               unread: newMsg.sender === 'client',
               messages: [...c.messages, newMsg],
-              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider
+              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
+              channel: resolvedChannel
             };
           }
         }
@@ -209,9 +323,23 @@ export const CrmProvider = ({ children }) => {
             
             let defaultValue = 0;
 
+            const rawName = contactMeta.name || freshC.name;
+            let displayName = rawName;
+            let username = '';
+            if (rawName) {
+              if (rawName.includes(' | @')) {
+                const parts = rawName.split(' | @');
+                username = parts[parts.length - 1];
+                displayName = parts.slice(0, -1).join(' | @');
+              } else if (resolvedChannel === 'telegram' && !rawName.includes(' ')) {
+                username = rawName;
+              }
+            }
+
             const mappedFreshC = {
               ...freshC,
-              name: contactMeta.name || freshC.name,
+              name: displayName,
+              username: username,
               tags: contactMeta.tags || freshC.tags || [],
               status: contactMeta.status || freshC.status || defaultStage,
               value: contactMeta.value !== undefined ? contactMeta.value : (freshC.value || defaultValue),
@@ -222,11 +350,11 @@ export const CrmProvider = ({ children }) => {
               const existing = prev2.find(c => c.id === mappedFreshC.id);
               if (existing) {
                 if (existing.name === 'Novo Contato') {
-                   return prev2.map(c => c.id === mappedFreshC.id ? { ...mappedFreshC, messages: c.messages, provider: resolvedProvider, unread: true } : c);
+                   return prev2.map(c => c.id === mappedFreshC.id ? { ...mappedFreshC, messages: c.messages, provider: resolvedProvider, channel: resolvedChannel, unread: true } : c);
                 }
                 return prev2;
               }
-              return [{ ...mappedFreshC, messages: [newMsg], provider: resolvedProvider, unread: true }, ...prev2];
+              return [{ ...mappedFreshC, messages: [newMsg], provider: resolvedProvider, channel: resolvedChannel, unread: true }, ...prev2];
             });
           }
         });
@@ -237,7 +365,7 @@ export const CrmProvider = ({ children }) => {
           email: '',
           phone: 'Carregando...',
           status: 'new',
-          channel: 'whatsapp',
+          channel: resolvedChannel,
           value: 0,
           tags: ['Novo Lead'],
           unread: true,
@@ -441,12 +569,17 @@ export const CrmProvider = ({ children }) => {
     });
   };
 
-  const updateContactTags = (contactId, tags) => {
+  const updateContactTags = async (contactId, tags) => {
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, tags } : c)));
     const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
     if (!meta[contactId]) meta[contactId] = {};
     meta[contactId].tags = tags;
     localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+    try {
+      await SupabaseService.updateContactTags(contactId, tags);
+    } catch (e) {
+      console.error("[CrmContext] Error saving contact tags to Supabase:", e);
+    }
   };
 
   const updateContactName = (contactId, name) => {
@@ -500,10 +633,23 @@ export const CrmProvider = ({ children }) => {
     if (sender === 'agent') {
       const activeC = contacts.find(c => c.id === contactId);
       if (activeC) {
+        // Automatically pause AI by adding "IA Inativa" to tags if not already present
+        if (!activeC.tags.includes("IA Inativa")) {
+          const newTags = [...activeC.tags, "IA Inativa"];
+          updateContactTags(contactId, newTags);
+        }
         try {
-          // Determine channel from the contact's most recent message, or default to Meta
+          // Determine channel from the contact's most recent message, or default to provider-specific channel
           const lastMsg = activeC.messages?.findLast(m => m.channel_id);
-          const channelId = lastMsg?.channel_id || META_CHANNEL_ID;
+          let channelId = lastMsg?.channel_id;
+          if (!channelId) {
+            const matchedChannel = channels.find(ch => {
+              if (activeC.provider === 'instagram') return ch.provider === 'instagram';
+              if (activeC.provider === 'evolution') return ch.provider === 'evolution';
+              return ch.provider === 'meta' || ch.provider === 'meta_cloud';
+            });
+            channelId = matchedChannel ? matchedChannel.id : META_CHANNEL_ID;
+          }
 
           await N8nService.sendOutboundMessage(
             channelId,

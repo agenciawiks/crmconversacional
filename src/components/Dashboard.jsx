@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useCrm } from '../context/CrmContext';
+import { MessageCircle, UserPlus, FileText, BadgeDollarSign, Cpu, CheckCircle2, Webhook, Briefcase, MessagesSquare } from 'lucide-react';
 
 export default function Dashboard() {
   const { contacts, isBotEnabled, setIsBotEnabled, setActiveScreen, setActiveContactId } = useCrm();
@@ -28,50 +29,28 @@ export default function Dashboard() {
       value: totalChats,
       trend: '+12% esta semana',
       isPositive: true,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      )
+      icon: <MessageCircle size={18} strokeWidth={2.5} />
     },
     {
       title: 'Novos Leads',
       value: newLeads,
       trend: '+4 novos hoje',
       isPositive: true,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-        </svg>
-      )
+      icon: <UserPlus size={18} strokeWidth={2.5} />
     },
     {
       title: 'Em Proposta',
       value: proposalLeads,
       trend: '-2% vs ontem',
       isPositive: false,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-          <polyline points="10 9 9 9 8 9" />
-        </svg>
-      )
+      icon: <Briefcase size={18} strokeWidth={2.5} />
     },
     {
       title: 'Receita Ganha',
       value: `R$ ${wonLeadsTotal.toLocaleString('pt-BR')}`,
       trend: '+24% este mês',
       isPositive: true,
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="12" y1="1" x2="12" y2="23" />
-          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        </svg>
-      )
+      icon: <BadgeDollarSign size={18} strokeWidth={2.5} />
     }
   ];
 
@@ -82,38 +61,50 @@ export default function Dashboard() {
       type: 'bot',
       title: 'Bot Auto-resposta executado',
       meta: 'Disparado por palavra-chave "olá" de Mariana Costa',
-      time: 'Há 5 minutos',
-      icon: '🤖'
+      time: 'Há 5 minutos'
     },
     {
       id: 2,
       type: 'won',
       title: 'Lead ganho! Status atualizado',
       meta: 'Roberto Souza fechou contrato no valor de R$ 15.400',
-      time: 'Há 2 horas',
-      icon: '🎉'
+      time: 'Há 2 horas'
     },
     {
       id: 3,
       type: 'webhook',
       title: 'Webhook n8n integrado com sucesso',
       meta: 'Dados do lead Carlos Oliveira enviados para CRM principal',
-      time: 'Há 3 horas',
-      icon: '🔌'
+      time: 'Há 3 horas'
     },
     {
       id: 4,
       type: 'lead',
       title: 'Novo Lead importado via Webchat',
       meta: 'Mariana Costa iniciou uma nova sessão no chat público',
-      time: 'Há 5 horas',
-      icon: '👤'
+      time: 'Há 5 horas'
     }
   ];
 
   const handleStartChat = (contactId) => {
     setActiveContactId(contactId);
     setActiveScreen('chat');
+  };
+
+  const renderActivityIcon = (type) => {
+    const size = 16;
+    switch (type) {
+      case 'bot':
+        return <Cpu size={size} strokeWidth={2.5} style={{ color: 'var(--accent-primary)' }} />;
+      case 'won':
+        return <CheckCircle2 size={size} strokeWidth={2.5} style={{ color: 'var(--color-status-won)' }} />;
+      case 'webhook':
+        return <Webhook size={size} strokeWidth={2.5} style={{ color: 'var(--color-status-new)' }} />;
+      case 'lead':
+        return <UserPlus size={size} strokeWidth={2.5} style={{ color: 'var(--color-status-proposal)' }} />;
+      default:
+        return null;
+    }
   };
 
   return (
@@ -231,7 +222,7 @@ export default function Dashboard() {
             {activities.map(act => (
               <div key={act.id} className="timeline-item">
                 <div className="timeline-icon-dot">
-                  {act.icon}
+                  {renderActivityIcon(act.type)}
                 </div>
                 <div className="timeline-content">
                   <span className="timeline-title">{act.title}</span>
@@ -250,7 +241,10 @@ export default function Dashboard() {
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: '700' }}>🔥 Negociações em Proposta</h3>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Briefcase size={18} strokeWidth={2.5} style={{ color: 'var(--color-status-proposal)' }} />
+                Negociações em Proposta
+              </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Leads quentes na fase decisiva do funil</p>
             </div>
             <span className="tag status-proposal" style={{ background: 'rgba(217, 70, 239, 0.15)', color: 'var(--color-status-proposal)', fontWeight: '700', border: '1px solid rgba(217, 70, 239, 0.3)', padding: '4px 8px', borderRadius: 'var(--radius-sm)' }}>
@@ -289,7 +283,7 @@ export default function Dashboard() {
                     </td>
                     <td style={{ padding: '14px 8px', textAlign: 'right' }}>
                       <button onClick={() => handleStartChat(contact.id)} className="glass-btn" style={{ padding: '6px 12px', fontSize: '11px', background: 'rgba(7, 167, 225, 0.1)', color: 'var(--accent-primary)', border: '1px solid rgba(7, 167, 225, 0.2)', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s', boxShadow: 'none' }}>
-                        Negociar ➔
+                        Negociar
                       </button>
                     </td>
                   </tr>
@@ -297,7 +291,7 @@ export default function Dashboard() {
                 {proposalContacts.length === 0 && (
                   <tr>
                     <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '13px' }}>
-                      Nenhum lead na fase de proposta no momento. 💼
+                      Nenhum lead na fase de proposta no momento.
                     </td>
                   </tr>
                 )}
@@ -309,7 +303,10 @@ export default function Dashboard() {
         {/* QUICK CHATS SHORTCUT ROW */}
         <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <h3 style={{ fontSize: '18px', fontWeight: '700' }}>⚡ Respostas Pendentes</h3>
+            <h3 style={{ fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MessagesSquare size={18} strokeWidth={2.5} style={{ color: 'var(--color-status-contacted)' }} />
+              Respostas Pendentes
+            </h3>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Clientes aguardando atendimento humano</p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, justifyContent: 'center' }}>
@@ -341,7 +338,7 @@ export default function Dashboard() {
             ))}
             {contacts.filter(c => c.unread).length === 0 && (
               <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '12px' }}>
-                Nenhuma mensagem pendente. 🎉
+                Nenhuma mensagem pendente.
               </div>
             )}
           </div>

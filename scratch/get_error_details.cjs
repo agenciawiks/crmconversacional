@@ -16,7 +16,7 @@ function apiCall(path) {
 
 async function run() {
   // Get detailed execution info for the errors
-  const errorIds = [34980, 34977];
+  const errorIds = [39118];
   
   for (const id of errorIds) {
     console.log(`\n=== Execution ${id} Details ===`);
