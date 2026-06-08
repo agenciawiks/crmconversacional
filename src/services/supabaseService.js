@@ -143,10 +143,11 @@ class SupabaseService {
     return true;
   }
 
-  static async fetchAiSettings() {
+  static async fetchAiSettings(channelId) {
+    if (!channelId) return null;
     const serviceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8";
     try {
-      const response = await fetch("https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?limit=1", {
+      const response = await fetch(`https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?channel_id=eq.${channelId}&limit=1`, {
         headers: {
           'apikey': serviceKey,
           'Authorization': `Bearer ${serviceKey}`
@@ -165,6 +166,7 @@ class SupabaseService {
           return {
             id: row.id,
             tenant_id: row.tenant_id,
+            channel_id: row.channel_id,
             temperature: row.temperature ?? 0.7,
             pause_trigger_phrases: row.pause_trigger_phrases ?? [],
             agent_name: parsedPrompt.agent_name ?? 'Agente de IA',
@@ -196,6 +198,7 @@ class SupabaseService {
 
     const body = {
       tenant_id: settings.tenant_id || "11111111-1111-1111-1111-111111111111",
+      channel_id: settings.channel_id,
       system_prompt: systemPromptJson,
       temperature: Number(settings.temperature) ?? 0.7,
       pause_trigger_phrases: settings.pause_trigger_phrases || []

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, Tag, StickyNote, Phone } from 'lucide-react';
+import { MessageSquare, Tag, StickyNote, Phone, User } from 'lucide-react';
 
 export default function ContactsList() {
   const { 
@@ -225,7 +225,12 @@ export default function ContactsList() {
                       {contact.name.substring(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <span className="contact-name-bold">{contact.name}</span>
+                      <span className="contact-name-bold" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {contact.name}
+                        {contact.tags?.includes('IA Inativa') && (
+                          <User size={14} strokeWidth={2.5} color="var(--warning-color)" title="Aguardando Atendente Humano" />
+                        )}
+                      </span>
                       <div className="contact-email-sub">{contact.email}</div>
                     </div>
                   </div>

@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 
 export default function AiAgentSettings() {
+  const [channels, setChannels] = useState([]);
+  const [selectedChannelId, setSelectedChannelId] = useState('');
+  
   const [id, setId] = useState(null);
   const [tenantId, setTenantId] = useState(null);
   const [isEnabled, setIsEnabled] = useState(false);
@@ -35,11 +38,32 @@ export default function AiAgentSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
 
-  // Load settings on mount
+  // Load channels on mount
+  useEffect(() => {
+    async function init() {
+      try {
+        const chs = await SupabaseService.fetchChannels();
+        setChannels(chs);
+        if (chs.length > 0) {
+          setSelectedChannelId(chs[0].id);
+        }
+      } catch (err) {
+        console.error('Error loading channels:', err);
+      }
+    }
+    init();
+  }, []);
+
+  // Load settings when selected channel changes
   useEffect(() => {
     async function loadSettings() {
+      if (!selectedChannelId) {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
       try {
-        const config = await SupabaseService.fetchAiSettings();
+        const config = await SupabaseService.fetchAiSettings(selectedChannelId);
         if (config) {
           setId(config.id);
           setTenantId(config.tenant_id);
@@ -51,6 +75,16 @@ export default function AiAgentSettings() {
           setSystemPrompt(config.system_prompt);
           setNegativePrompt(config.negative_prompt);
           setPausePhrases(config.pause_trigger_phrases || []);
+        } else {
+          // Reset if no settings found for this channel
+          setId(null);
+          setIsEnabled(false);
+          setAgentName('Atendente IA');
+          setModel('gpt-4o-mini');
+          setTemperature(0.7);
+          setSystemPrompt('');
+          setNegativePrompt('');
+          setPausePhrases([]);
         }
       } catch (err) {
         console.error('Error loading AI settings:', err);
@@ -60,7 +94,7 @@ export default function AiAgentSettings() {
       }
     }
     loadSettings();
-  }, []);
+  }, [selectedChannelId]);
 
   const showStatus = (type, text) => {
     setStatusMsg({ type, text });
@@ -76,6 +110,7 @@ export default function AiAgentSettings() {
     const settingsData = {
       id,
       tenant_id: tenantId,
+      channel_id: selectedChannelId,
       is_enabled: isEnabled,
       agent_name: agentName,
       model,
@@ -159,6 +194,28 @@ export default function AiAgentSettings() {
         </div>
       </div>
 
+      {/* Channel Selector */}
+      <div className="glass-panel" style={{ marginBottom: '24px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <h2 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>Selecione o Canal:</h2>
+        <select 
+          className="glass-input" 
+          style={{ maxWidth: '300px' }}
+          value={selectedChannelId}
+          onChange={(e) => setSelectedChannelId(e.target.value)}
+        >
+          {channels.length === 0 ? (
+            <option value="">Nenhum canal encontrado</option>
+          ) : (
+            channels.map(ch => (
+              <option key={ch.id} value={ch.id}>{ch.name} ({ch.provider})</option>
+            ))
+          )}
+        </select>
+        {!selectedChannelId && channels.length > 0 && (
+          <span style={{ fontSize: '12px', color: 'var(--color-status-lost)' }}>Selecione um canal para configurar a IA.</span>
+        )}
+      </div>
+
       {/* Alert banner for save status */}
       {statusMsg.text && (
         <div className={`builder-alert-bar animated-fade-in`} style={{
@@ -184,7 +241,8 @@ export default function AiAgentSettings() {
         </div>
       )}
 
-      <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1000px', paddingBottom: '40px' }}>
+      {selectedChannelId && (
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1000px', paddingBottom: '40px' }}>
         
         {/* Row 1: Global Status & Core Settings */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
@@ -199,8 +257,8 @@ export default function AiAgentSettings() {
             {/* Enable Toggle Switch */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-surface-hover)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
               <div>
-                <span style={{ fontSize: '13px', fontWeight: '600', display: 'block', color: 'var(--text-primary)' }}>Ativar Robô Globalmente</span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Habilitar resposta automática por IA</span>
+                <span style={{ fontSize: '13px', fontWeight: '600', display: 'block', color: 'var(--text-primary)' }}>Ativar Robô neste Canal</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Habilitar resposta automática por IA para este canal</span>
               </div>
               <label className="theme-toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', cursor: 'pointer' }}>
                 <input 
@@ -481,7 +539,8 @@ Seja simpático, use emojis e responda em parágrafos curtos."
           </button>
         </div>
 
-      </form>
+        </form>
+      )}
     </div>
   );
 }

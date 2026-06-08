@@ -24,7 +24,7 @@ const contactJson = $('Fetch Contact').first()?.json || {};
 const contact = Array.isArray(contactJson) ? (contactJson[0] || {}) : contactJson;
 
 if (!is_enabled) {
-  return [{ json: { run_ai: false, reason: 'No settings found or disabled globally' } }];
+  return [{ json: { run_ai: false, reason: 'AI is disabled for this channel or no settings found.' } }];
 }
 
 const tags = contact.tags || [];
@@ -114,6 +114,9 @@ return [{
 
 const fetchContactNode = wf.nodes.find(n => n.name === 'Fetch Contact');
 fetchContactNode.parameters.url = '=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $(\'AI Webhook Trigger\').item.json.body.contact_id }}&limit=1';
+
+const fetchAiNode = wf.nodes.find(n => n.name === 'Fetch AI Settings');
+fetchAiNode.parameters.url = '=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?channel_id=eq.{{ $json.body.channel_id }}&limit=1';
 
 const uploadPayload = {
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User } from 'lucide-react';
 
 export default function ChatWindow() {
   const {
@@ -101,6 +101,15 @@ export default function ChatWindow() {
     sendMessage(activeContact.id, text, 'client');
   };
 
+  const isAiPaused = activeContact.tags?.includes('IA Inativa');
+  const toggleAi = () => {
+    if (isAiPaused) {
+      updateContactTags(activeContact.id, activeContact.tags.filter(t => t !== 'IA Inativa'));
+    } else {
+      updateContactTags(activeContact.id, [...activeContact.tags, 'IA Inativa']);
+    }
+  };
+
   return (
     <div className="chat-workspace animated-fade-in" style={{ 
       position: 'absolute', 
@@ -183,7 +192,12 @@ export default function ChatWindow() {
 
                 <div className="chat-info">
                   <div className="chat-info-header">
-                    <span className="chat-name">{contact.name}</span>
+                    <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {contact.name}
+                      {contact.tags?.includes('IA Inativa') && (
+                        <User size={12} strokeWidth={2.5} color="var(--warning-color)" title="Aguardando Atendente Humano" />
+                      )}
+                    </span>
                     <span className="chat-time">{lastMsg?.time || ''}</span>
                   </div>
                   <div className="chat-preview-row">
@@ -227,15 +241,27 @@ export default function ChatWindow() {
             </div>
           </div>
 
-          <button
-            onClick={handleSimulateClient}
-            className="glass-btn secondary"
-            style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center' }}
-            title="Simula uma nova mensagem chegando do cliente"
-          >
-            <MessageSquare size={12} strokeWidth={2.5} />
-            Simular Cliente
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              onClick={toggleAi}
+              className={`glass-btn ${isAiPaused ? 'primary' : ''}`}
+              style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center', background: isAiPaused ? 'var(--warning-color)' : 'var(--bg-surface-hover)', borderColor: isAiPaused ? 'transparent' : 'var(--border-glass)' }}
+              title={isAiPaused ? "Retornar atendimento para a Inteligência Artificial" : "Pausar IA e assumir a conversa"}
+            >
+              {isAiPaused ? <User size={12} strokeWidth={2.5} color="#fff" /> : <Bot size={12} strokeWidth={2.5} />}
+              {isAiPaused ? <span style={{ color: '#fff' }}>Humano Ativo</span> : 'IA Ativa'}
+            </button>
+
+            <button
+              onClick={handleSimulateClient}
+              className="glass-btn secondary"
+              style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center' }}
+              title="Simula uma nova mensagem chegando do cliente"
+            >
+              <MessageSquare size={12} strokeWidth={2.5} />
+              Simular Cliente
+            </button>
+          </div>
         </div>
 
         {/* MESSAGES VIEW */}

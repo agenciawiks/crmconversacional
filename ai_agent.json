@@ -46,7 +46,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
-        200,
+        800,
         300
       ]
     },
@@ -274,8 +274,109 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
+        2400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 8
+      },
+      "id": "0e7168c5-0d53-420e-a3a5-0024ce7c3b7c",
+      "name": "Debounce Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages?contact_id=eq.{{ $('AI Webhook Trigger').item.json.body.contact_id }}&order=created_at.desc&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0c99ac52-7a25-4dd5-9714-fa9898101edc",
+      "name": "Fetch Latest Msg",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json[0].id }}",
+              "value2": "={{ $('AI Webhook Trigger').item.json.body.id }}"
+            }
+          ]
+        }
+      },
+      "id": "6bee6d67-c564-4aa9-bd46-3b0a67666864",
+      "name": "If Is Latest",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.first().json;\nlet output = input.content || \"\";\n\n// 1. PROTEÇÃO (MÁSCARA):\noutput = output.replace(/\\b(Dr|Dra|Sr|Sra)\\.\\s/gi, \"$1@@ \");\n\n// 2. CORTE SEGURO:\nconst partes = output.split(/(?<=[.!?]) +|\\n+/);\n\nconst returnItems = [];\n// 3. RESTAURAÇÃO E LIMPEZA:\npartes.forEach(pedaco => {\n  let textoLimpo = pedaco.trim();\n  \n  if (textoLimpo.length > 0) {\n    textoLimpo = textoLimpo.replace(/@@/g, \".\");\n    returnItems.push({\n      json: { \n        ...input,\n        content: textoLimpo \n      }\n    });\n  }\n});\n\nreturn returnItems;\n"
+      },
+      "id": "7b9a9203-de90-4aa0-b66a-7509dd1dc299",
+      "name": "Split AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
         1800,
-        400
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "d00f90c3-ba0c-4780-8e37-257e45246513",
+      "name": "Loop Over Messages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "id": "f04d292d-15fb-4824-a89f-cbb066a55200",
+      "name": "Typing Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        2200,
+        300
       ]
     }
   ],
@@ -284,7 +385,7 @@
       "main": [
         [
           {
-            "node": "Fetch AI Settings",
+            "node": "Debounce Wait",
             "type": "main",
             "index": 0
           }
@@ -390,7 +491,85 @@
       "main": [
         [
           {
+            "node": "Split AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Debounce Wait": {
+      "main": [
+        [
+          {
+            "node": "Fetch Latest Msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Latest Msg": {
+      "main": [
+        [
+          {
+            "node": "If Is Latest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Is Latest": {
+      "main": [
+        [
+          {
+            "node": "Fetch AI Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split AI Response": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Messages": {
+      "main": [
+        [
+          {
+            "node": "Typing Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Typing Wait": {
+      "main": [
+        [
+          {
             "node": "Send AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send AI Response": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Messages",
             "type": "main",
             "index": 0
           }
