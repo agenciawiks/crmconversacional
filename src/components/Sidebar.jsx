@@ -1,6 +1,6 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
-import { LayoutDashboard, MessageSquare, Kanban, Bot, Users, Link2, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Bot, Users, Link2, Sun, Moon, Clock } from 'lucide-react';
 
 export default function Sidebar() {
   const { activeScreen, setActiveScreen, theme, toggleTheme } = useCrm();
@@ -35,6 +35,11 @@ export default function Sidebar() {
       id: 'channels',
       label: 'Conectar Canais',
       icon: <Link2 size={20} strokeWidth={2} />
+    },
+    {
+      id: 'followup',
+      label: 'Follow-Up',
+      icon: <Clock size={20} strokeWidth={2} />
     }
   ];
 

@@ -4,6 +4,7 @@ import { supabase } from '../supabase';
 import { useRealtimeMessages } from '../hooks/useSupabase';
 import SupabaseService from '../services/supabaseService';
 import N8nService from '../services/n8nService';
+import * as followUpService from '../services/followUpService';
 
 const CrmContext = createContext();
 
@@ -31,6 +32,7 @@ export const CrmProvider = ({ children }) => {
     return localStorage.getItem('crm_theme') || 'dark';
   });
   const [isBotEnabled, setIsBotEnabled] = useState(true);
+  const [followupRules, setFollowupRules] = useState([]);
   const [channels, setChannels] = useState([
     { id: '1', name: 'Whats Suporte (Evolution API)', provider: 'evolution', status: 'connected', instance: 'SuporteCorp', url: 'https://api.evolution.cloudcorp.com', apiKey: 'token_evo_suporte_xyz' },
     { id: '2', name: 'Whats Vendas (Meta Cloud API)', provider: 'meta_cloud', status: 'connected', phoneId: '1098457293847', accessToken: 'EAAd8B_meta_official_token' }
@@ -43,16 +45,21 @@ export const CrmProvider = ({ children }) => {
   useEffect(() => {
     async function loadData() {
       try {
-        const [dbContacts, { data: dbMessagesRaw }, dbChannels] = await Promise.all([
+        const [dbContacts, { data: dbMessagesRaw }, dbChannels, dbFollowupRules] = await Promise.all([
           SupabaseService.fetchContacts(),
           supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
-          SupabaseService.fetchChannels()
+          SupabaseService.fetchChannels(),
+          followUpService.fetchRules()
         ]);
 
         const dbMessages = (dbMessagesRaw || []).reverse();
 
         if (dbChannels && dbChannels.length > 0) {
           setChannels(dbChannels);
+        }
+
+        if (dbFollowupRules) {
+          setFollowupRules(dbFollowupRules);
         }
 
         const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
@@ -416,6 +423,35 @@ export const CrmProvider = ({ children }) => {
     };
   }, [mergeMessage]);
 
+  // Realtime subscription on followup_queue to trigger alert when a follow-up is dispatched
+  useEffect(() => {
+    if (!supabase) return;
+
+    const queueChannel = supabase
+      .channel('public:followup_queue:direct')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'followup_queue' },
+        (payload) => {
+          const updatedItem = payload.new;
+          if (updatedItem.status === 'sent') {
+            console.log('[Supabase Realtime] Follow-up sent event:', updatedItem);
+            
+            // Try to find the contact name
+            const contact = contacts.find(c => c.id === updatedItem.contact_id);
+            const contactName = contact ? contact.name : 'um lead';
+            
+            console.log(`[Follow-up] Disparado com sucesso para ${contactName}`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(queueChannel);
+    };
+  }, [contacts]);
+
   // Polling fallback: fetch new messages every 5 seconds (uses DB created_at to avoid clock skew)
   useEffect(() => {
     const interval = setInterval(async () => {
@@ -718,7 +754,8 @@ export const CrmProvider = ({ children }) => {
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
-      updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel
+      updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel,
+      followupRules, setFollowupRules
     }}>
       {children}
     </CrmContext.Provider>

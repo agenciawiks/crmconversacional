@@ -9,6 +9,7 @@ import './styles/chat.css';
 import './styles/kanban.css';
 import './styles/builder.css';
 import './styles/contacts.css';
+import './styles/followup.css';
 
 // Import subcomponents
 import Sidebar from './components/Sidebar';
@@ -18,6 +19,7 @@ import KanbanBoard from './components/KanbanBoard';
 import FlowBuilder from './components/FlowBuilder';
 import ContactsList from './components/ContactsList';
 import ChannelsConfig from './components/ChannelsConfig';
+import FollowUpSettings from './components/FollowUpSettings';
 
 function AppContent() {
   const { activeScreen } = useCrm();
@@ -36,6 +38,8 @@ function AppContent() {
         return <ContactsList />;
       case 'channels':
         return <ChannelsConfig />;
+      case 'followup':
+        return <FollowUpSettings />;
       default:
         return <Dashboard />;
     }
