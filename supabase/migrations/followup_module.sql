@@ -106,7 +106,7 @@ BEGIN
         -- Enfileira
         INSERT INTO public.followup_queue (rule_id, contact_id, channel_id, scheduled_at, status)
         VALUES (r.id, NEW.id, target_channel_id, now() + (r.delay_hours * interval '1 hour'), 'pending');
-    END FOR;
+    END LOOP;
     
     RETURN NEW;
 END;
@@ -166,7 +166,7 @@ BEGIN
             -- Enfileira
             INSERT INTO public.followup_queue (rule_id, contact_id, channel_id, scheduled_at, status)
             VALUES (r.id, NEW.id, target_channel_id, now() + (r.delay_hours * interval '1 hour'), 'pending');
-        END FOR;
+        END LOOP;
     END IF;
     
     RETURN NEW;
@@ -226,7 +226,7 @@ BEGIN
             -- Enfileira
             INSERT INTO public.followup_queue (rule_id, contact_id, channel_id, scheduled_at, status)
             VALUES (r.id, NEW.contact_id, NEW.channel_id, now() + (r.delay_hours * interval '1 hour'), 'pending');
-        END FOR;
+        END LOOP;
     END IF;
     
     RETURN NEW;
