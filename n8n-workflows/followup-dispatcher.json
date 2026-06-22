@@ -3,13 +3,18 @@
   "nodes": [
     {
       "parameters": {
-        "rule": "interval",
-        "value": 1,
-        "unit": "minutes"
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
       },
       "id": "trigger-cron",
       "name": "Cron Trigger 1m",
-      "type": "n8n-nodes-base.cron",
+      "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1,
       "position": [
         100,
@@ -48,7 +53,7 @@
         "conditions": {
           "string": [
             {
-              "value1": "={{ $json[0]?.value }}",
+              "value1": "={{ $json.value }}",
               "operation": "equal",
               "value2": "true"
             }
@@ -120,7 +125,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const queueItems = $('Fetch Pending Queue Items').first().json || [];\nconst companyName = $('Fetch Company Name').first().json?.[0]?.value || 'Minha Empresa';\n\nif (!Array.isArray(queueItems) || queueItems.length === 0) {\n  return [];\n}\n\nreturn queueItems.map(item => {\n  const rule = item.followup_rules;\n  const contact = item.contacts;\n  const channel = item.channels;\n  \n  let text = rule.message || '';\n  text = text.replace(/{{contact_name}}/g, contact.name || 'Cliente');\n  text = text.replace(/{{agent_name}}/g, 'Atendente');\n  text = text.replace(/{{company_name}}/g, companyName);\n  \n  return {\n    json: {\n      queue_item_id: item.id,\n      rule_id: item.rule_id,\n      contact_id: item.contact_id,\n      channel_id: item.channel_id,\n      attempt_number: item.attempt_number || 1,\n      max_attempts: rule.max_attempts || 1,\n      delay_hours: rule.delay_hours || 24,\n      phone: contact.phone,\n      provider: channel.provider,\n      content: text,\n      \n      // Meta credentials\n      phone_id: channel.phone_id || (channel.credentials?.phone_id),\n      access_token: channel.access_token || (channel.credentials?.access_token),\n      \n      // Evolution credentials\n      evo_url: channel.url || (channel.credentials?.url),\n      evo_instance: channel.instance || (channel.credentials?.instance),\n      evo_api_key: channel.api_key || (channel.credentials?.api_key)\n    }\n  };\n});"
+        "jsCode": "const queueItems = $('Fetch Pending Queue Items').all();\nconst companyNameJson = $('Fetch Company Name').first().json;\nconst companyName = companyNameJson?.value || 'Minha Empresa';\n\nif (queueItems.length === 0) {\n  return [];\n}\n\nreturn queueItems.map(itemObj => {\n  const item = itemObj.json || {};\n  const rule = item.followup_rules || {};\n  const contact = item.contacts || {};\n  const channel = item.channels || {};\n  \n  let text = rule.message || '';\n  text = text.replace(/{{contact_name}}/g, contact.name || 'Cliente');\n  text = text.replace(/{{agent_name}}/g, 'Atendente');\n  text = text.replace(/{{company_name}}/g, companyName);\n  \n  return {\n    json: {\n      queue_item_id: item.id,\n      rule_id: item.rule_id,\n      contact_id: item.contact_id,\n      channel_id: item.channel_id,\n      attempt_number: item.attempt_number || 1,\n      max_attempts: rule.max_attempts || 1,\n      delay_hours: rule.delay_hours || 24,\n      phone: contact.phone,\n      provider: channel.provider,\n      content: text,\n      \n      // Meta credentials\n      phone_id: channel.phone_id || (channel.credentials?.phone_id),\n      access_token: channel.access_token || (channel.credentials?.access_token),\n      \n      // Evolution credentials\n      evo_url: channel.url || (channel.credentials?.url),\n      evo_instance: channel.instance || (channel.credentials?.instance),\n      evo_api_key: channel.api_key || (channel.credentials?.api_key)\n    }\n  };\n});"
       },
       "id": "process-templates",
       "name": "Substitute Variables",
@@ -217,7 +222,7 @@
     {
       "parameters": {
         "method": "PATCH",
-        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/followup_queue?id=eq.{{ $json.queue_item_id }}",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/followup_queue?id=eq.{{ $('Substitute Variables').item.json.queue_item_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -272,7 +277,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"channel_id\": \"{{ $json.channel_id }}\",\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"direction\": \"out\",\n  \"content\": \"{{ $json.content }}\",\n  \"content_type\": \"text\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "jsonBody": "={\n  \"channel_id\": \"{{ $('Substitute Variables').item.json.channel_id }}\",\n  \"contact_id\": \"{{ $('Substitute Variables').item.json.contact_id }}\",\n  \"direction\": \"out\",\n  \"content\": \"{{ $('Substitute Variables').item.json.content }}\",\n  \"content_type\": \"text\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
         "options": {}
       },
       "id": "insert-chat-message",
@@ -289,9 +294,9 @@
         "conditions": {
           "number": [
             {
-              "value1": "={{ $json.attempt_number }}",
+              "value1": "={{ $('Substitute Variables').item.json.attempt_number }}",
               "operation": "smaller",
-              "value2": "={{ $json.max_attempts }}"
+              "value2": "={{ $('Substitute Variables').item.json.max_attempts }}"
             }
           ]
         }
@@ -328,7 +333,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"rule_id\": \"{{ $json.rule_id }}\",\n  \"contact_id\": \"{{ $json.contact_id }}\",\n  \"channel_id\": \"{{ $json.channel_id }}\",\n  \"attempt_number\": {{ $json.attempt_number + 1 }},\n  \"scheduled_at\": \"{{ new Date(Date.now() + ($json.delay_hours * 60 * 60 * 1000)).toISOString() }}\",\n  \"status\": \"pending\"\n}",
+        "jsonBody": "={\n  \"rule_id\": \"{{ $('Substitute Variables').item.json.rule_id }}\",\n  \"contact_id\": \"{{ $('Substitute Variables').item.json.contact_id }}\",\n  \"channel_id\": \"{{ $('Substitute Variables').item.json.channel_id }}\",\n  \"attempt_number\": {{ $('Substitute Variables').item.json.attempt_number + 1 }},\n  \"scheduled_at\": \"{{ new Date(Date.now() + ($('Substitute Variables').item.json.delay_hours * 60 * 60 * 1000)).toISOString() }}\",\n  \"status\": \"pending\"\n}",
         "options": {}
       },
       "id": "re-queue-item",

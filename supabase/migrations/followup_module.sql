@@ -72,7 +72,7 @@ CREATE TRIGGER trg_followup_rules_updated
 CREATE OR REPLACE FUNCTION public.followup_trigger_contact_created()
 RETURNS TRIGGER AS $$
 DECLARE
-    r RECORD;
+    rule_rec RECORD;
     target_channel_id UUID;
     is_global_enabled TEXT;
 BEGIN
@@ -88,24 +88,24 @@ BEGIN
         RETURN NEW;
     END IF;
     
-    FOR r IN 
+    FOR rule_rec IN 
         SELECT * FROM public.followup_rules 
         WHERE is_active = true 
           AND trigger_event = 'contact_created'
     LOOP
         -- Se o array de canais da regra não estiver vazio, checa se o canal está contido
-        IF array_length(r.channel_ids, 1) IS NOT NULL AND NOT (target_channel_id = ANY(r.channel_ids)) THEN
+        IF array_length(rule_rec.channel_ids, 1) IS NOT NULL AND NOT (target_channel_id = ANY(rule_rec.channel_ids)) THEN
             CONTINUE;
         END IF;
 
         -- Se o array de estágios não estiver vazio, checa se o estágio do contato está contido
-        IF array_length(r.pipeline_stages, 1) IS NOT NULL AND NOT (COALESCE(NEW.pipeline_stage, 'new') = ANY(r.pipeline_stages)) THEN
+        IF array_length(rule_rec.pipeline_stages, 1) IS NOT NULL AND NOT (COALESCE(NEW.pipeline_stage, 'new') = ANY(rule_rec.pipeline_stages)) THEN
             CONTINUE;
         END IF;
 
         -- Enfileira
         INSERT INTO public.followup_queue (rule_id, contact_id, channel_id, scheduled_at, status)
-        VALUES (r.id, NEW.id, target_channel_id, now() + (r.delay_hours * interval '1 hour'), 'pending');
+        VALUES (rule_rec.id, NEW.id, target_channel_id, now() + (rule_rec.delay_hours * interval '1 hour'), 'pending');
     END LOOP;
     
     RETURN NEW;
@@ -121,7 +121,7 @@ CREATE TRIGGER trg_followup_contact_created
 CREATE OR REPLACE FUNCTION public.followup_trigger_stage_entered()
 RETURNS TRIGGER AS $$
 DECLARE
-    r RECORD;
+    rule_rec RECORD;
     target_channel_id UUID;
     is_global_enabled TEXT;
 BEGIN
@@ -148,24 +148,24 @@ BEGIN
             RETURN NEW;
         END IF;
 
-        FOR r IN 
+        FOR rule_rec IN 
             SELECT * FROM public.followup_rules 
             WHERE is_active = true 
               AND trigger_event = 'stage_entered'
         LOOP
             -- Checa se o novo estágio está nos estágios da regra
-            IF array_length(r.pipeline_stages, 1) IS NOT NULL AND NOT (NEW.pipeline_stage = ANY(r.pipeline_stages)) THEN
+            IF array_length(rule_rec.pipeline_stages, 1) IS NOT NULL AND NOT (NEW.pipeline_stage = ANY(rule_rec.pipeline_stages)) THEN
                 CONTINUE;
             END IF;
 
             -- Checa se o canal está contido na regra
-            IF array_length(r.channel_ids, 1) IS NOT NULL AND NOT (target_channel_id = ANY(r.channel_ids)) THEN
+            IF array_length(rule_rec.channel_ids, 1) IS NOT NULL AND NOT (target_channel_id = ANY(rule_rec.channel_ids)) THEN
                 CONTINUE;
             END IF;
 
             -- Enfileira
             INSERT INTO public.followup_queue (rule_id, contact_id, channel_id, scheduled_at, status)
-            VALUES (r.id, NEW.id, target_channel_id, now() + (r.delay_hours * interval '1 hour'), 'pending');
+            VALUES (rule_rec.id, NEW.id, target_channel_id, now() + (rule_rec.delay_hours * interval '1 hour'), 'pending');
         END LOOP;
     END IF;
     
@@ -182,7 +182,7 @@ CREATE TRIGGER trg_followup_stage_entered
 CREATE OR REPLACE FUNCTION public.followup_trigger_message_inserted()
 RETURNS TRIGGER AS $$
 DECLARE
-    r RECORD;
+    rule_rec RECORD;
     contact_stage TEXT;
     is_global_enabled TEXT;
 BEGIN
@@ -208,24 +208,24 @@ BEGIN
         SELECT COALESCE(pipeline_stage, 'new') INTO contact_stage FROM public.contacts WHERE id = NEW.contact_id;
 
         -- 2. Enfileirar novas regras do tipo last_message_in
-        FOR r IN 
+        FOR rule_rec IN 
             SELECT * FROM public.followup_rules 
             WHERE is_active = true 
               AND trigger_event = 'last_message_in'
         LOOP
             -- Filtra por canal
-            IF array_length(r.channel_ids, 1) IS NOT NULL AND NOT (NEW.channel_id = ANY(r.channel_ids)) THEN
+            IF array_length(rule_rec.channel_ids, 1) IS NOT NULL AND NOT (NEW.channel_id = ANY(rule_rec.channel_ids)) THEN
                 CONTINUE;
             END IF;
 
             -- Filtra por estágio
-            IF array_length(r.pipeline_stages, 1) IS NOT NULL AND NOT (contact_stage = ANY(r.pipeline_stages)) THEN
+            IF array_length(rule_rec.pipeline_stages, 1) IS NOT NULL AND NOT (contact_stage = ANY(rule_rec.pipeline_stages)) THEN
                 CONTINUE;
             END IF;
 
             -- Enfileira
             INSERT INTO public.followup_queue (rule_id, contact_id, channel_id, scheduled_at, status)
-            VALUES (r.id, NEW.contact_id, NEW.channel_id, now() + (r.delay_hours * interval '1 hour'), 'pending');
+            VALUES (rule_rec.id, NEW.contact_id, NEW.channel_id, now() + (rule_rec.delay_hours * interval '1 hour'), 'pending');
         END LOOP;
     END IF;
     
