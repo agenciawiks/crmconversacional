@@ -97,3 +97,68 @@ CREATE POLICY agent_profiles_update ON public.agent_profiles
 
 CREATE POLICY agent_profiles_delete ON public.agent_profiles
   FOR DELETE USING (auth.role() IN ('anon', 'authenticated'));
+
+-- 8. Habilitar replicação em realtime para a tabela crm_settings
+ALTER TABLE public.crm_settings REPLICA IDENTITY FULL;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'crm_settings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.crm_settings;
+  END IF;
+END $$;
+
+-- 9. Criar função RPC para renomeação em lote de tags jsonb em contatos
+CREATE OR REPLACE FUNCTION public.rename_tag_in_contacts(old_name text, new_name text)
+RETURNS integer AS $$
+DECLARE
+  affected integer;
+BEGIN
+  UPDATE public.contacts
+  SET tags = (
+    SELECT COALESCE(
+      jsonb_agg(DISTINCT replaced_val),
+      '[]'::jsonb
+    )
+    FROM (
+      SELECT CASE WHEN val = old_name THEN new_name ELSE val END AS replaced_val
+      FROM jsonb_array_elements_text(COALESCE(tags, '[]'::jsonb)) AS val
+    ) sub
+  )::jsonb
+  WHERE tags ? old_name;
+
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- 10. Criar função RPC para exclusão em lote de tags jsonb em contatos
+DROP FUNCTION IF EXISTS public.remove_tag_from_contacts(text);
+
+CREATE OR REPLACE FUNCTION public.remove_tag_from_contacts(tag_name text)
+RETURNS integer AS $$
+DECLARE
+  affected integer;
+BEGIN
+  UPDATE public.contacts
+  SET tags = (
+    SELECT COALESCE(
+      jsonb_agg(val),
+      '[]'::jsonb
+    )
+    FROM jsonb_array_elements_text(COALESCE(tags, '[]'::jsonb)) AS val
+    WHERE val <> tag_name
+  )::jsonb
+  WHERE tags ? tag_name;
+
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+-- 11. Conceder permissões de execução (grants) para os papéis do frontend
+GRANT EXECUTE ON FUNCTION public.rename_tag_in_contacts(text, text) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.remove_tag_from_contacts(text) TO anon, authenticated;
+

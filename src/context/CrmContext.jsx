@@ -24,6 +24,8 @@ export const CrmProvider = ({ children }) => {
     return localStorage.getItem('crm_active_screen') || 'dashboard';
   });
   const [contacts, setContacts] = useState([]);
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'yesterday', '7days', 'custom'
+  const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [activeContactId, setActiveContactId] = useState(() => {
     return localStorage.getItem('crm_active_contact_id') || null;
   });
@@ -33,6 +35,7 @@ export const CrmProvider = ({ children }) => {
   });
   const [isBotEnabled, setIsBotEnabled] = useState(true);
   const [followupRules, setFollowupRules] = useState([]);
+  const [globalTags, setGlobalTags] = useState([]);
   const [channels, setChannels] = useState([
     { id: '1', name: 'Whats Suporte (Evolution API)', provider: 'evolution', status: 'connected', instance: 'SuporteCorp', url: 'https://api.evolution.cloudcorp.com', apiKey: 'token_evo_suporte_xyz' },
     { id: '2', name: 'Whats Vendas (Meta Cloud API)', provider: 'meta_cloud', status: 'connected', phoneId: '1098457293847', accessToken: 'EAAd8B_meta_official_token' }
@@ -45,11 +48,12 @@ export const CrmProvider = ({ children }) => {
   useEffect(() => {
     async function loadData() {
       try {
-        const [dbContacts, { data: dbMessagesRaw }, dbChannels, dbFollowupRules] = await Promise.all([
+        const [dbContacts, { data: dbMessagesRaw }, dbChannels, dbFollowupRules, dbSettings] = await Promise.all([
           SupabaseService.fetchContacts(),
           supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
           SupabaseService.fetchChannels(),
-          followUpService.fetchRules()
+          followUpService.fetchRules(),
+          followUpService.fetchSettings()
         ]);
 
         const dbMessages = (dbMessagesRaw || []).reverse();
@@ -61,6 +65,28 @@ export const CrmProvider = ({ children }) => {
         if (dbFollowupRules) {
           setFollowupRules(dbFollowupRules);
         }
+
+        let loadedTags = [];
+        const tagsSetting = dbSettings?.find(s => s.key === 'global_tags');
+        if (tagsSetting) {
+          try {
+            loadedTags = JSON.parse(tagsSetting.value);
+          } catch(e) {
+            console.error("Error parsing global_tags:", e);
+          }
+        } else {
+          // Initialize default tags
+          loadedTags = [
+            { name: 'Novo Lead', color: '#06B6D4' },
+            { name: 'Falar com Atendente', color: '#F59E0B' },
+            { name: 'IA Inativa', color: '#F97316' },
+            { name: 'Interesse', color: '#8B5CF6' },
+            { name: 'Urgente', color: '#EF4444' },
+            { name: 'VIP', color: '#3B82F6' }
+          ];
+          await followUpService.updateSetting('global_tags', JSON.stringify(loadedTags));
+        }
+        setGlobalTags(loadedTags);
 
         const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
         const idSet = new Set();
@@ -379,7 +405,8 @@ export const CrmProvider = ({ children }) => {
           avatarColor: `hsl(200, 80%, 65%)`,
           notes: [],
           messages: [newMsg],
-          provider: resolvedProvider
+          provider: resolvedProvider,
+          created_at: new Date().toISOString()
         };
         return [freshContact, ...updated];
       }
@@ -451,6 +478,32 @@ export const CrmProvider = ({ children }) => {
       supabase.removeChannel(queueChannel);
     };
   }, [contacts]);
+
+  // Realtime subscription for global tags in crm_settings
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('public:crm_settings:tags')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'crm_settings', filter: 'key=eq.global_tags' },
+        (payload) => {
+          console.log('[Supabase Realtime] global_tags update received:', payload.new);
+          try {
+            const parsed = JSON.parse(payload.new.value || '[]');
+            setGlobalTags(parsed);
+          } catch (e) {
+            console.error("Error parsing realtime global_tags:", e);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Polling fallback: fetch new messages every 5 seconds (uses DB created_at to avoid clock skew)
   useEffect(() => {
@@ -618,6 +671,145 @@ export const CrmProvider = ({ children }) => {
     }
   };
 
+  const addGlobalTag = async (name, color) => {
+    if (!name.trim()) return false;
+    try {
+      // 1. Race condition mitigation: Fetch latest tags from database first
+      const currentSettings = await followUpService.fetchSettings();
+      const tagsSetting = currentSettings?.find(s => s.key === 'global_tags');
+      let tagsList = [];
+      if (tagsSetting) {
+        tagsList = JSON.parse(tagsSetting.value || '[]');
+      }
+      
+      // 2. Validate input and duplicates case-insensitive
+      const cleanedName = name.trim();
+      const exists = tagsList.some(t => t.name.toLowerCase() === cleanedName.toLowerCase());
+      if (exists) return false;
+
+      const newTag = { name: cleanedName, color: color || '#10B981' };
+      const updated = [...tagsList, newTag];
+      
+      // 3. Persist to DB and update local state
+      setGlobalTags(updated);
+      await followUpService.updateSetting('global_tags', JSON.stringify(updated));
+      return true;
+    } catch(e) {
+      console.error("[CrmContext] Error adding global tag:", e);
+      return false;
+    }
+  };
+
+  const updateGlobalTag = async (oldName, newName, newColor) => {
+    const cleanedOld = oldName.trim();
+    const cleanedNew = newName.trim();
+    const isNameChange = cleanedOld.toLowerCase() !== cleanedNew.toLowerCase();
+
+    try {
+      // 1. Fetch latest catalogue
+      const currentSettings = await followUpService.fetchSettings();
+      const tagsSetting = currentSettings?.find(s => s.key === 'global_tags');
+      let tagsList = [];
+      if (tagsSetting) {
+        tagsList = JSON.parse(tagsSetting.value || '[]');
+      }
+
+      // 2. If name changed, validate that new name does not already exist (unless case-insensitive match of itself)
+      if (isNameChange && tagsList.some(t => t.name.toLowerCase() === cleanedNew.toLowerCase())) {
+        throw new Error("Uma etiqueta com este nome já existe.");
+      }
+
+      // 3. Update the global tags catalogue
+      const updated = tagsList.map(t => {
+        if (t.name.toLowerCase() === cleanedOld.toLowerCase()) {
+          return { name: cleanedNew, color: newColor };
+        }
+        return t;
+      });
+
+      // 4. If name changed, perform atomic batch update in database via RPC
+      if (isNameChange) {
+        const { data, error } = await supabase.rpc('rename_tag_in_contacts', {
+          old_name: cleanedOld,
+          new_name: cleanedNew
+        });
+        if (error) throw error;
+        
+        // Update local state for contacts immediately to prevent UI lag/flicker
+        setContacts(prev => prev.map(c => {
+          if (c.tags && c.tags.includes(cleanedOld)) {
+            // Replace oldName with newName and deduplicate
+            const filtered = c.tags.map(t => t === cleanedOld ? cleanedNew : t);
+            const deduplicated = [...new Set(filtered)];
+            
+            // Also update localStorage metadata
+            const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+            if (!meta[c.id]) meta[c.id] = {};
+            meta[c.id].tags = deduplicated;
+            localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+            
+            return { ...c, tags: deduplicated };
+          }
+          return c;
+        }));
+      }
+
+      // 5. Save updated catalogue to database
+      setGlobalTags(updated);
+      await followUpService.updateSetting('global_tags', JSON.stringify(updated));
+      return true;
+    } catch(e) {
+      console.error("[CrmContext] Error updating global tag:", e);
+      throw e;
+    }
+  };
+
+  const deleteGlobalTag = async (name) => {
+    const cleanedName = name.trim();
+    try {
+      // 1. Fetch latest catalogue
+      const currentSettings = await followUpService.fetchSettings();
+      const tagsSetting = currentSettings?.find(s => s.key === 'global_tags');
+      let tagsList = [];
+      if (tagsSetting) {
+        tagsList = JSON.parse(tagsSetting.value || '[]');
+      }
+
+      // 2. Remove from catalogue
+      const updated = tagsList.filter(t => t.name.toLowerCase() !== cleanedName.toLowerCase());
+
+      // 3. Execute atomic delete in database via RPC
+      const { data, error } = await supabase.rpc('remove_tag_from_contacts', {
+        tag_name: cleanedName
+      });
+      if (error) throw error;
+
+      // 4. Update local state for contacts immediately to prevent UI lag/flicker
+      setContacts(prev => prev.map(c => {
+        if (c.tags && c.tags.includes(cleanedName)) {
+          const filtered = c.tags.filter(t => t !== cleanedName);
+          
+          // Also update localStorage metadata
+          const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+          if (!meta[c.id]) meta[c.id] = {};
+          meta[c.id].tags = filtered;
+          localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+
+          return { ...c, tags: filtered };
+        }
+        return c;
+      }));
+
+      // 5. Save updated catalogue to database
+      setGlobalTags(updated);
+      await followUpService.updateSetting('global_tags', JSON.stringify(updated));
+      return true;
+    } catch(e) {
+      console.error("[CrmContext] Error deleting global tag:", e);
+      return false;
+    }
+  };
+
   const updateContactName = (contactId, name) => {
     if (!name.trim()) return;
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, name } : c)));
@@ -642,7 +834,8 @@ export const CrmProvider = ({ children }) => {
     const newContact = {
       id, name, email: `${name.toLowerCase().replace(/\s+/g, '.')}@email.com`, phone: '(11) 99999-8888',
       status: 'new', channel, value: 0, tags: ['Novo Lead'], unread: true, avatarColor: `hsl(${hue}, 80%, 65%)`,
-      notes: [], messages: [{ id: 1, sender: 'client', text: initialText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: new Date() }]
+      notes: [], messages: [{ id: 1, sender: 'client', text: initialText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: new Date() }],
+      created_at: new Date().toISOString()
     };
     setContacts(prev => [newContact, ...prev]);
     setActiveContactId(id);
@@ -749,13 +942,51 @@ export const CrmProvider = ({ children }) => {
   };
   const deleteFlowNode = (id) => setFlowNodes(prev => prev.filter(n => n.id !== id));
 
+  const getFilteredContacts = useCallback(() => {
+    if (dateFilter === 'all') return sortedContacts;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, -1);
+    const startOf7DaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+
+    return sortedContacts.filter(c => {
+      if (!c.created_at) return true;
+      const cDate = new Date(c.created_at);
+      
+      switch (dateFilter) {
+        case 'today':
+          return cDate >= startOfToday;
+        case 'yesterday':
+          return cDate >= startOfYesterday && cDate <= endOfYesterday;
+        case '7days':
+          return cDate >= startOf7DaysAgo;
+        case 'custom': {
+          if (!customDateRange.start && !customDateRange.end) return true;
+          let start = customDateRange.start ? new Date(customDateRange.start) : null;
+          let end = customDateRange.end ? new Date(customDateRange.end) : null;
+          if (start) start.setHours(0, 0, 0, 0);
+          if (end) end.setHours(23, 59, 59, 999);
+          if (start && end) return cDate >= start && cDate <= end;
+          if (start) return cDate >= start;
+          if (end) return cDate <= end;
+          return true;
+        }
+        default:
+          return true;
+      }
+    });
+  }, [sortedContacts, dateFilter, customDateRange]);
+
   return (
     <CrmContext.Provider value={{
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
       updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel,
-      followupRules, setFollowupRules
+      followupRules, setFollowupRules, globalTags, addGlobalTag, updateGlobalTag, deleteGlobalTag,
+      dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts
     }}>
       {children}
     </CrmContext.Provider>

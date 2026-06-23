@@ -5,12 +5,26 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/
 import { Badge } from './ui/badge';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartContext } from './ui/chart';
 import { TrendingUp } from 'lucide-react';
+import TagBadge from './TagBadge';
 
 export default function KanbanBoard() {
-  const { contacts, changeContactStatus, setActiveContactId, setActiveScreen } = useCrm();
+  const { 
+    contacts, 
+    changeContactStatus, 
+    setActiveContactId, 
+    setActiveScreen, 
+    globalTags,
+    dateFilter,
+    setDateFilter,
+    customDateRange,
+    setCustomDateRange,
+    getFilteredContacts
+  } = useCrm();
+  const filteredContacts = getFilteredContacts();
   const [activeDropCol, setActiveDropCol] = React.useState(null);
   const [viewMode, setViewMode] = React.useState('board'); // 'board' or 'charts'
   const [hoveredSegmentIdx, setHoveredSegmentIdx] = React.useState(null);
+  const [hoveredFunnelStage, setHoveredFunnelStage] = React.useState(null);
 
   const columns = [
     { id: 'new', title: 'Novos Leads', class: 'new' },
@@ -52,19 +66,22 @@ export default function KanbanBoard() {
     setActiveScreen('chat');
   };
 
-  // Render the modern Funnel Chart using pure SVG polygons (Enlarged)
+  // Render the modern Funnel Chart using 3D glass cylinders
   const RenderFunnelChart = () => {
-    const newCount = contacts.filter(c => c.status === 'new').length;
-    const contactedCount = contacts.filter(c => c.status === 'contacted').length;
-    const proposalCount = contacts.filter(c => c.status === 'proposal').length;
-    const wonCount = contacts.filter(c => c.status === 'won').length;
+    const newCount = filteredContacts.filter(c => c.status === 'new').length;
+    const contactedCount = filteredContacts.filter(c => c.status === 'contacted').length;
+    const proposalCount = filteredContacts.filter(c => c.status === 'proposal').length;
+    const wonCount = filteredContacts.filter(c => c.status === 'won').length;
 
+    // Cylinder widths and Y positioning
     const stages = [
-      { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 300, wBottom: 240, y: 10, h: 56 },
-      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 236, wBottom: 176, y: 76, h: 56 },
-      { title: 'Proposta', count: proposalCount, color: '#eab308', wTop: 172, wBottom: 112, y: 142, h: 56 },
-      { title: 'Ganho', count: wonCount, color: '#10b981', wTop: 108, wBottom: 48, y: 208, h: 56 }
+      { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 280, wBottom: 220, y: 30, h: 54 },
+      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 216, wBottom: 160, y: 100, h: 54 },
+      { title: 'Propostas', count: proposalCount, color: '#eab308', wTop: 156, wBottom: 100, y: 170, h: 54 },
+      { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 96, wBottom: 40, y: 240, h: 54 }
     ];
+
+    const cx = 228; // Centered on a 500px wide SVG canvas: left margin 98px, right margin 98px
 
     return (
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
@@ -80,89 +97,267 @@ export default function KanbanBoard() {
             Fluxo de conversão linear das etapas do CRM
           </CardDescription>
         </CardHeader>
-        <CardContent style={{ padding: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
-          <svg width="360" height="270" viewBox="0 0 360 270" style={{ overflow: 'visible' }}>
-            <defs>
-              <filter id="glow-funnel" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="5" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-              {stages.map((st, i) => (
-                <linearGradient key={i} id={`funnel-grad-${i}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={st.color} stopOpacity="0.7" />
-                  <stop offset="100%" stopColor={st.color} stopOpacity="0.15" />
-                </linearGradient>
-              ))}
-            </defs>
-            
-            {stages.map((st, i) => {
-              const xTopLeft = 180 - st.wTop / 2;
-              const xTopRight = 180 + st.wTop / 2;
-              const xBottomLeft = 180 - st.wBottom / 2;
-              const xBottomRight = 180 + st.wBottom / 2;
-              const points = `${xTopLeft},${st.y} ${xTopRight},${st.y} ${xBottomRight},${st.y + st.h} ${xBottomLeft},${st.y + st.h}`;
+        <CardContent style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+          <div style={{ height: '380px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <svg width="500" height="320" viewBox="0 0 500 320" style={{ overflow: 'visible' }}>
+              <defs>
+                <filter id="glow-funnel" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="6" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+                {stages.map((st, i) => (
+                  <linearGradient key={i} id={`funnel-grad-${i}`} x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor={st.color} stopOpacity="0.8" />
+                    <stop offset="30%" stopColor={st.color} stopOpacity="0.95" />
+                    <stop offset="70%" stopColor={st.color} stopOpacity="0.6" />
+                    <stop offset="100%" stopColor={st.color} stopOpacity="0.25" />
+                  </linearGradient>
+                ))}
+              </defs>
               
+              {stages.map((st, i) => {
+                const rx1 = st.wTop / 2;
+                const rx2 = st.wBottom / 2;
+                const y1 = st.y;
+                const y2 = y1 + st.h;
+                
+                const topCap = `M ${cx - rx1} ${y1} A ${rx1} ${st.wTop/14} 0 0 1 ${cx + rx1} ${y1}`;
+                const rightEdge = `L ${cx + rx2} ${y2}`;
+                const bottomCurve = `A ${rx2} ${st.wBottom/14} 0 0 1 ${cx - rx2} ${y2}`;
+                const pathStr = `${topCap} ${rightEdge} ${bottomCurve} Z`;
+                
+                const isHovered = hoveredFunnelStage === i;
+                
+                const conversionRate = i > 0 && stages[i-1].count > 0 
+                  ? Math.round((st.count / stages[i-1].count) * 100) 
+                  : 100;
+                
+                return (
+                  <g 
+                    key={i} 
+                    style={{ cursor: 'pointer' }}
+                    onMouseEnter={() => setHoveredFunnelStage(i)}
+                    onMouseLeave={() => setHoveredFunnelStage(null)}
+                  >
+                    {/* Cylinder body */}
+                    <path 
+                      d={pathStr} 
+                      fill={`url(#funnel-grad-${i})`} 
+                      stroke={st.color} 
+                      strokeWidth={isHovered ? 2.5 : 1.5}
+                      style={{ 
+                        transition: 'all 0.3s ease',
+                        filter: isHovered ? 'url(#glow-funnel)' : 'none',
+                        opacity: hoveredFunnelStage === null || isHovered ? 1 : 0.65
+                      }}
+                    />
+                    
+                    {/* Top Cap Ellipse */}
+                    <ellipse 
+                      cx={cx} 
+                      cy={y1} 
+                      rx={rx1} 
+                      ry={st.wTop/14} 
+                      fill={st.color} 
+                      fillOpacity="0.25" 
+                      stroke={st.color} 
+                      strokeWidth="1"
+                      style={{
+                        transition: 'all 0.3s ease',
+                        opacity: hoveredFunnelStage === null || isHovered ? 1 : 0.65
+                      }}
+                    />
+  
+                    {/* Inner text metric */}
+                    <text 
+                      x={cx} 
+                      y={y1 + st.h/2 + 4} 
+                      fill="#fff" 
+                      fontSize="12" 
+                      fontWeight="800" 
+                      textAnchor="middle" 
+                      style={{ pointerEvents: 'none', fontFamily: 'var(--font-sans)', letterSpacing: '0.5px' }}
+                    >
+                      {st.title}: {st.count}
+                    </text>
+  
+                    {/* Conversion rate indicator to the right */}
+                    {i > 0 && (
+                      <g style={{ transition: 'opacity 0.3s ease', opacity: hoveredFunnelStage === null || isHovered ? 1 : 0.4 }}>
+                        {/* Connecting curve */}
+                        <path 
+                          d={`M ${cx + rx1 + 10} ${y1 - 12} Q ${cx + rx1 + 25} ${y1} ${cx + rx1 + 10} ${y1 + 12}`}
+                          fill="transparent"
+                          stroke="rgba(255,255,255,0.2)"
+                          strokeWidth="1.5"
+                          strokeDasharray="3,3"
+                        />
+                        {/* Conversion label box */}
+                        <rect 
+                          x={cx + rx1 + 24} 
+                          y={y1 - 10} 
+                          width="52" 
+                          height="20" 
+                          rx="6" 
+                          fill="rgba(16, 185, 129, 0.08)" 
+                          stroke="rgba(16, 185, 129, 0.35)" 
+                          strokeWidth="1" 
+                        />
+                        <text 
+                          x={cx + rx1 + 50} 
+                          y={y1 + 3} 
+                          fill="#10b981" 
+                          fontSize="10" 
+                          fontWeight="800" 
+                          textAnchor="middle"
+                        >
+                          {conversionRate}%
+                        </text>
+                      </g>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+          
+          {/* Funnel Legend Grid cards */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(2, 1fr)', 
+            gap: '10px 14px', 
+            width: '100%', 
+            padding: '0 12px',
+            marginTop: '16px'
+          }}>
+            {stages.map((st, i) => {
+              const isStHovered = hoveredFunnelStage === i;
               return (
-                <g key={i} className="funnel-stage-group" style={{ cursor: 'pointer' }}>
-                  <polygon 
-                    points={points} 
-                    fill={`url(#funnel-grad-${i})`} 
-                    stroke={st.color} 
-                    strokeWidth="1.5"
-                    style={{ 
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      filter: 'drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4))'
-                    }}
-                  />
-                  <text x="180" y={st.y + 32} fill="var(--text-primary)" fontSize="12" fontWeight="700" textAnchor="middle" style={{ pointerEvents: 'none', fontFamily: 'var(--font-sans)', letterSpacing: '0.5px' }}>
-                    {st.title}: {st.count}
-                  </text>
-                </g>
+                <div 
+                  key={st.title} 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: isStHovered 
+                      ? 'rgba(255, 255, 255, 0.05)' 
+                      : 'rgba(255, 255, 255, 0.015)',
+                    border: isStHovered 
+                      ? `1px solid ${st.color}40` 
+                      : '1px solid rgba(255, 255, 255, 0.04)',
+                    boxShadow: isStHovered 
+                      ? `0 4px 12px ${st.color}15, inset 0 1px 1px rgba(255, 255, 255, 0.05)` 
+                      : 'inset 0 1px 1px rgba(255, 255, 255, 0.02)',
+                    fontSize: '12px', 
+                    color: isStHovered ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: isStHovered ? '700' : '500',
+                    transform: isStHovered ? 'translateY(-2px)' : 'translateY(0)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={() => setHoveredFunnelStage(i)}
+                  onMouseLeave={() => setHoveredFunnelStage(null)}
+                >
+                  <span style={{ 
+                    width: '10px', 
+                    height: '10px', 
+                    borderRadius: '3px', 
+                    backgroundColor: st.color, 
+                    boxShadow: isStHovered ? `0 0 10px ${st.color}` : 'none',
+                    transition: 'all 0.2s ease'
+                  }} />
+                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>{st.title}</span>
+                  <span style={{ color: isStHovered ? st.color : 'var(--text-primary)', fontWeight: '700' }}>
+                    {st.count}
+                  </span>
+                </div>
               );
             })}
-          </svg>
+          </div>
         </CardContent>
       </Card>
     );
   };
 
-  // Render the modern Pizza Donut Chart (Enlarged)
+  // Render the modern Pizza/Pie Chart (3D Solid Pie)
   const RenderDonutChart = () => {
-    const newCount = contacts.filter(c => c.status === 'new').length;
-    const contactedCount = contacts.filter(c => c.status === 'contacted').length;
-    const proposalCount = contacts.filter(c => c.status === 'proposal').length;
-    const wonCount = contacts.filter(c => c.status === 'won').length;
-    const lostCount = contacts.filter(c => c.status === 'lost').length;
+    const newCount = filteredContacts.filter(c => c.status === 'new').length;
+    const contactedCount = filteredContacts.filter(c => c.status === 'contacted').length;
+    const proposalCount = filteredContacts.filter(c => c.status === 'proposal').length;
+    const wonCount = filteredContacts.filter(c => c.status === 'won').length;
+    const lostCount = filteredContacts.filter(c => c.status === 'lost').length;
 
-    const totalLeads = contacts.length;
-    const activeLeads = contacts.filter(c => c.status !== 'lost' && c.status !== 'won').length;
+    const totalLeads = filteredContacts.length;
+    const activeLeads = filteredContacts.filter(c => c.status !== 'lost' && c.status !== 'won').length;
 
     const rawSegments = [
-      { name: "Novos Leads", value: newCount, color: "#a855f7" },
-      { name: "Em Contato", value: contactedCount, color: "#3b82f6" },
-      { name: "Propostas", value: proposalCount, color: "#eab308" },
-      { name: "Vendas Ganhas", value: wonCount, color: "#10b981" },
-      { name: "Perdidos", value: lostCount, color: "#ef4444" }
+      { name: "Novos Leads", value: newCount, color: "url(#donut-grad-new)", solidColor: "#a855f7" },
+      { name: "Em Contato", value: contactedCount, color: "url(#donut-grad-contacted)", solidColor: "#3b82f6" },
+      { name: "Propostas", value: proposalCount, color: "url(#donut-grad-proposal)", solidColor: "#eab308" },
+      { name: "Vendas Ganhas", value: wonCount, color: "url(#donut-grad-won)", solidColor: "#10b981" },
+      { name: "Perdidos", value: lostCount, color: "url(#donut-grad-lost)", solidColor: "#ef4444" }
     ].filter(s => s.value > 0);
 
-    const r = 85;
-    const strokeWidth = 16;
-    const circ = 2 * Math.PI * r; // ~534
+    const r = 180; // Enlarged radius for pie chart to fill the card completely
+    
+    // Helper to generate a solid pie slice path centered at (0,0)
+    const getSlicePath = (startAngle, endAngle, radius) => {
+      const startRad = (startAngle * Math.PI) / 180;
+      const endRad = (endAngle * Math.PI) / 180;
+      
+      const x1 = radius * Math.cos(startRad);
+      const y1 = radius * Math.sin(startRad);
+      const x2 = radius * Math.cos(endRad);
+      const y2 = radius * Math.sin(endRad);
+      
+      const largeArcFlag = endAngle - startAngle > 180 ? 1 : 0;
+      return `M 0 0 L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+    };
 
-    let accumulatedOffset = 0;
+    // Helper to generate a glossy arc line along the slice outer border
+    const getGlossArcPath = (startAngle, endAngle, radius) => {
+      const r_in = radius - 4;
+      const sweep = endAngle - startAngle;
+      const startGloss = startAngle + sweep * 0.12;
+      const endGloss = startAngle + sweep * 0.88;
+      const startGlossRad = (startGloss * Math.PI) / 180;
+      const endGlossRad = (endGloss * Math.PI) / 180;
+
+      const x1 = r_in * Math.cos(startGlossRad);
+      const y1 = r_in * Math.sin(startGlossRad);
+      const x2 = r_in * Math.cos(endGlossRad);
+      const y2 = r_in * Math.sin(endGlossRad);
+
+      const largeArcFlag = endGloss - startGloss > 180 ? 1 : 0;
+      return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r_in} ${r_in} 0 ${largeArcFlag} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+    };
+
+    let currentAngle = -90; // Start at 12 o'clock
     const segments = rawSegments.map((s, idx) => {
       const pct = totalLeads > 0 ? s.value / totalLeads : 0;
-      const strokeLength = pct * circ;
-      const offset = accumulatedOffset;
-      accumulatedOffset += strokeLength;
+      const angleSweep = pct * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + angleSweep;
+      currentAngle = endAngle;
+
+      const path = getSlicePath(startAngle, endAngle, r);
+      const glossPath = getGlossArcPath(startAngle, endAngle, r);
+
+      // Calculate bisector for explode displacement
+      const bisectorAngle = startAngle + angleSweep / 2;
+      const bisectorRad = (bisectorAngle * Math.PI) / 180;
 
       return {
         ...s,
         idx,
         pct,
-        strokeLength,
-        strokeDasharray: `${strokeLength} ${circ - strokeLength}`,
-        strokeDashoffset: -offset
+        startAngle,
+        endAngle,
+        path,
+        glossPath,
+        bisectorRad
       };
     });
 
@@ -178,7 +373,7 @@ export default function KanbanBoard() {
                 <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
                 <path d="M22 12A10 10 0 0 0 12 2v10z" />
               </svg>
-              Distribuição do Funil
+              Distribuição do Funil (Pizza)
             </span>
             <Badge
               variant="outline"
@@ -189,125 +384,261 @@ export default function KanbanBoard() {
               <span>{activeLeads} Ativos</span>
             </Badge>
           </CardTitle>
-          <CardDescription style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Proporção de leads por etapa do pipeline
+          <CardDescription style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '18px' }}>
+            <span>Proporção de leads por etapa do pipeline</span>
+            {isHovered && (
+              <span className="animated-fade-in" style={{ fontWeight: '700', color: hoveredSeg.solidColor }}>
+                {hoveredSeg.name}: {hoveredSeg.value} ({Math.round(hoveredSeg.pct * 100)}%)
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 pb-0" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ height: '300px', width: '100%', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ height: '380px', width: '100%', position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
             
-            <svg width="260" height="260" viewBox="0 0 260 260" style={{ transform: 'rotate(-90deg)', overflow: 'visible' }}>
+            <svg width="440" height="440" viewBox="0 0 440 440" style={{ overflow: 'visible' }}>
               <defs>
-                <filter id="glow-svg" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="5" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                {/* Neon glow filter with alpha boosting for extra vibrant hover glow */}
+                <filter id="glow-svg-donut" x="-40%" y="-40%" width="180%" height="180%">
+                  <feGaussianBlur stdDeviation="8" result="blur" />
+                  <feComponentTransfer in="blur" result="boost">
+                    <feFuncA type="linear" slope="1.8" />
+                  </feComponentTransfer>
+                  <feComposite in="SourceGraphic" in2="boost" operator="over" />
                 </filter>
+                <filter id="donut-depth-darken">
+                  <feComponentTransfer>
+                    <feFuncR type="linear" slope="0.45" />
+                    <feFuncG type="linear" slope="0.45" />
+                    <feFuncB type="linear" slope="0.45" />
+                  </feComponentTransfer>
+                </filter>
+                <filter id="donut-shadow-blur" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="5" />
+                </filter>
+                <linearGradient id="donut-grad-new" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" />
+                  <stop offset="100%" stopColor="#d8b4fe" />
+                </linearGradient>
+                <linearGradient id="donut-grad-contacted" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#2563eb" />
+                  <stop offset="100%" stopColor="#60a5fa" />
+                </linearGradient>
+                <linearGradient id="donut-grad-proposal" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#ca8a04" />
+                  <stop offset="100%" stopColor="#fde047" />
+                </linearGradient>
+                <linearGradient id="donut-grad-won" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#059669" />
+                  <stop offset="100%" stopColor="#34d399" />
+                </linearGradient>
+                <linearGradient id="donut-grad-lost" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#dc2626" />
+                  <stop offset="100%" stopColor="#f87171" />
+                </linearGradient>
               </defs>
               
-              <circle
-                cx="130"
-                cy="130"
-                r={r}
-                fill="transparent"
-                stroke="rgba(255, 255, 255, 0.03)"
-                strokeWidth={strokeWidth}
-              />
-
               {totalLeads === 0 ? (
-                <circle
-                  cx="130"
-                  cy="130"
-                  r={r}
-                  fill="transparent"
-                  stroke="rgba(255, 255, 255, 0.1)"
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={`${circ} 0`}
-                  strokeDashoffset="0"
-                />
-              ) : (
-                segments.map((seg) => {
-                  const active = hoveredSegmentIdx === seg.idx;
-                  return (
+                /* 3D empty track */
+                <g transform="translate(220, 220) scale(1, 0.58)">
+                  <g transform="translate(0, 14)">
                     <circle
-                      key={seg.idx}
-                      cx="130"
-                      cy="130"
+                      cx="0"
+                      cy="0"
                       r={r}
-                      fill="transparent"
-                      stroke={seg.color}
-                      strokeWidth={active ? strokeWidth + 4 : strokeWidth}
-                      strokeDasharray={seg.strokeDasharray}
-                      strokeDashoffset={seg.strokeDashoffset}
-                      strokeLinecap="round"
-                      style={{
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        cursor: 'pointer',
-                        filter: active ? 'url(#glow-svg)' : 'none',
-                        opacity: hoveredSegmentIdx === null || active ? 1 : 0.65
-                      }}
-                      onMouseEnter={() => setHoveredSegmentIdx(seg.idx)}
-                      onMouseLeave={() => setHoveredSegmentIdx(null)}
+                      fill="rgba(0, 0, 0, 0.4)"
+                      filter="url(#donut-shadow-blur)"
                     />
-                  );
-                })
+                  </g>
+                  {Array.from({ length: 10 }).map((_, k) => (
+                    <g key={k} transform={`translate(0, ${10 - k})`}>
+                      <circle
+                        cx="0"
+                        cy="0"
+                        r={r}
+                        fill="rgba(255, 255, 255, 0.08)"
+                        filter="url(#donut-depth-darken)"
+                      />
+                    </g>
+                  ))}
+                  <g transform="translate(0, 0)">
+                    <circle
+                      cx="0"
+                      cy="0"
+                      r={r}
+                      fill="rgba(255, 255, 255, 0.12)"
+                    />
+                  </g>
+                </g>
+              ) : (
+                /* 3D Extruded Pie Chart */
+                <g transform="translate(220, 220) scale(1, 0.58)">
+                  
+                  {/* 1. 3D Shadow Layer for Slices */}
+                  {segments.map((seg) => {
+                    const active = hoveredSegmentIdx === seg.idx;
+                    const shiftDist = active ? 10 : 3;
+                    const dx = shiftDist * Math.cos(seg.bisectorRad);
+                    const dy = shiftDist * Math.sin(seg.bisectorRad) + (active ? 24 : 14);
+                    
+                    return (
+                      <g key={`shadow-${seg.idx}`} transform={`translate(${dx.toFixed(2)}, ${dy.toFixed(2)})`}>
+                        <path
+                          d={seg.path}
+                          fill="rgba(0, 0, 0, 0.55)"
+                          filter="url(#donut-shadow-blur)"
+                          style={{
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            opacity: active ? 0.35 : 0.65,
+                            pointerEvents: 'none'
+                          }}
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {/* 2. 3D Wall Extrusion Layers (depth) */}
+                  {Array.from({ length: 10 }).map((_, k) => (
+                    <g key={`depth-layer-${k}`}>
+                      {segments.map((seg) => {
+                        const active = hoveredSegmentIdx === seg.idx;
+                        const H = active ? -12 : 0;
+                        const B = 10;
+                        const y = B - (B - H) * (k / 10);
+                        const shiftDist = active ? 10 : 3;
+                        const dx = shiftDist * Math.cos(seg.bisectorRad);
+                        const dy = shiftDist * Math.sin(seg.bisectorRad) + y;
+                        
+                        return (
+                          <g key={`${seg.idx}-${k}`} transform={`translate(${dx.toFixed(2)}, ${dy.toFixed(2)})`}>
+                            <path
+                              d={seg.path}
+                              fill={seg.color}
+                              filter="url(#donut-depth-darken)"
+                              style={{
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                opacity: hoveredSegmentIdx === null || active ? 0.8 : 0.45,
+                                pointerEvents: 'none'
+                              }}
+                            />
+                          </g>
+                        );
+                      })}
+                    </g>
+                  ))}
+
+                  {/* 3. Top Cap Layer (Face) */}
+                  {segments.map((seg) => {
+                    const active = hoveredSegmentIdx === seg.idx;
+                    const H = active ? -12 : 0;
+                    const shiftDist = active ? 10 : 3;
+                    const dx = shiftDist * Math.cos(seg.bisectorRad);
+                    const dy = shiftDist * Math.sin(seg.bisectorRad) + H;
+                    
+                    return (
+                      <g key={`top-${seg.idx}`} transform={`translate(${dx.toFixed(2)}, ${dy.toFixed(2)})`}>
+                        <path
+                          d={seg.path}
+                          fill={seg.color}
+                          stroke={seg.solidColor}
+                          strokeWidth="0.5"
+                          style={{
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            cursor: 'pointer',
+                            filter: active ? 'url(#glow-svg-donut)' : 'none',
+                            opacity: hoveredSegmentIdx === null || active ? 1 : 0.45
+                          }}
+                          onMouseEnter={() => setHoveredSegmentIdx(seg.idx)}
+                          onMouseLeave={() => setHoveredSegmentIdx(null)}
+                        />
+                      </g>
+                    );
+                  })}
+
+                  {/* 4. Specular Gloss Highlights */}
+                  {segments.map((seg) => {
+                    const active = hoveredSegmentIdx === seg.idx;
+                    const H = active ? -13.5 : -1.5;
+                    const shiftDist = active ? 10 : 3;
+                    const dx = shiftDist * Math.cos(seg.bisectorRad);
+                    const dy = shiftDist * Math.sin(seg.bisectorRad) + H;
+                    
+                    return (
+                      <g key={`gloss-${seg.idx}`} transform={`translate(${dx.toFixed(2)}, ${dy.toFixed(2)})`}>
+                        <path
+                          d={seg.glossPath}
+                          fill="none"
+                          stroke="rgba(255, 255, 255, 0.38)"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          style={{
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            pointerEvents: 'none',
+                            opacity: hoveredSegmentIdx === null || active ? 1 : 0.35
+                          }}
+                        />
+                      </g>
+                    );
+                  })}
+                </g>
               )}
             </svg>
+          </div>
 
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-              pointerEvents: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              width: '144px',
-              height: '144px',
-              borderRadius: '50%',
-              background: 'var(--bg-surface-solid)',
-              backdropFilter: 'var(--glass-blur)',
-              border: '1px solid var(--border-glass)',
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              <span style={{ 
-                fontSize: '32px', 
-                fontWeight: '800', 
-                fontFamily: 'var(--font-display)', 
-                color: isHovered ? hoveredSeg.color : 'var(--text-primary)',
-                textShadow: isHovered ? `0 0 12px ${hoveredSeg.color}66` : 'none',
-                transition: 'all 0.2s ease'
-              }}>
-                {isHovered ? hoveredSeg.value : totalLeads}
-              </span>
-              <span style={{ 
-                fontSize: '10px', 
-                textTransform: 'uppercase', 
-                letterSpacing: '0.05em', 
-                color: 'var(--text-muted)',
-                fontWeight: '600',
-                marginTop: '2px',
-                maxWidth: '110px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s ease'
-              }}>
-                {isHovered ? hoveredSeg.name : 'Leads'}
-              </span>
-              {isHovered && (
-                <span style={{ 
-                  fontSize: '9px', 
-                  color: 'rgba(255,255,255,0.4)', 
-                  fontWeight: '500', 
-                  marginTop: '1px' 
-                }}>
-                  {Math.round(hoveredSeg.pct * 100)}% do total
-                </span>
-              )}
-            </div>
+          {/* Interactive Legend Grid cards */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(2, 1fr)', 
+            gap: '10px 14px', 
+            width: '100%', 
+            padding: '0 12px',
+            marginTop: '16px'
+          }}>
+            {segments.map(seg => {
+              const active = hoveredSegmentIdx === seg.idx;
+              return (
+                <div 
+                  key={seg.name} 
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px', 
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    background: active 
+                      ? 'rgba(255, 255, 255, 0.05)' 
+                      : 'rgba(255, 255, 255, 0.015)',
+                    border: active 
+                      ? `1px solid ${seg.solidColor}40` 
+                      : '1px solid rgba(255, 255, 255, 0.04)',
+                    boxShadow: active 
+                      ? `0 4px 12px ${seg.solidColor}15, inset 0 1px 1px rgba(255, 255, 255, 0.05)` 
+                      : 'inset 0 1px 1px rgba(255, 255, 255, 0.02)',
+                    fontSize: '12px', 
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontWeight: active ? '700' : '500',
+                    transform: active ? 'translateY(-2px)' : 'translateY(0)',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={() => setHoveredSegmentIdx(seg.idx)}
+                  onMouseLeave={() => setHoveredSegmentIdx(null)}
+                >
+                  <span style={{ 
+                    width: '10px', 
+                    height: '10px', 
+                    borderRadius: '3px', 
+                    backgroundColor: seg.solidColor, 
+                    boxShadow: active ? `0 0 10px ${seg.solidColor}` : 'none',
+                    transition: 'all 0.2s ease'
+                  }} />
+                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>{seg.name}</span>
+                  <span style={{ color: active ? seg.solidColor : 'var(--text-primary)', fontWeight: '700' }}>
+                    {seg.value}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
@@ -316,9 +647,9 @@ export default function KanbanBoard() {
 
   // Render horizontal glowing bars for communication channel performance
   const RenderChannelPerformance = () => {
-    const whatsappCount = contacts.filter(c => c.channel === 'whatsapp').length;
-    const telegramCount = contacts.filter(c => c.channel === 'telegram').length;
-    const webchatCount = contacts.filter(c => c.channel === 'webchat' || c.channel === 'web').length;
+    const whatsappCount = filteredContacts.filter(c => c.channel === 'whatsapp').length;
+    const telegramCount = filteredContacts.filter(c => c.channel === 'telegram').length;
+    const webchatCount = filteredContacts.filter(c => c.channel === 'webchat' || c.channel === 'web').length;
     const total = whatsappCount + telegramCount + webchatCount || 1;
 
     const channels = [
@@ -401,10 +732,38 @@ export default function KanbanBoard() {
 
   // Render conversion rates cards (AI Performance)
   const RenderBotPerformance = () => {
-    const totalMsg = contacts.reduce((acc, c) => acc + (c.messages?.length || 0), 0);
-    const automationRate = 88; // 88% handled by bot
-    const botHandled = Math.round(totalMsg * 0.88);
-    const humanHandled = totalMsg - botHandled;
+    // Calculate real messages statistics from database contacts
+    const totalOutbound = filteredContacts.reduce((acc, c) => acc + (c.messages?.filter(m => m.sender === 'agent' || m.sender === 'bot').length || 0), 0);
+    const botHandled = filteredContacts.reduce((acc, c) => {
+      const isAiPaused = c.tags?.includes('IA Inativa');
+      const outbound = c.messages?.filter(m => m.sender === 'agent' || m.sender === 'bot') || [];
+      return acc + (isAiPaused ? 0 : outbound.length);
+    }, 0);
+    const humanHandled = totalOutbound - botHandled;
+    const automationRate = totalOutbound > 0 ? Math.round((botHandled / totalOutbound) * 100) : 88;
+
+    // Calculate real average response latency of AI
+    let totalLatency = 0;
+    let latencyCount = 0;
+    filteredContacts.forEach(c => {
+      const isAiPaused = c.tags?.includes('IA Inativa');
+      if (isAiPaused) return; // only evaluate when AI is active
+      
+      const msgs = c.messages || [];
+      for (let i = 0; i < msgs.length - 1; i++) {
+        const current = msgs[i];
+        const next = msgs[i + 1];
+        if (current.sender === 'client' && (next.sender === 'agent' || next.sender === 'bot')) {
+          const diff = new Date(next.timestamp) - new Date(current.timestamp);
+          if (diff > 0 && diff < 30 * 1000) { // evaluate latency only for instantaneous AI replies (< 30s)
+            totalLatency += diff;
+            latencyCount++;
+          }
+        }
+      }
+    });
+    const avgLatencySec = latencyCount > 0 ? (totalLatency / latencyCount / 1000).toFixed(1) : null;
+    const latencyDisplay = avgLatencySec ? `< ${avgLatencySec}s` : '< 2s';
 
     return (
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
@@ -447,7 +806,7 @@ export default function KanbanBoard() {
                 stroke="#06b6d4"
                 strokeWidth="10"
                 strokeDasharray={`${2 * Math.PI * 45}`}
-                strokeDashoffset={`${2 * Math.PI * 45 * (1 - 0.88)}`}
+                strokeDashoffset={`${2 * Math.PI * 45 * (1 - automationRate / 100)}`}
                 strokeLinecap="round"
                 style={{
                   filter: 'url(#glow-bot)',
@@ -457,7 +816,7 @@ export default function KanbanBoard() {
             </svg>
             <div style={{ position: 'absolute', textAlign: 'center' }}>
               <div style={{ fontSize: '24px', fontWeight: '800', fontFamily: 'var(--font-display)', color: '#06b6d4', textShadow: '0 0 10px rgba(6, 182, 212, 0.4)' }}>
-                88%
+                {automationRate}%
               </div>
               <div style={{ fontSize: '8px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: '600' }}>
                 Automatizado
@@ -468,11 +827,11 @@ export default function KanbanBoard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Interações da IA</span>
-              <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{botHandled || 184} msg</span>
+              <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{botHandled} msg</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Transbordos (Humanos)</span>
-              <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{humanHandled || 25} msg</span>
+              <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-primary)' }}>{humanHandled} msg</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500' }}>Tempo de Resposta IA</span>
@@ -480,7 +839,7 @@ export default function KanbanBoard() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ display: 'inline-block' }}>
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
-                &lt; 2s
+                {latencyDisplay}
               </span>
             </div>
           </div>
@@ -492,16 +851,60 @@ export default function KanbanBoard() {
 
   return (
     <div className="content-wrapper animated-fade-in" style={{ height: '100%', overflow: 'auto', paddingBottom: '40px' }}>
-      <div className="page-header">
+      <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div className="page-title">
           <h1>Funil de Vendas</h1>
           <p>Gerencie, visualize e analise o fluxo de conversão dos seus leads comercialmente.</p>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          {/* Date Range Period Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="crm-status-dropdown"
+              style={{ padding: '6px 32px 6px 12px', fontSize: '12px', height: '34px' }}
+            >
+              <option value="all">Todo o Período</option>
+              <option value="today">Hoje</option>
+              <option value="yesterday">Ontem</option>
+              <option value="7days">Últimos 7 dias</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
+
+          {dateFilter === 'custom' && (
+            <div className="animated-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
+                value={customDateRange.start}
+                onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                placeholder="De"
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>até</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
+                value={customDateRange.end}
+                onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                placeholder="Até"
+              />
+            </div>
+          )}
+
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             Total em negociação: <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>
-              R$ {contacts.filter(c => c.status !== 'lost').reduce((acc, c) => acc + c.value, 0).toLocaleString('pt-BR')}
+              R$ {filteredContacts.filter(c => c.status !== 'lost').reduce((acc, c) => acc + c.value, 0).toLocaleString('pt-BR')}
             </span>
           </div>
 
@@ -540,7 +943,7 @@ export default function KanbanBoard() {
         /* KANBAN SCROLLER BOARD VIEW */
         <div className="kanban-board-container">
           {columns.map(col => {
-            const colContacts = contacts.filter(c => c.status === col.id);
+            const colContacts = filteredContacts.filter(c => c.status === col.id);
             const colSum = colContacts.reduce((acc, c) => acc + c.value, 0);
             const isHovered = activeDropCol === col.id;
 
@@ -588,12 +991,14 @@ export default function KanbanBoard() {
                         </span>
                       </div>
 
-                      <div className="kanban-card-tags">
-                        {contact.tags && contact.tags.slice(0, 2).map(tag => (
-                          <span key={tag} className="kanban-card-tag">
-                            {tag}
-                          </span>
-                        ))}
+                      <div className="kanban-card-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                        {contact.tags && contact.tags.slice(0, 3).map(tag => {
+                          const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
+                          const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
+                          return (
+                            <TagBadge key={tag} name={tag} color={color} />
+                          );
+                        })}
                       </div>
 
                       <div className="kanban-card-footer">

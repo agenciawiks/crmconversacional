@@ -33,7 +33,8 @@ class SupabaseService {
         }
         return [{ id: 1, text: c.notes, date: c.updated_at }];
       })(),
-      messages: []
+      messages: [],
+      created_at: c.created_at
     }));
   }
 

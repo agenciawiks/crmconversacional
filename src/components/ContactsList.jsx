@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCrm } from '../context/CrmContext';
 import { MessageSquare, Tag, StickyNote, Phone, User } from 'lucide-react';
+import TagBadge from './TagBadge';
 
 export default function ContactsList() {
   const { 
@@ -12,7 +13,13 @@ export default function ContactsList() {
     addNoteToContact,
     updateContactTags,
     updateContactName,
-    updateContactValue
+    updateContactValue,
+    globalTags,
+    dateFilter,
+    setDateFilter,
+    customDateRange,
+    setCustomDateRange,
+    getFilteredContacts
   } = useCrm();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,13 +38,14 @@ export default function ContactsList() {
   const [newNoteText, setNewNoteText] = useState('');
 
   // Financial sum metrics
-  const totalLeads = contacts.length;
-  const totalRevenue = contacts.filter(c => c.status === 'won').reduce((sum, c) => sum + c.value, 0);
+  const dateFilteredContacts = getFilteredContacts();
+  const totalLeads = dateFilteredContacts.length;
+  const totalRevenue = dateFilteredContacts.filter(c => c.status === 'won').reduce((sum, c) => sum + c.value, 0);
   const conversionRate = totalLeads > 0 
-    ? ((contacts.filter(c => c.status === 'won').length / totalLeads) * 100).toFixed(0) 
+    ? ((dateFilteredContacts.filter(c => c.status === 'won').length / totalLeads) * 100).toFixed(0) 
     : 0;
-
-  const filteredContacts = contacts.filter(c => 
+ 
+  const filteredContacts = dateFilteredContacts.filter(c => 
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -109,15 +117,61 @@ export default function ContactsList() {
 
   return (
     <div className="content-wrapper animated-fade-in" style={{ position: 'relative' }}>
-      <div className="page-header">
+      <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div className="page-title">
           <h1>Lista de Contatos</h1>
           <p>Base unificada de leads capturados, históricos e volumes de vendas.</p>
         </div>
+ 
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          {/* Date Range Period Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="crm-status-dropdown"
+              style={{ padding: '6px 32px 6px 12px', fontSize: '12px', height: '34px' }}
+            >
+              <option value="all">Todo o Período</option>
+              <option value="today">Hoje</option>
+              <option value="yesterday">Ontem</option>
+              <option value="7days">Últimos 7 dias</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </div>
 
-        <button onClick={() => setShowAddForm(prev => !prev)} className="glass-btn">
-          <span>{showAddForm ? '✕ Fechar Form' : '＋ Novo Lead'}</span>
-        </button>
+          {dateFilter === 'custom' && (
+            <div className="animated-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
+                value={customDateRange.start}
+                onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
+                placeholder="De"
+              />
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>até</span>
+              <input
+                type="date"
+                className="glass-input"
+                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
+                value={customDateRange.end}
+                onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
+                placeholder="Até"
+              />
+            </div>
+          )}
+
+          <button onClick={() => setShowAddForm(prev => !prev)} className="glass-btn">
+            <span>{showAddForm ? '✕ Fechar Form' : '＋ Novo Lead'}</span>
+          </button>
+        </div>
       </div>
 
       {/* QUICK INLINE LEAD CREATOR FORM */}
@@ -279,12 +333,14 @@ export default function ContactsList() {
 
                 {/* Personal labels rows */}
                 <td>
-                  <div className="contact-tags-list">
-                    {contact.tags.map(tag => (
-                      <span key={tag} className="kanban-card-tag">
-                        {tag}
-                      </span>
-                    ))}
+                  <div className="contact-tags-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {contact.tags.map(tag => {
+                      const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
+                      const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
+                      return (
+                        <TagBadge key={tag} name={tag} color={color} />
+                      );
+                    })}
                   </div>
                 </td>
 
@@ -487,33 +543,19 @@ export default function ContactsList() {
                 </label>
                 
                 {/* Active tags visual lists */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '30px', padding: '10px', background: 'var(--bg-app)', border: '1px dashed var(--border-glass)', borderRadius: '8px' }}>
-                  {editTags.map(tag => (
-                    <span 
-                      key={tag} 
-                      className="kanban-card-tag"
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '6px', 
-                        padding: '4px 10px', 
-                        background: 'rgba(7, 167, 225, 0.08)', 
-                        border: '1px solid rgba(7, 167, 225, 0.15)', 
-                        color: '#07a7e1', 
-                        fontSize: '12px' 
-                      }}
-                    >
-                      {tag}
-                      <span 
-                        onClick={() => handleRemoveTag(tag)}
-                        style={{ cursor: 'pointer', fontWeight: '700', color: 'var(--text-muted)', transition: 'color 0.2s' }}
-                        onMouseEnter={(e) => e.target.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
-                      >
-                        ✕
-                      </span>
-                    </span>
-                  ))}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '30px', padding: '10px', background: 'var(--bg-app)', border: '1px dashed var(--border-glass)', borderRadius: '8px', alignItems: 'center' }}>
+                  {editTags.map(tag => {
+                    const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
+                    const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
+                    return (
+                      <TagBadge 
+                        key={tag} 
+                        name={tag} 
+                        color={color} 
+                        onDelete={() => handleRemoveTag(tag)}
+                      />
+                    );
+                  })}
                   {editTags.length === 0 && (
                     <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>Sem etiquetas ainda</span>
                   )}

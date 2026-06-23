@@ -1,7 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
+import TagBadge from './TagBadge';
+
+const tagColorsPalette = [
+  '#10B981', // Emerald
+  '#3B82F6', // Cobalt
+  '#8B5CF6', // Amethyst
+  '#EF4444', // Crimson
+  '#F59E0B', // Amber
+  '#06B6D4', // Cyan
+  '#F97316', // Salmon
+  '#EC4899'  // Coral
+];
 
 const sanitizeUrl = (url) => {
   if (!url) return '#';
@@ -21,7 +33,11 @@ export default function ChatWindow() {
     changeContactStatus,
     addNoteToContact,
     updateContactTags,
-    updateContactValue
+    updateContactValue,
+    globalTags,
+    addGlobalTag,
+    updateGlobalTag,
+    deleteGlobalTag
   } = useCrm();
 
   const [channelFilter, setChannelFilter] = useState('all');
@@ -29,6 +45,12 @@ export default function ChatWindow() {
   const [inputText, setInputText] = useState('');
   const [noteText, setNoteText] = useState('');
   const [newTagText, setNewTagText] = useState('');
+  
+  const [isTagPanelOpen, setIsTagPanelOpen] = useState(false);
+  const [tagSearch, setTagSearch] = useState('');
+  const [selectedNewColor, setSelectedNewColor] = useState('#10B981');
+  const [editingTag, setEditingTag] = useState(null);
+  const [confirmDeleteTag, setConfirmDeleteTag] = useState(null);
   
   const scrollRef = useRef(null);
 
@@ -85,17 +107,72 @@ export default function ChatWindow() {
     setNoteText('');
   };
 
-  const handleAddTag = (e) => {
-    if (e.key === 'Enter' && newTagText.trim()) {
-      if (!activeContact.tags.includes(newTagText.trim())) {
-        updateContactTags(activeContact.id, [...activeContact.tags, newTagText.trim()]);
-      }
-      setNewTagText('');
+  const handleRemoveTag = (tagToRemove) => {
+    const activeTags = activeContact.tags || [];
+    updateContactTags(activeContact.id, activeTags.filter(t => t !== tagToRemove));
+  };
+
+  const handleAddTagDirect = (tagName) => {
+    const activeTags = activeContact.tags || [];
+    if (!activeTags.includes(tagName)) {
+      updateContactTags(activeContact.id, [...activeTags, tagName]);
     }
   };
 
-  const handleRemoveTag = (tagToRemove) => {
-    updateContactTags(activeContact.id, activeContact.tags.filter(t => t !== tagToRemove));
+  const handleCreateNewTag = async () => {
+    const cleaned = tagSearch.trim().substring(0, 24);
+    if (!cleaned) return;
+    
+    // Check validation (remove special chars < > ")
+    const regex = /[<>"]/g;
+    if (regex.test(cleaned)) {
+      alert("Caracteres especiais inválidos (<, >, \") não são permitidos.");
+      return;
+    }
+
+    const success = await addGlobalTag(cleaned, selectedNewColor);
+    if (success) {
+      // Automatically assign to current contact
+      handleAddTagDirect(cleaned);
+      setTagSearch('');
+    }
+  };
+
+  const handleSaveTagEdit = async () => {
+    if (!editingTag) return;
+    const cleanedNew = editingTag.newName.trim().substring(0, 24);
+    if (!cleanedNew) return;
+
+    // Check validation (remove special chars < > ")
+    const regex = /[<>"]/g;
+    if (regex.test(cleanedNew)) {
+      alert("Caracteres especiais inválidos (<, >, \") não são permitidos.");
+      return;
+    }
+
+    try {
+      // Check duplicate merge
+      const isNameChange = editingTag.name.toLowerCase() !== cleanedNew.toLowerCase();
+      if (isNameChange && globalTags.some(t => t.name.toLowerCase() === cleanedNew.toLowerCase())) {
+        const confirmMerge = window.confirm(`A etiqueta "${cleanedNew}" já existe. Deseja mesclar as duas etiquetas? Esta ação atualizará todos os contatos associados.`);
+        if (!confirmMerge) return;
+      }
+
+      await updateGlobalTag(editingTag.name, cleanedNew, editingTag.color);
+      setEditingTag(null);
+    } catch(e) {
+      alert(e.message || "Erro ao atualizar etiqueta.");
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!confirmDeleteTag) return;
+    await deleteGlobalTag(confirmDeleteTag.name);
+    setConfirmDeleteTag(null);
+  };
+
+  const getContactsWithTagCount = (tagName) => {
+    return contacts.filter(c => c.tags && c.tags.includes(tagName)).length;
   };
 
   // Simulate client inbound message
@@ -210,11 +287,40 @@ export default function ChatWindow() {
                     </span>
                     <span className="chat-time">{lastMsg?.time || ''}</span>
                   </div>
-                  <div className="chat-preview-row">
-                    <span className="chat-preview-text">
-                      {lastMsg ? (lastMsg.sender === 'agent' ? 'Você: ' : lastMsg.sender === 'bot' ? 'Bot: ' : '') + lastMsg.text : 'Sem mensagens'}
-                    </span>
-                    {contact.unread && <span className="unread-count-dot"></span>}
+                  <div className="chat-preview-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start', height: 'auto', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className="chat-preview-text" style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                        {lastMsg ? (lastMsg.sender === 'agent' ? 'Você: ' : lastMsg.sender === 'bot' ? 'Bot: ' : '') + lastMsg.text : 'Sem mensagens'}
+                      </span>
+                      {contact.unread && <span className="unread-count-dot" style={{ marginLeft: '6px', flexShrink: 0 }}></span>}
+                    </div>
+                    {contact.tags && contact.tags.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px', width: '100%' }}>
+                        {contact.tags.map(tag => {
+                          const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
+                          const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
+                          return (
+                            <span
+                              key={tag}
+                              style={{
+                                padding: '1px 5px',
+                                backgroundColor: `${color}15`,
+                                borderColor: `${color}30`,
+                                color: color,
+                                border: '1px solid',
+                                borderRadius: '3px',
+                                fontSize: '9px',
+                                fontWeight: '600',
+                                lineHeight: '1.2',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {tag}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -493,29 +599,334 @@ export default function ChatWindow() {
 
         {/* TAGS MANAGER */}
         <div className="profile-section">
-          <span className="profile-section-title">Tags Personalizadas</span>
-          <div className="contact-tags-list" style={{ marginBottom: '8px' }}>
-            {activeContact.tags.map(tag => (
-              <span key={tag} className="kanban-card-tag" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {tag}
-                <button
-                  onClick={() => handleRemoveTag(tag)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '10px' }}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span className="profile-section-title" style={{ margin: 0 }}>Tags do Contato</span>
+            <button
+              onClick={() => setIsTagPanelOpen(!isTagPanelOpen)}
+              className="glass-btn"
+              style={{
+                padding: '4px 8px',
+                fontSize: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                height: '24px',
+                background: isTagPanelOpen ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                borderColor: 'var(--border-glass)'
+              }}
+            >
+              <Tag size={10} />
+              {isTagPanelOpen ? 'Fechar' : 'Gerenciar'}
+            </button>
           </div>
-          <input
-            type="text"
-            className="glass-input"
-            placeholder="Nova tag + Enter..."
-            value={newTagText}
-            onChange={(e) => setNewTagText(e.target.value)}
-            onKeyDown={handleAddTag}
-            style={{ padding: '8px 12px', fontSize: '12px' }}
-          />
+
+          {/* Active Tags list on the contact */}
+          <div className="contact-tags-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+            {activeContact.tags && activeContact.tags.length > 0 ? (
+              activeContact.tags.map(tagName => {
+                const tagColorObj = globalTags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
+                const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
+                return (
+                  <TagBadge
+                    key={tagName}
+                    name={tagName}
+                    color={color}
+                    onDelete={() => handleRemoveTag(tagName)}
+                  />
+                );
+              })
+            ) : (
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Sem tags vinculadas.</span>
+            )}
+          </div>
+
+          {/* Expansible Tag Catalog & Control Panel */}
+          {isTagPanelOpen && (
+            <div 
+              style={{
+                marginTop: '12px',
+                padding: '12px',
+                borderRadius: '8px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid var(--border-glass)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+              className="animated-fade-in"
+            >
+              {/* Direct tag creation panel */}
+              <div 
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  padding: '8px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '6px',
+                  border: '1px solid rgba(255, 255, 255, 0.05)'
+                }}
+              >
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>Criar Nova Tag</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input
+                    type="text"
+                    placeholder="Nome da tag..."
+                    value={newTagText}
+                    onChange={(e) => setNewTagText(e.target.value)}
+                    className="glass-input"
+                    style={{
+                      fontSize: '11px',
+                      padding: '6px 10px',
+                      flex: 1
+                    }}
+                  />
+                  <button
+                    onClick={async () => {
+                      const cleaned = newTagText.trim().substring(0, 24);
+                      if (!cleaned) return;
+                      const regex = /[<>"]/g;
+                      if (regex.test(cleaned)) {
+                        alert("Caracteres especiais inválidos (<, >, \") não são permitidos.");
+                        return;
+                      }
+                      const success = await addGlobalTag(cleaned, selectedNewColor);
+                      if (success) {
+                        handleAddTagDirect(cleaned);
+                        setNewTagText('');
+                      } else {
+                        alert("Esta tag já existe ou ocorreu um erro.");
+                      }
+                    }}
+                    className="glass-btn primary"
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      background: 'var(--accent-color)',
+                      color: '#000',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Criar
+                  </button>
+                </div>
+                
+                {/* Color Selector circles */}
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Cor:</span>
+                  {tagColorsPalette.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedNewColor(color)}
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '50%',
+                        backgroundColor: color,
+                        border: selectedNewColor === color ? '2px solid #fff' : '1px solid rgba(255, 255, 255, 0.2)',
+                        cursor: 'pointer',
+                        padding: 0,
+                        boxShadow: selectedNewColor === color ? '0 0 6px ' + color : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.05)', margin: '2px 0' }} />
+
+              {/* Search tag catalogue */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>Buscar & Vincular</span>
+                <input
+                  type="text"
+                  placeholder="Buscar no catálogo..."
+                  value={tagSearch}
+                  onChange={(e) => setTagSearch(e.target.value)}
+                  className="glass-input"
+                  style={{
+                    fontSize: '11px',
+                    padding: '6px 10px',
+                    width: '100%'
+                  }}
+                />
+              </div>
+
+              {/* Tag Catalog List */}
+              <div 
+                style={{
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  paddingRight: '4px'
+                }}
+              >
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '2px' }}>Catálogo de Tags</span>
+                {globalTags
+                  .filter(t => !tagSearch || t.name.toLowerCase().includes(tagSearch.toLowerCase()))
+                  .map(tag => {
+                    const isAttached = activeContact.tags?.some(at => at.toLowerCase() === tag.name.toLowerCase());
+                    const isEditing = editingTag && editingTag.name.toLowerCase() === tag.name.toLowerCase();
+
+                    if (isEditing) {
+                      return (
+                        <div 
+                          key={tag.name}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '6px',
+                            padding: '8px',
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                          }}
+                        >
+                          <input
+                            type="text"
+                            value={editingTag.newName}
+                            onChange={(e) => setEditingTag({ ...editingTag, newName: e.target.value })}
+                            className="glass-input"
+                            style={{ fontSize: '11px', padding: '4px 8px' }}
+                            maxLength={24}
+                          />
+                          
+                          {/* Color Palette Selector for Editing */}
+                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                            {tagColorsPalette.map(color => (
+                              <button
+                                key={color}
+                                onClick={() => setEditingTag({ ...editingTag, color })}
+                                style={{
+                                  width: '14px',
+                                  height: '14px',
+                                  borderRadius: '50%',
+                                  backgroundColor: color,
+                                  border: editingTag.color === color ? '2px solid #fff' : '1px solid rgba(255, 255, 255, 0.2)',
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                  transition: 'all 0.1s ease'
+                                }}
+                              />
+                            ))}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                            <button
+                              onClick={handleSaveTagEdit}
+                              className="glass-btn"
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '9px',
+                                flex: 1,
+                                background: 'rgba(16, 185, 129, 0.2)',
+                                borderColor: 'rgba(16, 185, 129, 0.4)',
+                                color: '#10B981'
+                              }}
+                            >
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteTag(tag)}
+                              className="glass-btn"
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '9px',
+                                flex: 1,
+                                background: 'rgba(239, 68, 68, 0.2)',
+                                borderColor: 'rgba(239, 68, 68, 0.4)',
+                                color: '#EF4444'
+                              }}
+                            >
+                              Excluir
+                            </button>
+                            <button
+                              onClick={() => setEditingTag(null)}
+                              className="glass-btn"
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '9px',
+                                flex: 1
+                              }}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div 
+                        key={tag.name}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '4px 6px',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <div 
+                          onClick={() => {
+                            if (isAttached) {
+                              handleRemoveTag(tag.name);
+                            } else {
+                              handleAddTagDirect(tag.name);
+                            }
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            flex: 1
+                          }}
+                        >
+                          <input 
+                            type="checkbox"
+                            checked={isAttached}
+                            readOnly
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <TagBadge name={tag.name} color={tag.color} />
+                        </div>
+
+                        <button
+                          onClick={() => setEditingTag({ name: tag.name, newName: tag.name, color: tag.color })}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '2px 6px',
+                            fontSize: '10px'
+                          }}
+                          title="Editar etiqueta"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    );
+                  })}
+                {globalTags.filter(t => !tagSearch || t.name.toLowerCase().includes(tagSearch.toLowerCase())).length === 0 && (
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px' }}>
+                    Nenhuma tag encontrada no catálogo.
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* CUSTOM NOTES REPOSITORY */}
@@ -552,6 +963,78 @@ export default function ChatWindow() {
         </div>
 
       </div>
+
+      {/* GLOBAL DELETE TAG CONFIRMATION MODAL */}
+      {confirmDeleteTag && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}
+        className="animated-fade-in"
+        >
+          <div style={{
+            background: 'rgba(20, 20, 25, 0.95)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '400px',
+            width: '100%',
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '18px', color: '#EF4444', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ⚠️ Excluir Etiqueta Globalmente
+            </h3>
+            <p style={{ fontSize: '13px', lineHeight: '1.6', color: 'rgba(255, 255, 255, 0.8)', margin: 0 }}>
+              Você tem certeza que deseja excluir a etiqueta <strong>"{confirmDeleteTag.name}"</strong>?
+              <br /><br />
+              Esta ação é <strong>irreversível</strong> e irá removê-la permanentemente do catálogo e de todos os contatos associados no CRM (atualmente em <strong>{getContactsWithTagCount(confirmDeleteTag.name)}</strong> contatos).
+            </p>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button
+                onClick={handleConfirmDelete}
+                className="glass-btn"
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  borderColor: 'rgba(239, 68, 68, 0.5)',
+                  color: '#EF4444',
+                  fontWeight: '600',
+                  fontSize: '12px'
+                }}
+              >
+                Sim, Excluir de tudo
+              </button>
+              <button
+                onClick={() => setConfirmDeleteTag(null)}
+                className="glass-btn"
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  fontWeight: '600',
+                  fontSize: '12px'
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
