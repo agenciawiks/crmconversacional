@@ -554,13 +554,7 @@
     },
     "Insert Msg": {
       "main": [
-        [
-          {
-            "node": "Fetch AI Settings",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Fetch AI Settings": {

@@ -627,11 +627,6 @@
             "node": "Log Webhook Event",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Fetch AI Settings",
-            "type": "main",
-            "index": 0
           }
         ]
       ]

@@ -174,6 +174,7 @@ class SupabaseService {
             api_key: parsedPrompt.api_key ?? '',
             system_prompt: parsedPrompt.system_prompt ?? '',
             negative_prompt: parsedPrompt.negative_prompt ?? '',
+            welcome_message: parsedPrompt.welcome_message ?? '',
             is_enabled: parsedPrompt.is_enabled ?? false
           };
         }
@@ -193,6 +194,7 @@ class SupabaseService {
       api_key: settings.api_key,
       system_prompt: settings.system_prompt,
       negative_prompt: settings.negative_prompt,
+      welcome_message: settings.welcome_message,
       is_enabled: settings.is_enabled
     });
 

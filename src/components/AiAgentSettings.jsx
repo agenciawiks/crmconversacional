@@ -13,7 +13,8 @@ import {
   X, 
   Plus, 
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 
 export default function AiAgentSettings() {
@@ -29,6 +30,7 @@ export default function AiAgentSettings() {
   const [temperature, setTemperature] = useState(0.7);
   const [systemPrompt, setSystemPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
+  const [welcomeMessage, setWelcomeMessage] = useState('');
   const [pausePhrases, setPausePhrases] = useState([]);
   
   // UI states
@@ -74,6 +76,7 @@ export default function AiAgentSettings() {
           setTemperature(config.temperature);
           setSystemPrompt(config.system_prompt);
           setNegativePrompt(config.negative_prompt);
+          setWelcomeMessage(config.welcome_message || '');
           setPausePhrases(config.pause_trigger_phrases || []);
         } else {
           // Reset if no settings found for this channel
@@ -84,6 +87,7 @@ export default function AiAgentSettings() {
           setTemperature(0.7);
           setSystemPrompt('');
           setNegativePrompt('');
+          setWelcomeMessage('');
           setPausePhrases([]);
         }
       } catch (err) {
@@ -118,6 +122,7 @@ export default function AiAgentSettings() {
       temperature: Number(temperature),
       system_prompt: systemPrompt,
       negative_prompt: negativePrompt,
+      welcome_message: welcomeMessage,
       pause_trigger_phrases: pausePhrases
     };
 
@@ -387,6 +392,26 @@ export default function AiAgentSettings() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Mensagem de Boas-Vindas (Opcional) */}
+        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
+            <MessageSquare size={18} style={{ color: 'var(--accent-primary)' }} />
+            <div>
+              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Mensagem de Boas-Vindas (Opcional)</h2>
+              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Se configurada, esta mensagem será enviada automaticamente no primeiro contato do cliente. Deixe em branco se quiser que o Agente de IA responda diretamente usando Inteligência Artificial desde a primeira mensagem.
+              </p>
+            </div>
+          </div>
+          <textarea
+            className="node-textarea"
+            style={{ minHeight: '80px', fontSize: '12.5px', padding: '12px', lineHeight: '1.5' }}
+            value={welcomeMessage}
+            onChange={(e) => setWelcomeMessage(e.target.value)}
+            placeholder="Ex: Olá! Seja bem-vindo à Clínica Estética. Como posso te ajudar hoje?"
+          />
         </div>
 
         {/* System Prompt (Persona / Context) */}
