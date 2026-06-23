@@ -145,39 +145,41 @@ class SupabaseService {
 
   static async fetchAiSettings(channelId) {
     if (!channelId) return null;
-    const serviceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8";
     try {
-      const response = await fetch(`https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?channel_id=eq.${channelId}&limit=1`, {
-        headers: {
-          'apikey': serviceKey,
-          'Authorization': `Bearer ${serviceKey}`
+      const { data, error } = await supabase
+        .from('ai_settings')
+        .select('*')
+        .eq('channel_id', channelId)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[SupabaseService] fetchAiSettings db error:', error);
+        return null;
+      }
+
+      if (data) {
+        const row = data;
+        let parsedPrompt = {};
+        try {
+          parsedPrompt = JSON.parse(row.system_prompt || '{}');
+        } catch(e) {
+          parsedPrompt = { system_prompt: row.system_prompt };
         }
-      });
-      if (response.ok) {
-        const list = await response.json();
-        if (list && list.length > 0) {
-          const row = list[0];
-          let parsedPrompt = {};
-          try {
-            parsedPrompt = JSON.parse(row.system_prompt || '{}');
-          } catch(e) {
-            parsedPrompt = { system_prompt: row.system_prompt };
-          }
-          return {
-            id: row.id,
-            tenant_id: row.tenant_id,
-            channel_id: row.channel_id,
-            temperature: row.temperature ?? 0.7,
-            pause_trigger_phrases: row.pause_trigger_phrases ?? [],
-            agent_name: parsedPrompt.agent_name ?? 'Agente de IA',
-            model: parsedPrompt.model ?? 'gpt-4o-mini',
-            api_key: parsedPrompt.api_key ?? '',
-            system_prompt: parsedPrompt.system_prompt ?? '',
-            negative_prompt: parsedPrompt.negative_prompt ?? '',
-            welcome_message: parsedPrompt.welcome_message ?? '',
-            is_enabled: parsedPrompt.is_enabled ?? false
-          };
-        }
+        return {
+          id: row.id,
+          tenant_id: row.tenant_id,
+          channel_id: row.channel_id,
+          temperature: row.temperature ?? 0.7,
+          pause_trigger_phrases: row.pause_trigger_phrases ?? [],
+          agent_name: parsedPrompt.agent_name ?? 'Agente de IA',
+          model: parsedPrompt.model ?? 'gpt-4o-mini',
+          api_key: parsedPrompt.api_key ?? '',
+          system_prompt: parsedPrompt.system_prompt ?? '',
+          negative_prompt: parsedPrompt.negative_prompt ?? '',
+          welcome_message: parsedPrompt.welcome_message ?? '',
+          is_enabled: parsedPrompt.is_enabled ?? false
+        };
       }
     } catch(e) {
       console.error('[SupabaseService] fetchAiSettings error:', e);
@@ -186,8 +188,6 @@ class SupabaseService {
   }
 
   static async saveAiSettings(settings) {
-    const serviceKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8";
-    
     const systemPromptJson = JSON.stringify({
       agent_name: settings.agent_name,
       model: settings.model,
@@ -206,32 +206,27 @@ class SupabaseService {
       pause_trigger_phrases: settings.pause_trigger_phrases || []
     };
 
-    if (settings.id) {
-      body.id = settings.id;
-    }
-
     try {
-      const url = settings.id 
-        ? `https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?id=eq.${settings.id}`
-        : `https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings`;
-
-      const response = await fetch(url, {
-        method: settings.id ? 'PATCH' : 'POST',
-        headers: {
-          'apikey': serviceKey,
-          'Authorization': `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data?.[0] || true;
+      let query;
+      if (settings.id) {
+        query = supabase
+          .from('ai_settings')
+          .update(body)
+          .eq('id', settings.id);
       } else {
-        console.error('[SupabaseService] saveAiSettings response error:', await response.text());
+        query = supabase
+          .from('ai_settings')
+          .insert([body]);
       }
+
+      const { data, error } = await query.select();
+
+      if (error) {
+        console.error('[SupabaseService] saveAiSettings db error:', error);
+        return false;
+      }
+
+      return data?.[0] || true;
     } catch(e) {
       console.error('[SupabaseService] saveAiSettings error:', e);
     }

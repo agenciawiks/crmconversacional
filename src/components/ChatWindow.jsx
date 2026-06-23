@@ -3,6 +3,15 @@ import { useCrm } from '../context/CrmContext';
 import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 
+const sanitizeUrl = (url) => {
+  if (!url) return '#';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:')) {
+    return '#';
+  }
+  return trimmed;
+};
+
 export default function ChatWindow() {
   const {
     contacts,
@@ -298,7 +307,7 @@ export default function ChatWindow() {
                 ) : msg.content_type === 'document' && msg.media_url ? (
                   <div>
                     <a 
-                      href={msg.media_url} 
+                      href={sanitizeUrl(msg.media_url)} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-color)', textDecoration: 'underline' }}
