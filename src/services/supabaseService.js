@@ -144,6 +144,64 @@ class SupabaseService {
     return true;
   }
 
+  static async updateContactName(contactId, name) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ name })
+      .eq('id', contactId)
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] updateContactName error:', error);
+      return false;
+    }
+    return true;
+  }
+
+  static async updateContactStatus(contactId, status) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ pipeline_stage: status })
+      .eq('id', contactId)
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] updateContactStatus error:', error);
+      return false;
+    }
+    return true;
+  }
+
+  static async createContact(contactData) {
+    const row = {
+      phone: contactData.phone.replace(/\D/g, ''),
+      name: contactData.name,
+      pipeline_stage: contactData.status || 'new',
+      email: contactData.email || null,
+      tags: contactData.tags || []
+    };
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .insert([row])
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] createContact error:', error);
+      if (error.code === '23505') {
+        const { data: existing } = await supabase
+          .from('contacts')
+          .select('*')
+          .eq('phone', row.phone)
+          .maybeSingle();
+        return existing;
+      }
+      return null;
+    }
+
+    return data?.[0];
+  }
+
   static async fetchAiSettings(channelId) {
     if (!channelId) return null;
     try {

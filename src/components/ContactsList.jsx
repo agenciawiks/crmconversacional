@@ -25,6 +25,7 @@ export default function ContactsList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLeadName, setNewLeadName] = useState('');
+  const [newLeadPhone, setNewLeadPhone] = useState('');
   const [newLeadChannel, setNewLeadChannel] = useState('whatsapp');
   const [newLeadMsg, setNewLeadMsg] = useState('Olá, gostaria de saber mais informações.');
 
@@ -53,11 +54,12 @@ export default function ContactsList() {
 
   const handleCreateLead = (e) => {
     e.preventDefault();
-    if (!newLeadName.trim()) return;
+    if (!newLeadName.trim() || !newLeadPhone.trim()) return;
     
     // Add lead and close form
-    addContact(newLeadName, newLeadChannel, newLeadMsg);
+    addContact(newLeadName, newLeadChannel, newLeadPhone, newLeadMsg);
     setNewLeadName('');
+    setNewLeadPhone('');
     setNewLeadMsg('Olá, gostaria de saber mais informações.');
     setShowAddForm(false);
   };
@@ -180,7 +182,7 @@ export default function ContactsList() {
           padding: '20px',
           background: 'var(--bg-surface-solid)',
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)) 100px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr)) 100px',
           gap: '16px',
           alignItems: 'end',
           marginBottom: '20px'
@@ -208,6 +210,18 @@ export default function ContactsList() {
               <option value="telegram">Instagram</option>
               <option value="webchat">Tiktok</option>
             </select>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Telefone / Celular</span>
+            <input
+              type="text"
+              required
+              className="glass-input"
+              placeholder="Ex: 5511999998888"
+              value={newLeadPhone}
+              onChange={(e) => setNewLeadPhone(e.target.value)}
+            />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

@@ -631,12 +631,19 @@ export const CrmProvider = ({ children }) => {
 
   const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
 
-  const changeContactStatus = (contactId, newStatus) => {
+  const changeContactStatus = async (contactId, newStatus) => {
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, status: newStatus } : c)));
     const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
     if (!meta[contactId]) meta[contactId] = {};
     meta[contactId].status = newStatus;
     localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+    if (contactId && contactId.toString().includes('-')) {
+      try {
+        await SupabaseService.updateContactStatus(contactId, newStatus);
+      } catch (e) {
+        console.error("[CrmContext] Error updating contact status in database:", e);
+      }
+    }
   };
 
   const addNoteToContact = async (contactId, text) => {
@@ -810,13 +817,20 @@ export const CrmProvider = ({ children }) => {
     }
   };
 
-  const updateContactName = (contactId, name) => {
+  const updateContactName = async (contactId, name) => {
     if (!name.trim()) return;
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, name } : c)));
     const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
     if (!meta[contactId]) meta[contactId] = {};
     meta[contactId].name = name;
     localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+    if (contactId && contactId.toString().includes('-')) {
+      try {
+        await SupabaseService.updateContactName(contactId, name);
+      } catch (e) {
+        console.error("[CrmContext] Error updating contact name in database:", e);
+      }
+    }
   };
 
   const updateContactValue = (contactId, value) => {
@@ -828,18 +842,74 @@ export const CrmProvider = ({ children }) => {
     localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
   };
 
-  const addContact = (name, channel, initialText = 'Olá!') => {
-    const id = Date.now().toString();
-    const hue = Math.floor(Math.random() * 360);
-    const newContact = {
-      id, name, email: `${name.toLowerCase().replace(/\s+/g, '.')}@email.com`, phone: '(11) 99999-8888',
-      status: 'new', channel, value: 0, tags: ['Novo Lead'], unread: true, avatarColor: `hsl(${hue}, 80%, 65%)`,
-      notes: [], messages: [{ id: 1, sender: 'client', text: initialText, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), timestamp: new Date() }],
-      created_at: new Date().toISOString()
-    };
-    setContacts(prev => [newContact, ...prev]);
-    setActiveContactId(id);
-    setActiveScreen('chat');
+  const addContact = async (name, channel, phone, initialText = 'Olá!') => {
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (!cleanPhone) return;
+
+    try {
+      const dbContact = await SupabaseService.createContact({
+        name,
+        phone: cleanPhone,
+        status: 'new',
+        email: `${name.toLowerCase().replace(/\s+/g, '.')}@email.com`,
+        tags: ['Novo Lead']
+      });
+
+      if (dbContact) {
+        const hue = Math.floor(Math.random() * 360);
+        const exists = contacts.find(c => c.id === dbContact.id);
+        if (exists) {
+          setActiveContactId(dbContact.id);
+          setActiveScreen('chat');
+          return;
+        }
+
+        let firstMsg = null;
+        if (initialText) {
+          const { data: insertedMsg } = await supabase
+            .from('messages')
+            .insert([{
+              contact_id: dbContact.id,
+              direction: 'in',
+              content: initialText,
+              timestamp: new Date().toISOString()
+            }])
+            .select();
+          if (insertedMsg?.[0]) {
+            firstMsg = {
+              id: insertedMsg[0].id,
+              sender: 'client',
+              text: insertedMsg[0].content,
+              time: new Date(insertedMsg[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              timestamp: new Date(insertedMsg[0].timestamp),
+              channel_id: insertedMsg[0].channel_id
+            };
+          }
+        }
+
+        const newContact = {
+          id: dbContact.id,
+          name: dbContact.name,
+          email: dbContact.email || '',
+          phone: dbContact.phone,
+          status: dbContact.pipeline_stage || 'new',
+          channel,
+          value: 0,
+          tags: dbContact.tags || ['Novo Lead'],
+          unread: true,
+          avatarColor: `hsl(${hue}, 80%, 65%)`,
+          notes: [],
+          messages: firstMsg ? [firstMsg] : [],
+          created_at: dbContact.created_at
+        };
+
+        setContacts(prev => [newContact, ...prev]);
+        setActiveContactId(dbContact.id);
+        setActiveScreen('chat');
+      }
+    } catch (e) {
+      console.error("[CrmContext] Error in addContact:", e);
+    }
   };
 
   const sendMessage = async (contactId, text, sender = 'agent') => {
