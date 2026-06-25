@@ -292,6 +292,33 @@ class SupabaseService {
     return false;
   }
 
+  static async updateChannelStatus(channelId, status) {
+    const { data, error } = await supabase
+      .from('channels')
+      .update({ status })
+      .eq('id', channelId)
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] updateChannelStatus error:', error);
+      return false;
+    }
+    return true;
+  }
+
+  static async deleteChannel(channelId) {
+    const { error } = await supabase
+      .from('channels')
+      .delete()
+      .eq('id', channelId);
+
+    if (error) {
+      console.error('[SupabaseService] deleteChannel error:', error);
+      return false;
+    }
+    return true;
+  }
+
   static _hashCode(str) {
     let hash = 0;
     for (let i = 0; i < (str || '').length; i++) {

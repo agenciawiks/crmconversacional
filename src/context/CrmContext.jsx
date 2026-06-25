@@ -610,12 +610,32 @@ export const CrmProvider = ({ children }) => {
     }
   };
 
-  const toggleChannelStatus = (id) => {
-    setChannels(prev => prev.map(c => (c.id === id ? { ...c, status: c.status === 'connected' ? 'disconnected' : 'connected' } : c)));
+  const toggleChannelStatus = async (id) => {
+    const chan = channels.find(c => c.id === id);
+    if (!chan) return;
+    const newStatus = chan.status === 'connected' ? 'disconnected' : 'connected';
+
+    setChannels(prev => prev.map(c => (c.id === id ? { ...c, status: newStatus } : c)));
+
+    if (id && id.toString().includes('-')) {
+      try {
+        await SupabaseService.updateChannelStatus(id, newStatus);
+      } catch (e) {
+        console.error("[CrmContext] Error updating channel status in database:", e);
+      }
+    }
   };
 
-  const deleteChannel = (id) => {
+  const deleteChannel = async (id) => {
     setChannels(prev => prev.filter(c => c.id !== id));
+
+    if (id && id.toString().includes('-')) {
+      try {
+        await SupabaseService.deleteChannel(id);
+      } catch (e) {
+        console.error("[CrmContext] Error deleting channel from database:", e);
+      }
+    }
   };
 
   useEffect(() => {
@@ -648,21 +668,31 @@ export const CrmProvider = ({ children }) => {
 
   const addNoteToContact = async (contactId, text) => {
     if (!text.trim()) return;
-    
-    setContacts(prev => {
-      const contact = prev.find(c => c.id === contactId);
-      if (!contact) return prev;
-      
-      const newNote = { id: Date.now(), text, date: new Date().toISOString().replace('T', ' ').substring(0, 16) };
-      const updatedNotes = [...contact.notes, newNote];
-      
-      const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
-      if (!meta[contactId]) meta[contactId] = {};
-      meta[contactId].notes = updatedNotes;
-      localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
-      
-      return prev.map(c => (c.id === contactId ? { ...c, notes: updatedNotes } : c));
-    });
+
+    const contact = contacts.find(c => c.id === contactId);
+    if (!contact) return;
+
+    const newNote = { 
+      id: Date.now(), 
+      text, 
+      date: new Date().toISOString().replace('T', ' ').substring(0, 16) 
+    };
+    const updatedNotes = [...(contact.notes || []), newNote];
+
+    setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, notes: updatedNotes } : c)));
+
+    const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    if (!meta[contactId]) meta[contactId] = {};
+    meta[contactId].notes = updatedNotes;
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+
+    if (contactId && contactId.toString().includes('-')) {
+      try {
+        await SupabaseService.updateContactNotes(contactId, JSON.stringify(updatedNotes));
+      } catch (e) {
+        console.error("[CrmContext] Error updating contact notes in database:", e);
+      }
+    }
   };
 
   const updateContactTags = async (contactId, tags) => {
