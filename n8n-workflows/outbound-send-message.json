@@ -119,7 +119,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.phone }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.content }}\"\n  }\n}",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $json.phone, type: 'text', text: { body: $json.content } } }}",
         "options": {
           "timeout": 15000
         }
@@ -152,7 +152,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"recipient\": {\n    \"id\": \"{{ $json.phone }}\"\n  },\n  \"message\": {\n    \"text\": \"{{ $json.content }}\"\n  }\n}",
+        "jsonBody": "={{ { recipient: { id: $json.phone }, message: { text: $json.content } } }}",
         "options": {
           "timeout": 15000
         }
@@ -185,7 +185,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"number\": \"{{ $json.phone }}@s.whatsapp.net\",\n  \"text\": \"{{ $json.content }}\"\n}",
+        "jsonBody": "={{ { number: $json.phone + '@s.whatsapp.net', text: $json.content } }}",
         "options": {
           "timeout": 15000
         }

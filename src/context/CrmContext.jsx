@@ -36,13 +36,11 @@ export const CrmProvider = ({ children }) => {
   const [isBotEnabled, setIsBotEnabled] = useState(true);
   const [followupRules, setFollowupRules] = useState([]);
   const [globalTags, setGlobalTags] = useState([]);
-  const [channels, setChannels] = useState([
-    { id: '1', name: 'Whats Suporte (Evolution API)', provider: 'evolution', status: 'connected', instance: 'SuporteCorp', url: 'https://api.evolution.cloudcorp.com', apiKey: 'token_evo_suporte_xyz' },
-    { id: '2', name: 'Whats Vendas (Meta Cloud API)', provider: 'meta_cloud', status: 'connected', phoneId: '1098457293847', accessToken: 'EAAd8B_meta_official_token' }
-  ]);
+  const [channels, setChannels] = useState([]);
 
   const lastPollRef = useRef(new Date().toISOString());
   const knownMsgIdsRef = useRef(new Set());
+  const migrationDone = useRef(false);
 
   // Load Initial Data from Supabase
   useEffect(() => {
@@ -135,7 +133,7 @@ export const CrmProvider = ({ children }) => {
           let defaultValue = 0;
 
           const resolvedStatus = contactMeta.status || c.status || defaultStage;
-          const resolvedValue = contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue);
+          const resolvedValue = c.value !== undefined ? c.value : defaultValue;
           const rawName = contactMeta.name || c.name;
           const resolvedTags = contactMeta.tags || c.tags || [];
 
@@ -190,6 +188,41 @@ export const CrmProvider = ({ children }) => {
     }
     loadData();
   }, []);
+
+  // Migração client-side dos valores de leads (localStorage -> Supabase) executada uma única vez
+  useEffect(() => {
+    if (migrationDone.current) return;
+    if (contacts.length === 0) return;
+    
+    if (localStorage.getItem('crm_value_migrated_v1')) {
+      migrationDone.current = true;
+      return;
+    }
+    
+    migrationDone.current = true; // Previne execuções simultâneas
+    
+    const legacy = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    const updates = Object.entries(legacy)
+      .filter(([_, meta]) => meta.value > 0)
+      .map(([contactId, meta]) => {
+        const contactExists = contacts.some(c => c.id === contactId);
+        if (contactExists) {
+          return SupabaseService.updateContactValue(contactId, meta.value);
+        }
+        return Promise.resolve(true);
+      });
+    
+    if (updates.length > 0) {
+      Promise.all(updates).then(() => {
+        localStorage.setItem('crm_value_migrated_v1', 'true');
+        console.log(`[CrmContext] Migrated ${updates.length} legacy values from localStorage to Supabase.`);
+      }).catch(err => {
+        console.error("[CrmContext] Error migrating legacy values:", err);
+      });
+    } else {
+      localStorage.setItem('crm_value_migrated_v1', 'true');
+    }
+  }, [contacts]);
 
   // Synchronize state changes to localStorage
   useEffect(() => {
@@ -375,7 +408,7 @@ export const CrmProvider = ({ children }) => {
               username: username,
               tags: contactMeta.tags || freshC.tags || [],
               status: contactMeta.status || freshC.status || defaultStage,
-              value: contactMeta.value !== undefined ? contactMeta.value : (freshC.value || defaultValue),
+              value: freshC.value !== undefined ? freshC.value : defaultValue,
               notes: contactMeta.notes || freshC.notes || []
             };
 
@@ -689,6 +722,13 @@ export const CrmProvider = ({ children }) => {
     if (contactId && contactId.toString().includes('-')) {
       try {
         await SupabaseService.updateContactNotes(contactId, JSON.stringify(updatedNotes));
+        // Log manual de anotação de atividade no banco
+        await SupabaseService.logActivity(
+          contactId,
+          'note',
+          'Nota adicionada ao contato',
+          `Nota: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`
+        );
       } catch (e) {
         console.error("[CrmContext] Error updating contact notes in database:", e);
       }
@@ -863,13 +903,24 @@ export const CrmProvider = ({ children }) => {
     }
   };
 
-  const updateContactValue = (contactId, value) => {
+  const updateContactValue = async (contactId, value) => {
     const valNum = Number(value) || 0;
     setContacts(prev => prev.map(c => (c.id === contactId ? { ...c, value: valNum } : c)));
+    
+    // Remover o valor do localStorage para usar apenas a DB
     const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
-    if (!meta[contactId]) meta[contactId] = {};
-    meta[contactId].value = valNum;
-    localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+    if (meta[contactId]) {
+      delete meta[contactId].value;
+      localStorage.setItem('crm_contacts_metadata', JSON.stringify(meta));
+    }
+
+    if (contactId && contactId.toString().includes('-')) {
+      try {
+        await SupabaseService.updateContactValue(contactId, valNum);
+      } catch (e) {
+        console.error("[CrmContext] Error updating contact value in database:", e);
+      }
+    }
   };
 
   const addContact = async (name, channel, phone, initialText = 'Olá!') => {

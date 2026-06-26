@@ -19,7 +19,7 @@ class SupabaseService {
       phone: c.phone,
       status: c.pipeline_stage || 'new',
       channel: 'whatsapp',
-      value: 0,
+      value: Number(c.value) || 0,
       tags: c.tags || [],
       unread: false,
       avatarColor: `hsl(${Math.abs(this._hashCode(c.phone)) % 360}, 75%, 60%)`,
@@ -327,6 +327,33 @@ class SupabaseService {
       hash |= 0;
     }
     return hash;
+  }
+
+  static async updateContactValue(contactId, value) {
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ value: Number(value) || 0 })
+      .eq('id', contactId)
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] updateContactValue error:', error);
+      return false;
+    }
+    return true;
+  }
+
+  static async logActivity(contactId, type, title, meta) {
+    const { data, error } = await supabase
+      .from('activity_log')
+      .insert([{ contact_id: contactId, type, title, meta }])
+      .select();
+
+    if (error) {
+      console.error('[SupabaseService] logActivity error:', error);
+      return null;
+    }
+    return data?.[0];
   }
 }
 

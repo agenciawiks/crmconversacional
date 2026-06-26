@@ -1,7 +1,7 @@
 const fs = require('fs');
 
 const headers = { 
-  'X-N8N-API-KEY': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyN2Y2NjgzMS1iNjE2LTQwZGEtYjZkYS05MGQzZWExMmE0NmIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiYTlkNzM4NDgtNzZhYi00OTM3LWFjMmUtNzhlMDVjNzcxOTE3IiwiaWF0IjoxNzgwNTE2NzgwfQ.Nq0TV5AmJMLrBCImuZanmQPGdOJEj3Cs72ARj-OupzE', 
+  'X-N8N-API-KEY': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyN2Y2NjgzMS1iNjE2LTQwZGEtYjZkYS05MGQzZWExMmE0NmIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiMjNkZGI1ZTAtOWU1ZS00ZWVmLTk3MGYtMTg1NTM1MDE4YmYyIiwiaWF0IjoxNzgwOTU1OTI0fQ.2BsiFzbIzF_LMSEqi5TOY50YY9U4ugBDOQaocKZ89xg', 
   'Content-Type': 'application/json', 
   'Accept': 'application/json' 
 };
@@ -84,6 +84,11 @@ return [{
     updated_tags: updatedTags
   }
 }];`;
+  
+  const sendNode = wf.nodes.find(n => n.name === 'Send AI Response');
+  if (sendNode) {
+    sendNode.parameters.jsonBody = "={{ { channel_id: $json.channel_id, contact_id: $json.contact_id, phone: $json.phone, content: $json.content } }}";
+  }
 
   // We only keep executionOrder and errorWorkflow
   const validSettings = {};

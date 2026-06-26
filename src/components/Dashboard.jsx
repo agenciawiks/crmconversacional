@@ -1,9 +1,51 @@
 import React, { useEffect, useState } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageCircle, UserPlus, FileText, BadgeDollarSign, Cpu, CheckCircle2, Webhook, Briefcase, MessagesSquare } from 'lucide-react';
+import { supabase } from '../supabase';
+import { 
+  MessageCircle, UserPlus, FileText, BadgeDollarSign, Cpu, CheckCircle2, 
+  Webhook, Briefcase, MessagesSquare, Bot, TrendingUp, TrendingDown, 
+  ArrowRight, StickyNote 
+} from 'lucide-react';
+
+const calculatePercentageChange = (curr, prev) => {
+  if (prev === 0) return curr > 0 ? '+100%' : '0%';
+  const diff = ((curr - prev) / prev) * 100;
+  return `${diff >= 0 ? '+' : ''}${diff.toFixed(0)}%`;
+};
+
+const formatRelativeTime = (iso) => {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'Agora';
+  if (diff < 3600) return `Há ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `Há ${Math.floor(diff / 3600)} h`;
+  return new Date(iso).toLocaleDateString('pt-BR');
+};
+
+const formatActivityItem = (row) => ({
+  id: row.id,
+  type: row.type, // 'bot' | 'won' | 'lost' | 'lead' | 'note' | 'status_changed' | 'webhook'
+  title: row.title,
+  meta: row.meta,
+  contactId: row.contact_id,
+  timestamp: row.created_at,
+  time: formatRelativeTime(row.created_at)
+});
+
+const ACTIVITY_VISUAL = {
+  lead:           { icon: UserPlus,      color: 'var(--accent-secondary)' },      // Cyan
+  bot:            { icon: Bot,           color: 'var(--accent-primary)' },        // Violet
+  webhook:        { icon: MessageCircle, color: 'var(--color-status-contacted)' },// Blue
+  won:            { icon: TrendingUp,    color: 'var(--color-status-won)' },      // Success
+  lost:           { icon: TrendingDown,  color: 'var(--color-status-lost)' },     // Danger
+  status_changed: { icon: ArrowRight,    color: 'var(--color-status-proposal)' }, // Amber
+  note:           { icon: StickyNote,    color: 'var(--text-secondary)' }         // Slate
+};
 
 export default function Dashboard() {
   const { contacts, isBotEnabled, setIsBotEnabled, setActiveScreen, setActiveContactId } = useCrm();
+
+  const [activities, setActivities] = useState([]);
+  const [loadingActivities, setLoadingActivities] = useState(true);
 
   // Metrics calculators
   const totalChats = contacts.length;
@@ -21,90 +63,140 @@ export default function Dashboard() {
     setIsAnimating(true);
   }, []);
 
+  // Fetch activities from Supabase & Subscribe to Realtime
+  useEffect(() => {
+    let active = true;
+    async function loadActivities() {
+      try {
+        const { data, error } = await supabase
+          .from('activity_log')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(10);
+        
+        if (active && !error && data) {
+          setActivities(data.map(formatActivityItem));
+        }
+      } catch (e) {
+        console.error("Erro ao carregar atividades do Supabase:", e);
+      } finally {
+        if (active) setLoadingActivities(false);
+      }
+    }
+    loadActivities();
+
+    const channel = supabase
+      .channel('activity_log_changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'activity_log' },
+        (payload) => {
+          if (active) {
+            setActivities(prev => [formatActivityItem(payload.new), ...prev].slice(0, 10));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const maxFunnelCount = Math.max(newLeads, proposalLeads, wonCount, 1);
+
+  // Calculate dynamic trend indicators
+  const now = new Date();
+  const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const startOfLastWeek = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  const leadsThisWeek = contacts.filter(c => new Date(c.created_at) >= startOfWeek).length;
+  const leadsLastWeek = contacts.filter(c => {
+    const d = new Date(c.created_at);
+    return d >= startOfLastWeek && d < startOfWeek;
+  }).length;
+
+  const totalLeadsTrend = `+${leadsThisWeek} esta semana (${calculatePercentageChange(leadsThisWeek, leadsLastWeek)} vs sem. anterior)`;
+  const isTotalLeadsTrendPositive = leadsThisWeek >= leadsLastWeek;
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0,0,0,0);
+  const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+
+  const leadsToday = contacts.filter(c => c.status === 'new' && new Date(c.created_at) >= startOfToday).length;
+  const leadsYesterday = contacts.filter(c => {
+    const d = new Date(c.created_at);
+    return c.status === 'new' && d >= startOfYesterday && d < startOfToday;
+  }).length;
+
+  const deltaLeads = leadsToday - leadsYesterday;
+  const newLeadsTrend = `${deltaLeads >= 0 ? '+' : ''}${deltaLeads} hoje (vs ${leadsYesterday} ontem)`;
+  const isNewLeadsTrendPositive = deltaLeads >= 0;
+
+  const proposalToday = contacts.filter(c => c.status === 'proposal' && new Date(c.updated_at || c.created_at) >= startOfToday).length;
+  const proposalYesterday = contacts.filter(c => {
+    const d = new Date(c.updated_at || c.created_at);
+    return c.status === 'proposal' && d >= startOfYesterday && d < startOfToday;
+  }).length;
+
+  const deltaProposal = proposalToday - proposalYesterday;
+  const proposalTrend = `${deltaProposal >= 0 ? '+' : ''}${deltaProposal} hoje (vs ${proposalYesterday} ontem)`;
+  const isProposalTrendPositive = deltaProposal >= 0;
+
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+  const revenueThisMonth = contacts.filter(c => c.status === 'won' && new Date(c.created_at) >= startOfThisMonth).reduce((sum, c) => sum + (c.value || 0), 0);
+  const revenueLastMonth = contacts.filter(c => {
+    const d = new Date(c.created_at);
+    return c.status === 'won' && d >= startOfLastMonth && d <= endOfLastMonth;
+  }).reduce((sum, c) => sum + (c.value || 0), 0);
+
+  const revenueTrend = `${calculatePercentageChange(revenueThisMonth, revenueLastMonth)} vs mês anterior`;
+  const isRevenueTrendPositive = revenueThisMonth >= revenueLastMonth;
 
   const kpis = [
     {
-      title: 'Conversas Ativas',
+      title: 'Total de Leads',
       value: totalChats,
-      trend: '+12% esta semana',
-      isPositive: true,
+      trend: totalLeadsTrend,
+      isPositive: isTotalLeadsTrendPositive,
       icon: <MessageCircle size={18} strokeWidth={2.5} />
     },
     {
       title: 'Novos Leads',
       value: newLeads,
-      trend: '+4 novos hoje',
-      isPositive: true,
+      trend: newLeadsTrend,
+      isPositive: isNewLeadsTrendPositive,
       icon: <UserPlus size={18} strokeWidth={2.5} />
     },
     {
       title: 'Em Proposta',
       value: proposalLeads,
-      trend: '-2% vs ontem',
-      isPositive: false,
+      trend: proposalTrend,
+      isPositive: isProposalTrendPositive,
       icon: <Briefcase size={18} strokeWidth={2.5} />
     },
     {
       title: 'Receita Ganha',
       value: `R$ ${wonLeadsTotal.toLocaleString('pt-BR')}`,
-      trend: '+24% este mês',
-      isPositive: true,
+      trend: revenueTrend,
+      isPositive: isRevenueTrendPositive,
       icon: <BadgeDollarSign size={18} strokeWidth={2.5} />
     }
   ];
 
-  // Activities Log timeline
-  const activities = [
-    {
-      id: 1,
-      type: 'bot',
-      title: 'Bot Auto-resposta executado',
-      meta: 'Disparado por palavra-chave "olá" de Mariana Costa',
-      time: 'Há 5 minutos'
-    },
-    {
-      id: 2,
-      type: 'won',
-      title: 'Lead ganho! Status atualizado',
-      meta: 'Roberto Souza fechou contrato no valor de R$ 15.400',
-      time: 'Há 2 horas'
-    },
-    {
-      id: 3,
-      type: 'webhook',
-      title: 'Webhook n8n integrado com sucesso',
-      meta: 'Dados do lead Carlos Oliveira enviados para CRM principal',
-      time: 'Há 3 horas'
-    },
-    {
-      id: 4,
-      type: 'lead',
-      title: 'Novo Lead importado via Webchat',
-      meta: 'Mariana Costa iniciou uma nova sessão no chat público',
-      time: 'Há 5 horas'
-    }
-  ];
+  const renderActivityIcon = (type) => {
+    const visual = ACTIVITY_VISUAL[type] || { icon: MessageCircle, color: 'var(--text-muted)' };
+    const IconComponent = visual.icon;
+    return <IconComponent size={16} strokeWidth={2.5} style={{ color: visual.color }} />;
+  };
 
   const handleStartChat = (contactId) => {
     setActiveContactId(contactId);
     setActiveScreen('chat');
-  };
-
-  const renderActivityIcon = (type) => {
-    const size = 16;
-    switch (type) {
-      case 'bot':
-        return <Cpu size={size} strokeWidth={2.5} style={{ color: 'var(--accent-primary)' }} />;
-      case 'won':
-        return <CheckCircle2 size={size} strokeWidth={2.5} style={{ color: 'var(--color-status-won)' }} />;
-      case 'webhook':
-        return <Webhook size={size} strokeWidth={2.5} style={{ color: 'var(--color-status-new)' }} />;
-      case 'lead':
-        return <UserPlus size={size} strokeWidth={2.5} style={{ color: 'var(--color-status-proposal)' }} />;
-      default:
-        return null;
-    }
   };
 
   return (
@@ -214,23 +306,33 @@ export default function Dashboard() {
         {/* TIMELINE ACTIVITIES LIST */}
         <div className="glass-panel timeline-card">
           <div>
-            <span className="chart-title">Atividades do Bot</span>
-            <span className="chart-subtitle">Eventos e triggers automatizados mais recentes</span>
+            <span className="chart-title">Histórico de Atividades</span>
+            <span className="chart-subtitle">Eventos, triggers e interações em tempo real</span>
           </div>
 
           <div className="timeline-list">
-            {activities.map(act => (
-              <div key={act.id} className="timeline-item">
-                <div className="timeline-icon-dot">
-                  {renderActivityIcon(act.type)}
-                </div>
-                <div className="timeline-content">
-                  <span className="timeline-title">{act.title}</span>
-                  <span className="timeline-meta">{act.meta}</span>
-                  <span className="timeline-time">{act.time}</span>
-                </div>
+            {loadingActivities ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '24px' }}>
+                Carregando atividades...
               </div>
-            ))}
+            ) : activities.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '24px' }}>
+                Nenhuma atividade registrada.
+              </div>
+            ) : (
+              activities.map(act => (
+                <div key={act.id} className="timeline-item">
+                  <div className="timeline-icon-dot">
+                    {renderActivityIcon(act.type)}
+                  </div>
+                  <div className="timeline-content">
+                    <span className="timeline-title">{act.title}</span>
+                    <span className="timeline-meta">{act.meta}</span>
+                    <span className="timeline-time">{act.time}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
