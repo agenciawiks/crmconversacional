@@ -135,7 +135,7 @@ export const CrmProvider = ({ children }) => {
           const resolvedStatus = contactMeta.status || c.status || defaultStage;
           const resolvedValue = c.value !== undefined ? c.value : defaultValue;
           const rawName = contactMeta.name || c.name;
-          const resolvedTags = contactMeta.tags || c.tags || [];
+          const resolvedTags = c.tags || contactMeta.tags || [];
 
           let displayName = rawName;
           let username = '';
@@ -401,12 +401,11 @@ export const CrmProvider = ({ children }) => {
                 username = rawName;
               }
             }
-
             const mappedFreshC = {
               ...freshC,
               name: displayName,
               username: username,
-              tags: contactMeta.tags || freshC.tags || [],
+              tags: freshC.tags || contactMeta.tags || [],
               status: contactMeta.status || freshC.status || defaultStage,
               value: freshC.value !== undefined ? freshC.value : defaultValue,
               notes: contactMeta.notes || freshC.notes || []
@@ -589,7 +588,7 @@ export const CrmProvider = ({ children }) => {
                       return {
                         ...c,
                         name: contactMeta.name || c.name,
-                        tags: contactMeta.tags || c.tags || [],
+                        tags: c.tags || contactMeta.tags || [],
                         status: contactMeta.status || c.status || defaultStage,
                         value: contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue),
                         notes: contactMeta.notes || c.notes || [],
