@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SupabaseService from '../services/supabaseService';
+import OpenAIStatusCard from './OpenAIStatusCard';
 import { 
   Bot, 
   Sliders, 
@@ -198,6 +199,9 @@ export default function AiAgentSettings() {
           <p>Defina a identidade, as diretrizes da persona, chaves de API e regras de handoff com humanos.</p>
         </div>
       </div>
+
+      {/* OpenAI Status Card */}
+      <OpenAIStatusCard />
 
       {/* Channel Selector */}
       <div className="glass-panel" style={{ marginBottom: '24px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>

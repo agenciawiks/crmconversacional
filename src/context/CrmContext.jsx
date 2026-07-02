@@ -24,6 +24,7 @@ export const CrmProvider = ({ children }) => {
     return localStorage.getItem('crm_active_screen') || 'dashboard';
   });
   const [contacts, setContacts] = useState([]);
+  const [appointments, setAppointments] = useState([]);
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'yesterday', '7days', 'custom'
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
   const [activeContactId, setActiveContactId] = useState(() => {
@@ -46,15 +47,27 @@ export const CrmProvider = ({ children }) => {
   useEffect(() => {
     async function loadData() {
       try {
-        const [dbContacts, { data: dbMessagesRaw }, dbChannels, dbFollowupRules, dbSettings] = await Promise.all([
+        const [
+          dbContacts, 
+          { data: dbMessagesRaw }, 
+          dbChannels, 
+          dbFollowupRules, 
+          dbSettings,
+          dbAppointments
+        ] = await Promise.all([
           SupabaseService.fetchContacts(),
           supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
           SupabaseService.fetchChannels(),
           followUpService.fetchRules(),
-          followUpService.fetchSettings()
+          followUpService.fetchSettings(),
+          supabase.from('appointments').select('*, contacts(name, phone)').order('start_time', { ascending: true })
         ]);
 
         const dbMessages = (dbMessagesRaw || []).reverse();
+
+        if (dbAppointments?.data) {
+          setAppointments(dbAppointments.data);
+        }
 
         if (dbChannels && dbChannels.length > 0) {
           setChannels(dbChannels);
@@ -223,6 +236,43 @@ export const CrmProvider = ({ children }) => {
       localStorage.setItem('crm_value_migrated_v1', 'true');
     }
   }, [contacts]);
+
+  // Realtime subscription for Appointments
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:appointments')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        async (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            // Fetch the updated appointment with contact info
+            const { data } = await supabase
+              .from('appointments')
+              .select('*, contacts(name, phone)')
+              .eq('id', payload.new.id)
+              .single();
+              
+            if (data) {
+              setAppointments(prev => {
+                const existing = prev.find(a => a.id === data.id);
+                if (existing) {
+                  return prev.map(a => a.id === data.id ? data : a);
+                }
+                return [...prev, data].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+              });
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setAppointments(prev => prev.filter(a => a.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Synchronize state changes to localStorage
   useEffect(() => {
@@ -1156,7 +1206,8 @@ export const CrmProvider = ({ children }) => {
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
       updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel,
       followupRules, setFollowupRules, globalTags, addGlobalTag, updateGlobalTag, deleteGlobalTag,
-      dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts
+      dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts,
+      appointments, setAppointments
     }}>
       {children}
     </CrmContext.Provider>

@@ -20,6 +20,8 @@ import FlowBuilder from './components/FlowBuilder';
 import ContactsList from './components/ContactsList';
 import ChannelsConfig from './components/ChannelsConfig';
 import FollowUpSettings from './components/FollowUpSettings';
+import OpenAIStatusBanner from './components/OpenAIStatusBanner';
+import CalendarView from './components/CalendarView';
 
 function AppContent() {
   const { activeScreen } = useCrm();
@@ -30,7 +32,7 @@ function AppContent() {
         return <Dashboard />;
       case 'chat':
         return <ChatWindow />;
-      case 'pipeline':
+      case 'kanban':
         return <KanbanBoard />;
       case 'builder':
         return <FlowBuilder />;
@@ -40,6 +42,8 @@ function AppContent() {
         return <ChannelsConfig />;
       case 'followup':
         return <FollowUpSettings />;
+      case 'calendar':
+        return <CalendarView />;
       default:
         return <Dashboard />;
     }
@@ -50,15 +54,16 @@ function AppContent() {
       {/* Sleek Sidebar navigation panels */}
       <Sidebar />
       
-      {/* Main active container viewports */}
-      <main style={{
-        flex: 1,
-        height: '100%',
-        overflow: 'hidden',
-        position: 'relative'
-      }}>
-        {renderActiveScreen()}
-      </main>
+      {/* Main content area with global status banner */}
+      <div style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* Global OpenAI quota warning banner */}
+        <OpenAIStatusBanner />
+
+        {/* Active screen viewport */}
+        <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {renderActiveScreen()}
+        </main>
+      </div>
     </div>
   );
 }

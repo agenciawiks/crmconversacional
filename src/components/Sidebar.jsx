@@ -1,6 +1,6 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
-import { LayoutDashboard, MessageSquare, Kanban, Bot, Users, Link2, Sun, Moon, Clock } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock } from 'lucide-react';
 
 export default function Sidebar() {
   const { activeScreen, setActiveScreen, theme, toggleTheme } = useCrm();
@@ -20,6 +20,11 @@ export default function Sidebar() {
       id: 'pipeline',
       label: 'Funil Comercial',
       icon: <Kanban size={20} strokeWidth={2} />
+    },
+    {
+      id: 'calendar',
+      label: 'Agenda',
+      icon: <Calendar size={20} strokeWidth={2} />
     },
     {
       id: 'builder',
