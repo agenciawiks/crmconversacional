@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import TagBadge from './TagBadge';
 
@@ -23,6 +23,8 @@ const sanitizeUrl = (url) => {
   }
   return trimmed;
 };
+
+import SupabaseService from '../services/supabaseService';
 
 export default function ChatWindow() {
   const {
@@ -95,6 +97,18 @@ export default function ChatWindow() {
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') handleSend();
+  };
+
+  const handleResetAiMemory = async () => {
+    if (window.confirm("Isso fará com que a IA esqueça todo o histórico desta conversa e comece um novo atendimento do zero. Continuar?")) {
+      try {
+        await SupabaseService.resetAiMemory(activeContact.id);
+        alert("Memória da IA resetada com sucesso para este contato!");
+      } catch (e) {
+        console.error(e);
+        alert("Erro ao resetar memória.");
+      }
+    }
   };
 
   const handleInjectTemplate = (text) => {
@@ -534,7 +548,28 @@ export default function ChatWindow() {
 
         {/* CONTACT DATA INFO */}
         <div className="profile-section">
-          <span className="profile-section-title">Dados do Contato</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <span className="profile-section-title" style={{ margin: 0 }}>Dados do Contato</span>
+            <button 
+              onClick={handleResetAiMemory}
+              title="Resetar Memória da IA (inicia novo atendimento)"
+              style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                color: '#EF4444',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                fontSize: '11px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                cursor: 'pointer',
+                fontWeight: 600
+              }}
+            >
+              <Brain size={12} /> Resetar IA
+            </button>
+          </div>
           <div className="profile-field">
             <span className="profile-field-label">E-mail</span>
             <span className="profile-field-value">{activeContact.email}</span>

@@ -64,6 +64,34 @@ class SupabaseService {
     }));
   }
 
+  static async resetAiMemory(contactId) {
+    // Busca o channel_id atual do contato para vincular a mensagem corretamente
+    const { data: channelData } = await supabase
+      .from('messages')
+      .select('channel_id')
+      .eq('contact_id', contactId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+      
+    const channelId = channelData?.[0]?.channel_id || null;
+    
+    // Insere uma mensagem invisível no frontend que o n8n vai ler e usar para resetar o contexto do LLM
+    const { data, error } = await supabase.from('messages').insert([{
+      contact_id: contactId,
+      channel_id: channelId,
+      direction: 'out',
+      content: '[SYSTEM_RESET] ATENÇÃO: O histórico anterior foi concluído e irrelevante. Inicie um NOVO ATENDIMENTO do zero a partir de agora, esquecendo completamente o contexto e dados anteriores.',
+      content_type: 'text',
+      timestamp: new Date().toISOString()
+    }]).select().single();
+    
+    if (error) {
+      console.error('[SupabaseService] resetAiMemory error:', error);
+      throw error;
+    }
+    return data;
+  }
+
   static async fetchChannels() {
     const { data, error } = await supabase
       .from('channels')

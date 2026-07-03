@@ -103,7 +103,7 @@ export const CrmProvider = ({ children }) => {
         const idSet = new Set();
         const mappedContacts = dbContacts.map(c => {
           const contactMeta = meta[c.id] || {};
-          const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id).map(m => {
+          const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id && !(m.content || '').startsWith('[SYSTEM_RESET]')).map(m => {
             idSet.add(m.id);
             return {
               id: m.id,
@@ -366,8 +366,13 @@ export const CrmProvider = ({ children }) => {
   }, [activeContactId, channels]);
 
   // Merge a new message into contacts state (deduplicating by id)
-  const mergeMessage = useCallback((newMsg) => {
-    if (knownMsgIdsRef.current.has(newMsg.id)) return; // Already known
+  const mergeMessage = useCallback((payload) => {
+    const newMsg = payload.new || payload; // support both realtime payload and raw message object
+    
+    // Ignore invisible system reset messages in the UI
+    if ((newMsg.content || '').startsWith('[SYSTEM_RESET]')) return;
+
+    if (knownMsgIdsRef.current.has(newMsg.id)) return;
     knownMsgIdsRef.current.add(newMsg.id);
 
     // Resolve provider and channel type for the incoming message
@@ -531,6 +536,56 @@ export const CrmProvider = ({ children }) => {
       supabase.removeChannel(channel);
     };
   }, [mergeMessage]);
+
+  // Realtime subscription on contacts table to sync pipeline stage & tags in realtime
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('public:contacts:direct')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'contacts' },
+        (payload) => {
+          const updatedContact = payload.new;
+          console.log('[Supabase Realtime] Contact update received:', updatedContact);
+          
+          setContacts(prev => prev.map(c => {
+            if (c.id === updatedContact.id) {
+              const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+              const contactMeta = meta[updatedContact.id] || {};
+              
+              const rawName = contactMeta.name || updatedContact.name;
+              let displayName = rawName;
+              let username = '';
+              if (rawName && rawName.includes(' | @')) {
+                const parts = rawName.split(' | @');
+                username = parts[parts.length - 1];
+                displayName = parts.slice(0, -1).join(' | @');
+              }
+              
+              return {
+                ...c,
+                ...updatedContact,
+                name: displayName,
+                username: username || c.username,
+                tags: updatedContact.tags || [],
+                status: updatedContact.pipeline_stage || c.status,
+                value: updatedContact.value !== undefined ? updatedContact.value : c.value
+              };
+            }
+            return c;
+          }));
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Supabase Realtime] Contacts channel status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Realtime subscription on followup_queue to trigger alert when a follow-up is dispatched
   useEffect(() => {
