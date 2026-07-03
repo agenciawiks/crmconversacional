@@ -17,7 +17,7 @@ export default function Sidebar() {
       icon: <MessageSquare size={20} strokeWidth={2} />
     },
     {
-      id: 'pipeline',
+      id: 'kanban',
       label: 'Funil Comercial',
       icon: <Kanban size={20} strokeWidth={2} />
     },

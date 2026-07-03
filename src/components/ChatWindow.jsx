@@ -614,7 +614,7 @@ export default function ChatWindow() {
             >
               <option value="new">Novo Lead</option>
               <option value="contacted">Em Contato</option>
-              <option value="proposal">Proposta Enviada</option>
+              <option value="proposal">Tem Interesse</option>
               <option value="won">Ganho (Venda)</option>
               <option value="lost">Perdido</option>
             </select>

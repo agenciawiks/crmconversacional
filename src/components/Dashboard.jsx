@@ -173,7 +173,7 @@ export default function Dashboard() {
       icon: <UserPlus size={18} strokeWidth={2.5} />
     },
     {
-      title: 'Em Proposta',
+      title: 'Tem Interesse',
       value: proposalLeads,
       trend: proposalTrend,
       isPositive: isProposalTrendPositive,
@@ -345,7 +345,7 @@ export default function Dashboard() {
             <div>
               <h3 style={{ fontSize: '18px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Briefcase size={18} strokeWidth={2.5} style={{ color: 'var(--color-status-proposal)' }} />
-                Negociações em Proposta
+                Negociações em Tem Interesse
               </h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Leads quentes na fase decisiva do funil</p>
             </div>
@@ -393,7 +393,7 @@ export default function Dashboard() {
                 {proposalContacts.length === 0 && (
                   <tr>
                     <td colSpan="4" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '13px' }}>
-                      Nenhum lead na fase de proposta no momento.
+                      Nenhum lead na fase de Tem Interesse no momento.
                     </td>
                   </tr>
                 )}

@@ -22,7 +22,7 @@ export default function FollowUpRuleModal({ rule, channels, onClose, onSaveSucce
   const KANBAN_STAGES = [
     { value: 'new', label: 'Novo' },
     { value: 'contacted', label: 'Contatado' },
-    { value: 'proposal', label: 'Proposta' },
+    { value: 'proposal', label: 'Tem Interesse' },
     { value: 'won', label: 'Ganho' },
     { value: 'lost', label: 'Perdido' }
   ];

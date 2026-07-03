@@ -145,7 +145,7 @@ export const CrmProvider = ({ children }) => {
           
           let defaultValue = 0;
 
-          const resolvedStatus = contactMeta.status || c.status || defaultStage;
+          const resolvedStatus = c.status || contactMeta.status || defaultStage;
           const resolvedValue = c.value !== undefined ? c.value : defaultValue;
           const rawName = contactMeta.name || c.name;
           const resolvedTags = c.tags || contactMeta.tags || [];
@@ -461,7 +461,7 @@ export const CrmProvider = ({ children }) => {
               name: displayName,
               username: username,
               tags: freshC.tags || contactMeta.tags || [],
-              status: contactMeta.status || freshC.status || defaultStage,
+              status: freshC.status || contactMeta.status || defaultStage,
               value: freshC.value !== undefined ? freshC.value : defaultValue,
               notes: contactMeta.notes || freshC.notes || []
             };
@@ -694,7 +694,7 @@ export const CrmProvider = ({ children }) => {
                         ...c,
                         name: contactMeta.name || c.name,
                         tags: c.tags || contactMeta.tags || [],
-                        status: contactMeta.status || c.status || defaultStage,
+                        status: c.status || contactMeta.status || defaultStage,
                         value: contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue),
                         notes: contactMeta.notes || c.notes || [],
                         unread: true

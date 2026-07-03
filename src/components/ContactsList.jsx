@@ -332,7 +332,7 @@ export default function ContactsList() {
                   <span className={`tag status-${contact.status}`}>
                     {contact.status === 'new' && 'Novo Lead'}
                     {contact.status === 'contacted' && 'Em Contato'}
-                    {contact.status === 'proposal' && 'Proposta'}
+                    {contact.status === 'proposal' && 'Tem Interesse'}
                     {contact.status === 'won' && 'Vendido'}
                     {contact.status === 'lost' && 'Perdido'}
                   </span>
@@ -542,7 +542,7 @@ export default function ContactsList() {
                   >
                     <option value="new">Novo Lead</option>
                     <option value="contacted">Em Contato</option>
-                    <option value="proposal">Proposta</option>
+                    <option value="proposal">Tem Interesse</option>
                     <option value="won">Vendido</option>
                     <option value="lost">Perdido</option>
                   </select>

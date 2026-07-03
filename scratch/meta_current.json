@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-06-01T22:31:01.797Z",
+  "updatedAt": "2026-07-03T17:15:29.649Z",
   "createdAt": "2026-05-21T22:06:17.786Z",
   "id": "88zOQbdJAT7DOaET",
   "name": "WhatsApp Meta Official – Inbound Webhook",
@@ -9,41 +9,37 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "ALL",
+        "httpMethod": "GET",
         "path": "webhook/meta",
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "node-webhook-meta",
-      "name": "Meta Webhook Trigger",
+      "id": "node-webhook-meta-get",
+      "name": "Verify GET",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
         240,
-        300
+        180
       ],
-      "webhookId": "c43634d2-9930-4181-82d3-05a306f7d46f"
+      "webhookId": "1bd5cd9f-889a-47a7-aa59-25308d84fc61"
     },
     {
       "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{ $json.query?.['hub.mode'] }}",
-              "operation": "equals",
-              "value2": "subscribe"
-            }
-          ]
-        }
+        "httpMethod": "POST",
+        "path": "webhook/meta",
+        "responseMode": "responseNode",
+        "options": {}
       },
-      "id": "node-if-verification",
-      "name": "Is Verification?",
-      "type": "n8n-nodes-base.if",
+      "id": "node-webhook-meta-post",
+      "name": "Message POST",
+      "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        460,
-        300
-      ]
+        240,
+        420
+      ],
+      "webhookId": "fbf97e9e-d52e-42de-bea9-4e6aac0c3811"
     },
     {
       "parameters": {
@@ -86,7 +82,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
+        "jsCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
       },
       "id": "node-parse-meta",
       "name": "Parse Meta Payload",
@@ -147,14 +143,14 @@
         "jsonBody": "={\n  \"phone\": \"{{ $json.phone }}\",\n  \"name\": \"{{ $json.contact_name }}\"\n}",
         "options": {}
       },
+      "id": "node-upsert-contact",
       "name": "Upsert Contact",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [
         1340,
         320
-      ],
-      "id": "node-upsert-contact"
+      ]
     },
     {
       "parameters": {
@@ -334,21 +330,286 @@
         1580,
         560
       ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?limit=1",
+        "sendHeaders": true,
+        "options": {},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        }
+      },
+      "id": "f3eb88cb-73f6-4654-86e7-bef0617a871e",
+      "name": "Fetch AI Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        2100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rawSettings = $('Fetch AI Settings').first()?.json || {};\nlet parsedSettings = {};\ntry {\n  parsedSettings = JSON.parse(rawSettings.system_prompt || '{}');\n} catch (e) {\n  parsedSettings = rawSettings;\n}\n\n// Retrieve contact tags\nlet contact = {};\ntry {\n  contact = $('Upsert Contact').first().json;\n} catch(e) {\n  try {\n    contact = $input.first().json; // fallback\n  } catch(err) {}\n}\n\nconst tags = contact.tags || [];\nconst isPausedByTag = tags.includes('IA Inativa');\n\n// Read columns from parsed system_prompt JSON\nconst isEnabledGlobal = parsedSettings.is_enabled ?? rawSettings.is_enabled ?? true;\nconst systemPrompt = parsedSettings.system_prompt ?? rawSettings.system_prompt ?? '';\nconst negativePrompt = parsedSettings.negative_prompt ?? rawSettings.negative_prompt ?? '';\nconst apiKey = parsedSettings.api_key ?? rawSettings.api_key ?? '';\nconst model = parsedSettings.model ?? rawSettings.model ?? 'gpt-4o-mini';\nconst temperature = rawSettings.temperature ?? parsedSettings.temperature ?? 0.7;\nconst pausePhrases = rawSettings.pause_trigger_phrases ?? parsedSettings.pause_trigger_phrases ?? [];\n\n// Find message info dynamically\nlet msgText = '';\nlet direction = 'in';\nlet phone = contact.phone || '';\n\ntry {\n  const parsed = $('Parse Meta Payload').first().json;\n  msgText = parsed.content || '';\n  direction = parsed.direction || 'in';\n  if (!phone) phone = parsed.phone || '';\n} catch(e) {}\n\nconst isInbound = direction === 'in';\n\n// Check pause trigger phrases\nconst matchedPhrase = pausePhrases.find(p => p && msgText.toLowerCase().includes(p.toLowerCase()));\n\nlet pauseBot = false;\nlet runAi = false;\nlet reason = '';\n\nif (!isEnabledGlobal) {\n  reason = 'AI is disabled globally';\n} else if (!isInbound) {\n  reason = 'Message is outbound';\n} else if (isPausedByTag) {\n  reason = 'AI is paused for this contact (IA Inativa tag present)';\n} else if (matchedPhrase) {\n  pauseBot = true;\n  reason = `AI paused by trigger phrase: \"${matchedPhrase}\"`;\n} else {\n  runAi = true;\n  reason = 'All checks passed, running AI';\n}\n\nconst updatedTags = isPausedByTag ? tags : [...tags, 'IA Inativa'];\n\nreturn [{\n  json: {\n    run_ai: runAi,\n    pause_bot: pauseBot,\n    reason: reason,\n    contact_id: contact.id,\n    phone: phone,\n    channel_id: contact.channel_id || rawSettings.channel_id,\n    user_message: msgText,\n    system_prompt: systemPrompt,\n    negative_prompt: negativePrompt,\n    api_key: apiKey,\n    model: model,\n    temperature: temperature,\n    updated_tags: updatedTags\n  }\n}];\n"
+      },
+      "id": "3b1a5a89-3068-4b66-8d17-f1910f2aa753",
+      "name": "AI Routing Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2300,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.pause_bot }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "a11c26c9-0af6-4027-82ad-c70d1b4e00f2",
+      "name": "If Pause AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2500,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $json.contact_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"tags\": {{ JSON.stringify($json.updated_tags) }}, \"pipeline_stage\": \"proposal\" }",
+        "options": {}
+      },
+      "id": "794371d8-82f1-4c2b-a1d9-f309cf708026",
+      "name": "Pause Contact AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        2700,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.run_ai }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b4f997e0-f7b7-4f66-b33e-8de575e33f17",
+      "name": "If Run AI?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages?contact_id=eq.{{ $json.contact_id }}&order=timestamp.desc&limit=10",
+        "sendHeaders": true,
+        "options": {},
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            }
+          ]
+        }
+      },
+      "id": "6e36ab64-4af6-4778-91a6-ce9d97476796",
+      "name": "Fetch Conversation History",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        2700,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgs = $input.all().map(item => item.json);\nconst inboundMsgs = msgs.filter(m => m.direction === 'in');\nconst routerData = $('AI Routing Decision').first().json;\nconst welcomeMessage = routerData.welcome_message || '';\n\nif (inboundMsgs.length <= 1 && welcomeMessage.trim() !== '') {\n  return [{\n    json: {\n      is_welcome: true,\n      contact_id: routerData.contact_id,\n      phone: routerData.phone,\n      channel_id: routerData.channel_id,\n      content: welcomeMessage\n    }\n  }];\n}\n\nmsgs.reverse();\n\nconst historyText = msgs.map(m => {\n  const role = m.direction === 'in' ? 'USER' : 'ASSISTANT';\n  return `${role}: ${m.content || ''}`;\n}).join('\\n\\n');\n\nconst systemContent = `${routerData.system_prompt}\\n\\nRESTRISÇÕES IMPORTANTES (O QUE NUNCA FAZER):\\n${routerData.negative_prompt}`;\n\nconst systemMessage = `${systemContent}\\n\\nCONVERSATION HISTORY:\\n${historyText}`;\n\nreturn [{\n  json: {\n    is_welcome: false,\n    api_key: routerData.api_key,\n    model: routerData.model,\n    temperature: routerData.temperature,\n    chatInput: routerData.user_message,\n    systemMessage: systemMessage,\n    contact_id: routerData.contact_id,\n    phone: routerData.phone,\n    channel_id: routerData.channel_id\n  }\n}];"
+      },
+      "id": "b78daabb-e4ad-4a20-a93c-5560403962b4",
+      "name": "Format Prompt & History",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst answer = resp.output || resp.text || resp.content || JSON.stringify(resp);\nconst inputData = $('Format Prompt & History').first().json;\nreturn [{\n  json: {\n    contact_id: inputData.contact_id,\n    phone: inputData.phone,\n    channel_id: inputData.channel_id,\n    content: answer\n  }\n}];"
+      },
+      "id": "2bbd8a8d-137e-444b-82b5-418ffb0df4cc",
+      "name": "Extract AI Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-n8n.rh3fr2.easypanel.host/webhook/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"channel_id\": \"{{ $json.channel_id }}\", \"contact_id\": \"{{ $json.contact_id }}\", \"phone\": \"{{ $json.phone }}\", \"content\": {{ JSON.stringify($json.content) }} }",
+        "options": {}
+      },
+      "id": "3ff48a64-3017-4c91-821d-8caf5933729f",
+      "name": "Send AI Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        3500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "={{ $json.systemMessage }}\n\nIMPORTANT TOOL RULES: Para mover o lead para 'won', é OBRIGATÓRIO haver um agendamento concreto (data e hora aceitos pelo lead). Confirmações genéricas não são suficientes."
+        }
+      },
+      "id": "agent-hk5ru4",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "={{ $('Format Prompt & History').first().json.model || 'gpt-4o-mini' }}",
+          "mode": "id"
+        },
+        "options": {
+          "temperature": "={{ $('Format Prompt & History').first().json.temperature || 0.7 }}"
+        }
+      },
+      "id": "model-0rkun1",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1300,
+        600
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "pnuusAYVVpBuDVbK",
+          "name": "OpenAI account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "atualizar_funil_vendas",
+        "description": "Atualiza o estágio do lead no funil de vendas (pipeline_stage) e passa o atendimento para a equipe humana. Use isso SEMPRE que o lead disser que quer agendar ou aceitar falar com o especialista. OBRIGATÓRIO: você deve passar \"proposal\" para o parâmetro pipeline_stage.",
+        "method": "PATCH",
+        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $('AI Routing Decision').first().json.contact_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"pipeline_stage\": \"{{ $fromAI('pipeline_stage', 'Estágio do funil: proposal', 'string') }}\", \"tags\": {{ JSON.stringify(($fromAI('pipeline_stage') === 'proposal' || $fromAI('pipeline_stage') === 'won') ? (($('AI Routing Decision').first().json.updated_tags || []).includes('IA Inativa') ? ($('AI Routing Decision').first().json.updated_tags || []) : [...($('AI Routing Decision').first().json.updated_tags || []), 'IA Inativa']) : (Array.isArray($('Fetch Contact').first().json) ? ($('Fetch Contact').first().json[0]?.tags || []) : ($('Fetch Contact').first().json?.tags || []))) }}}",
+        "options": {}
+      },
+      "id": "tool-7zid4i",
+      "name": "Atualizar Funil",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1500,
+        600
+      ]
     }
   ],
   "connections": {
-    "Meta Webhook Trigger": {
-      "main": [
-        [
-          {
-            "node": "Is Verification?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Is Verification?": {
+    "Verify GET": {
       "main": [
         [
           {
@@ -356,7 +617,11 @@
             "type": "main",
             "index": 0
           }
-        ],
+        ]
+      ]
+    },
+    "Message POST": {
+      "main": [
         [
           {
             "node": "Instant Response for POST",
@@ -421,19 +686,149 @@
           }
         ]
       ]
+    },
+    "Fetch AI Settings": {
+      "main": [
+        [
+          {
+            "node": "AI Routing Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Routing Decision": {
+      "main": [
+        [
+          {
+            "node": "If Pause AI?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If Run AI?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Pause AI?": {
+      "main": [
+        [
+          {
+            "node": "Pause Contact AI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "If Run AI?": {
+      "main": [
+        [
+          {
+            "node": "Fetch Conversation History",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Fetch Conversation History": {
+      "main": [
+        [
+          {
+            "node": "Format Prompt & History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Prompt & History": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract AI Answer": {
+      "main": [
+        [
+          {
+            "node": "Send AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Extract AI Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Funil": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Webhook Event": {
+      "main": [
+        [
+          {
+            "node": "Fetch AI Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "errorWorkflow": "Dead Letter Queue",
+    "executionTimeout": 30
   },
   "staticData": null,
   "meta": null,
   "pinData": {},
-  "versionId": "1f777ea6-a756-4407-933c-239697866866",
-  "activeVersionId": "1f777ea6-a756-4407-933c-239697866866",
-  "versionCounter": 220,
-  "triggerCount": 1,
+  "versionId": "b5f3c091-06cd-4f55-bd80-7c568ff511e2",
+  "activeVersionId": "b5f3c091-06cd-4f55-bd80-7c568ff511e2",
+  "versionCounter": 396,
+  "triggerCount": 2,
   "shared": [
     {
       "updatedAt": "2026-05-21T22:06:17.794Z",
@@ -455,48 +850,44 @@
   ],
   "tags": [],
   "activeVersion": {
-    "updatedAt": "2026-06-01T22:31:01.828Z",
-    "createdAt": "2026-06-01T22:31:01.828Z",
-    "versionId": "1f777ea6-a756-4407-933c-239697866866",
+    "updatedAt": "2026-07-03T17:15:29.650Z",
+    "createdAt": "2026-07-03T17:15:29.650Z",
+    "versionId": "b5f3c091-06cd-4f55-bd80-7c568ff511e2",
     "workflowId": "88zOQbdJAT7DOaET",
     "nodes": [
       {
         "parameters": {
-          "httpMethod": "ALL",
+          "httpMethod": "GET",
           "path": "webhook/meta",
           "responseMode": "responseNode",
           "options": {}
         },
-        "id": "node-webhook-meta",
-        "name": "Meta Webhook Trigger",
+        "id": "node-webhook-meta-get",
+        "name": "Verify GET",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 1,
         "position": [
           240,
-          300
+          180
         ],
-        "webhookId": "c43634d2-9930-4181-82d3-05a306f7d46f"
+        "webhookId": "1bd5cd9f-889a-47a7-aa59-25308d84fc61"
       },
       {
         "parameters": {
-          "conditions": {
-            "string": [
-              {
-                "value1": "={{ $json.query?.['hub.mode'] }}",
-                "operation": "equals",
-                "value2": "subscribe"
-              }
-            ]
-          }
+          "httpMethod": "POST",
+          "path": "webhook/meta",
+          "responseMode": "responseNode",
+          "options": {}
         },
-        "id": "node-if-verification",
-        "name": "Is Verification?",
-        "type": "n8n-nodes-base.if",
+        "id": "node-webhook-meta-post",
+        "name": "Message POST",
+        "type": "n8n-nodes-base.webhook",
         "typeVersion": 1,
         "position": [
-          460,
-          300
-        ]
+          240,
+          420
+        ],
+        "webhookId": "fbf97e9e-d52e-42de-bea9-4e6aac0c3811"
       },
       {
         "parameters": {
@@ -539,7 +930,7 @@
       },
       {
         "parameters": {
-          "functionCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
+          "jsCode": "// Parse Meta Cloud API webhook payload\nconst body = $input.first().json.body || $input.first().json;\n\nconst entry = body.entry?.[0];\nconst changes = entry?.changes?.[0];\nconst value = changes?.value;\nconst message = value?.messages?.[0];\nconst contact = value?.contacts?.[0];\n\nif (!message) {\n  return [{ json: { skip: true, reason: 'No message in payload' } }];\n}\n\nconst msgId = message.id;\nconst phone = message.from;\nconst contactName = contact?.profile?.name || phone;\nconst type = message.type || 'text';\nlet content = message.text?.body || message.caption || '';\nlet mediaUrl = null;\n\n// If message has media, resolve the URL from Meta API\nif (['image', 'audio', 'video', 'document'].includes(type)) {\n  const mediaObj = message[type];\n  const mediaId = mediaObj?.id;\n  \n  if (mediaId) {\n    try {\n      const supabaseUrl = \"https://ibyterftfrqgkhktkaeg.supabase.co\";\n      const serviceKey = \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8\";\n      const channelId = \"4886443e-4996-4d2a-83e1-d96f503e1a28\";\n      \n      const channelsResp = await $helpers.httpRequest({\n        method: 'GET',\n        url: `${supabaseUrl}/rest/v1/channels?id=eq.${channelId}&select=access_token`,\n        headers: {\n          'apikey': serviceKey,\n          'Authorization': `Bearer ${serviceKey}`\n        }\n      });\n      \n      const accessToken = channelsResp?.[0]?.access_token;\n      \n      if (accessToken) {\n        const mediaResp = await $helpers.httpRequest({\n          method: 'GET',\n          url: `https://graph.facebook.com/v20.0/${mediaId}`,\n          headers: {\n            'Authorization': `Bearer ${accessToken}`\n          }\n        });\n        \n        mediaUrl = mediaResp?.url || null;\n      }\n    } catch (e) {\n      console.error('Error resolving Meta media URL:', e.message);\n    }\n  }\n  \n  if (!content) {\n    if (type === 'image') content = '[Imagem]';\n    else if (type === 'audio') content = '[Áudio]';\n    else if (type === 'video') content = '[Vídeo]';\n    else if (type === 'document') content = '[Documento]';\n    else content = '[Mídia]';\n  }\n}\n\nreturn [{\n  json: {\n    whatsapp_msg_id: msgId,\n    phone: phone,\n    contact_name: contactName,\n    direction: 'in',\n    content: content,\n    content_type: type,\n    media_url: mediaUrl,\n    timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n    raw_payload: body\n  }\n}];"
         },
         "id": "node-parse-meta",
         "name": "Parse Meta Payload",
@@ -600,14 +991,14 @@
           "jsonBody": "={\n  \"phone\": \"{{ $json.phone }}\",\n  \"name\": \"{{ $json.contact_name }}\"\n}",
           "options": {}
         },
+        "id": "node-upsert-contact",
         "name": "Upsert Contact",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 3,
         "position": [
           1340,
           320
-        ],
-        "id": "node-upsert-contact"
+        ]
       },
       {
         "parameters": {
@@ -787,21 +1178,286 @@
           1580,
           560
         ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/ai_settings?limit=1",
+          "sendHeaders": true,
+          "options": {},
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              }
+            ]
+          }
+        },
+        "id": "f3eb88cb-73f6-4654-86e7-bef0617a871e",
+        "name": "Fetch AI Settings",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          2100,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst rawSettings = $('Fetch AI Settings').first()?.json || {};\nlet parsedSettings = {};\ntry {\n  parsedSettings = JSON.parse(rawSettings.system_prompt || '{}');\n} catch (e) {\n  parsedSettings = rawSettings;\n}\n\n// Retrieve contact tags\nlet contact = {};\ntry {\n  contact = $('Upsert Contact').first().json;\n} catch(e) {\n  try {\n    contact = $input.first().json; // fallback\n  } catch(err) {}\n}\n\nconst tags = contact.tags || [];\nconst isPausedByTag = tags.includes('IA Inativa');\n\n// Read columns from parsed system_prompt JSON\nconst isEnabledGlobal = parsedSettings.is_enabled ?? rawSettings.is_enabled ?? true;\nconst systemPrompt = parsedSettings.system_prompt ?? rawSettings.system_prompt ?? '';\nconst negativePrompt = parsedSettings.negative_prompt ?? rawSettings.negative_prompt ?? '';\nconst apiKey = parsedSettings.api_key ?? rawSettings.api_key ?? '';\nconst model = parsedSettings.model ?? rawSettings.model ?? 'gpt-4o-mini';\nconst temperature = rawSettings.temperature ?? parsedSettings.temperature ?? 0.7;\nconst pausePhrases = rawSettings.pause_trigger_phrases ?? parsedSettings.pause_trigger_phrases ?? [];\n\n// Find message info dynamically\nlet msgText = '';\nlet direction = 'in';\nlet phone = contact.phone || '';\n\ntry {\n  const parsed = $('Parse Meta Payload').first().json;\n  msgText = parsed.content || '';\n  direction = parsed.direction || 'in';\n  if (!phone) phone = parsed.phone || '';\n} catch(e) {}\n\nconst isInbound = direction === 'in';\n\n// Check pause trigger phrases\nconst matchedPhrase = pausePhrases.find(p => p && msgText.toLowerCase().includes(p.toLowerCase()));\n\nlet pauseBot = false;\nlet runAi = false;\nlet reason = '';\n\nif (!isEnabledGlobal) {\n  reason = 'AI is disabled globally';\n} else if (!isInbound) {\n  reason = 'Message is outbound';\n} else if (isPausedByTag) {\n  reason = 'AI is paused for this contact (IA Inativa tag present)';\n} else if (matchedPhrase) {\n  pauseBot = true;\n  reason = `AI paused by trigger phrase: \"${matchedPhrase}\"`;\n} else {\n  runAi = true;\n  reason = 'All checks passed, running AI';\n}\n\nconst updatedTags = isPausedByTag ? tags : [...tags, 'IA Inativa'];\n\nreturn [{\n  json: {\n    run_ai: runAi,\n    pause_bot: pauseBot,\n    reason: reason,\n    contact_id: contact.id,\n    phone: phone,\n    channel_id: contact.channel_id || rawSettings.channel_id,\n    user_message: msgText,\n    system_prompt: systemPrompt,\n    negative_prompt: negativePrompt,\n    api_key: apiKey,\n    model: model,\n    temperature: temperature,\n    updated_tags: updatedTags\n  }\n}];\n"
+        },
+        "id": "3b1a5a89-3068-4b66-8d17-f1910f2aa753",
+        "name": "AI Routing Decision",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2300,
+          300
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.pause_bot }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "a11c26c9-0af6-4027-82ad-c70d1b4e00f2",
+        "name": "If Pause AI?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2500,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "method": "PATCH",
+          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $json.contact_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"tags\": {{ JSON.stringify($json.updated_tags) }}, \"pipeline_stage\": \"proposal\" }",
+          "options": {}
+        },
+        "id": "794371d8-82f1-4c2b-a1d9-f309cf708026",
+        "name": "Pause Contact AI",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          2700,
+          100
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.run_ai }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "id": "b4f997e0-f7b7-4f66-b33e-8de575e33f17",
+        "name": "If Run AI?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [
+          2500,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages?contact_id=eq.{{ $json.contact_id }}&order=timestamp.desc&limit=10",
+          "sendHeaders": true,
+          "options": {},
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              }
+            ]
+          }
+        },
+        "id": "6e36ab64-4af6-4778-91a6-ce9d97476796",
+        "name": "Fetch Conversation History",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          2700,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const msgs = $input.all().map(item => item.json);\nconst inboundMsgs = msgs.filter(m => m.direction === 'in');\nconst routerData = $('AI Routing Decision').first().json;\nconst welcomeMessage = routerData.welcome_message || '';\n\nif (inboundMsgs.length <= 1 && welcomeMessage.trim() !== '') {\n  return [{\n    json: {\n      is_welcome: true,\n      contact_id: routerData.contact_id,\n      phone: routerData.phone,\n      channel_id: routerData.channel_id,\n      content: welcomeMessage\n    }\n  }];\n}\n\nmsgs.reverse();\n\nconst historyText = msgs.map(m => {\n  const role = m.direction === 'in' ? 'USER' : 'ASSISTANT';\n  return `${role}: ${m.content || ''}`;\n}).join('\\n\\n');\n\nconst systemContent = `${routerData.system_prompt}\\n\\nRESTRISÇÕES IMPORTANTES (O QUE NUNCA FAZER):\\n${routerData.negative_prompt}`;\n\nconst systemMessage = `${systemContent}\\n\\nCONVERSATION HISTORY:\\n${historyText}`;\n\nreturn [{\n  json: {\n    is_welcome: false,\n    api_key: routerData.api_key,\n    model: routerData.model,\n    temperature: routerData.temperature,\n    chatInput: routerData.user_message,\n    systemMessage: systemMessage,\n    contact_id: routerData.contact_id,\n    phone: routerData.phone,\n    channel_id: routerData.channel_id\n  }\n}];"
+        },
+        "id": "b78daabb-e4ad-4a20-a93c-5560403962b4",
+        "name": "Format Prompt & History",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2900,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const resp = $input.first().json;\nconst answer = resp.output || resp.text || resp.content || JSON.stringify(resp);\nconst inputData = $('Format Prompt & History').first().json;\nreturn [{\n  json: {\n    contact_id: inputData.contact_id,\n    phone: inputData.phone,\n    channel_id: inputData.channel_id,\n    content: answer\n  }\n}];"
+        },
+        "id": "2bbd8a8d-137e-444b-82b5-418ffb0df4cc",
+        "name": "Extract AI Answer",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3300,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://n8n-n8n.rh3fr2.easypanel.host/webhook/send",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"channel_id\": \"{{ $json.channel_id }}\", \"contact_id\": \"{{ $json.contact_id }}\", \"phone\": \"{{ $json.phone }}\", \"content\": {{ JSON.stringify($json.content) }} }",
+          "options": {}
+        },
+        "id": "3ff48a64-3017-4c91-821d-8caf5933729f",
+        "name": "Send AI Response",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [
+          3500,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "text": "={{ $json.chatInput }}",
+          "options": {
+            "systemMessage": "={{ $json.systemMessage }}\n\nIMPORTANT TOOL RULES: Para mover o lead para 'won', é OBRIGATÓRIO haver um agendamento concreto (data e hora aceitos pelo lead). Confirmações genéricas não são suficientes."
+          }
+        },
+        "id": "agent-hk5ru4",
+        "name": "AI Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          1400,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "value": "={{ $('Format Prompt & History').first().json.model || 'gpt-4o-mini' }}",
+            "mode": "id"
+          },
+          "options": {
+            "temperature": "={{ $('Format Prompt & History').first().json.temperature || 0.7 }}"
+          }
+        },
+        "id": "model-0rkun1",
+        "name": "OpenAI Chat Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          1300,
+          600
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "pnuusAYVVpBuDVbK",
+            "name": "OpenAI account 2"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "name": "atualizar_funil_vendas",
+          "description": "Atualiza o estágio do lead no funil de vendas (pipeline_stage) e passa o atendimento para a equipe humana. Use isso SEMPRE que o lead disser que quer agendar ou aceitar falar com o especialista. OBRIGATÓRIO: você deve passar \"proposal\" para o parâmetro pipeline_stage.",
+          "method": "PATCH",
+          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/contacts?id=eq.{{ $('AI Routing Decision').first().json.contact_id }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "apikey",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\"pipeline_stage\": \"{{ $fromAI('pipeline_stage', 'Estágio do funil: proposal', 'string') }}\", \"tags\": {{ JSON.stringify(($fromAI('pipeline_stage') === 'proposal' || $fromAI('pipeline_stage') === 'won') ? (($('AI Routing Decision').first().json.updated_tags || []).includes('IA Inativa') ? ($('AI Routing Decision').first().json.updated_tags || []) : [...($('AI Routing Decision').first().json.updated_tags || []), 'IA Inativa']) : (Array.isArray($('Fetch Contact').first().json) ? ($('Fetch Contact').first().json[0]?.tags || []) : ($('Fetch Contact').first().json?.tags || []))) }}}",
+          "options": {}
+        },
+        "id": "tool-7zid4i",
+        "name": "Atualizar Funil",
+        "type": "n8n-nodes-base.httpRequestTool",
+        "typeVersion": 4.4,
+        "position": [
+          1500,
+          600
+        ]
       }
     ],
     "connections": {
-      "Meta Webhook Trigger": {
-        "main": [
-          [
-            {
-              "node": "Is Verification?",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Is Verification?": {
+      "Verify GET": {
         "main": [
           [
             {
@@ -809,7 +1465,11 @@
               "type": "main",
               "index": 0
             }
-          ],
+          ]
+        ]
+      },
+      "Message POST": {
+        "main": [
           [
             {
               "node": "Instant Response for POST",
@@ -874,6 +1534,134 @@
             }
           ]
         ]
+      },
+      "Fetch AI Settings": {
+        "main": [
+          [
+            {
+              "node": "AI Routing Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Routing Decision": {
+        "main": [
+          [
+            {
+              "node": "If Pause AI?",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "If Run AI?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If Pause AI?": {
+        "main": [
+          [
+            {
+              "node": "Pause Contact AI",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "If Run AI?": {
+        "main": [
+          [
+            {
+              "node": "Fetch Conversation History",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      },
+      "Fetch Conversation History": {
+        "main": [
+          [
+            {
+              "node": "Format Prompt & History",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Format Prompt & History": {
+        "main": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract AI Answer": {
+        "main": [
+          [
+            {
+              "node": "Send AI Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent": {
+        "main": [
+          [
+            {
+              "node": "Extract AI Answer",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Atualizar Funil": {
+        "ai_tool": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_tool",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Log Webhook Event": {
+        "main": [
+          [
+            {
+              "node": "Fetch AI Settings",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
     "authors": "Wilker Amaral",
@@ -882,34 +1670,18 @@
     "autosaved": false,
     "workflowPublishHistory": [
       {
-        "createdAt": "2026-06-01T22:31:02.416Z",
-        "id": 768,
+        "createdAt": "2026-07-03T17:15:29.786Z",
+        "id": 1309,
         "workflowId": "88zOQbdJAT7DOaET",
-        "versionId": "1f777ea6-a756-4407-933c-239697866866",
+        "versionId": "b5f3c091-06cd-4f55-bd80-7c568ff511e2",
         "event": "activated",
         "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
       },
       {
-        "createdAt": "2026-06-01T22:31:02.691Z",
-        "id": 770,
+        "createdAt": "2026-07-03T17:15:29.729Z",
+        "id": 1308,
         "workflowId": "88zOQbdJAT7DOaET",
-        "versionId": "1f777ea6-a756-4407-933c-239697866866",
-        "event": "activated",
-        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
-      },
-      {
-        "createdAt": "2026-06-01T22:31:02.369Z",
-        "id": 767,
-        "workflowId": "88zOQbdJAT7DOaET",
-        "versionId": "1f777ea6-a756-4407-933c-239697866866",
-        "event": "deactivated",
-        "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
-      },
-      {
-        "createdAt": "2026-06-01T22:31:02.628Z",
-        "id": 769,
-        "workflowId": "88zOQbdJAT7DOaET",
-        "versionId": "1f777ea6-a756-4407-933c-239697866866",
+        "versionId": "b5f3c091-06cd-4f55-bd80-7c568ff511e2",
         "event": "deactivated",
         "userId": "27f66831-b616-40da-b6da-90d3ea12a46b"
       }

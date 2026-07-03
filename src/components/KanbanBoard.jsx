@@ -29,7 +29,7 @@ export default function KanbanBoard() {
   const columns = [
     { id: 'new', title: 'Novos Leads', class: 'new' },
     { id: 'contacted', title: 'Em Contato', class: 'contacted' },
-    { id: 'proposal', title: 'Propostas', class: 'proposal' },
+    { id: 'proposal', title: 'Tem Interesse', class: 'proposal' },
     { id: 'won', title: 'Vendas Ganhas', class: 'won' },
     { id: 'lost', title: 'Perdidos', class: 'lost' }
   ];
@@ -77,7 +77,7 @@ export default function KanbanBoard() {
     const stages = [
       { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 280, wBottom: 220, y: 30, h: 54 },
       { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 216, wBottom: 160, y: 100, h: 54 },
-      { title: 'Propostas', count: proposalCount, color: '#eab308', wTop: 156, wBottom: 100, y: 170, h: 54 },
+      { title: 'Tem Interesse', count: proposalCount, color: '#eab308', wTop: 156, wBottom: 100, y: 170, h: 54 },
       { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 96, wBottom: 40, y: 240, h: 54 }
     ];
 
@@ -295,7 +295,7 @@ export default function KanbanBoard() {
     const rawSegments = [
       { name: "Novos Leads", value: newCount, color: "url(#donut-grad-new)", solidColor: "#a855f7" },
       { name: "Em Contato", value: contactedCount, color: "url(#donut-grad-contacted)", solidColor: "#3b82f6" },
-      { name: "Propostas", value: proposalCount, color: "url(#donut-grad-proposal)", solidColor: "#eab308" },
+      { name: "Tem Interesse", value: proposalCount, color: "url(#donut-grad-proposal)", solidColor: "#eab308" },
       { name: "Vendas Ganhas", value: wonCount, color: "url(#donut-grad-won)", solidColor: "#10b981" },
       { name: "Perdidos", value: lostCount, color: "url(#donut-grad-lost)", solidColor: "#ef4444" }
     ].filter(s => s.value > 0);
