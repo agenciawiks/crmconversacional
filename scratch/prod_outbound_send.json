@@ -27,17 +27,17 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/channels?id=eq.{{ $json.body?.channel_id || $json.channel_id }}&select=*",
+        "url": "=https://rjcuoxvutrrzknicyuev.supabase.co/rest/v1/channels?id=eq.{{ $json.body?.channel_id || $json.channel_id }}&select=*",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
             },
             {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
             }
           ]
         },
@@ -209,17 +209,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages",
+        "url": "https://rjcuoxvutrrzknicyuev.supabase.co/rest/v1/messages",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
             },
             {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
             },
             {
               "name": "Content-Type",
@@ -457,17 +457,17 @@
       {
         "parameters": {
           "method": "GET",
-          "url": "=https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/channels?id=eq.{{ $json.body?.channel_id || $json.channel_id }}&select=*",
+          "url": "=https://rjcuoxvutrrzknicyuev.supabase.co/rest/v1/channels?id=eq.{{ $json.body?.channel_id || $json.channel_id }}&select=*",
           "sendHeaders": true,
           "headerParameters": {
             "parameters": [
               {
                 "name": "apikey",
-                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
               },
               {
                 "name": "Authorization",
-                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
               }
             ]
           },
@@ -639,17 +639,17 @@
       {
         "parameters": {
           "method": "POST",
-          "url": "https://ibyterftfrqgkhktkaeg.supabase.co/rest/v1/messages",
+          "url": "https://rjcuoxvutrrzknicyuev.supabase.co/rest/v1/messages",
           "sendHeaders": true,
           "headerParameters": {
             "parameters": [
               {
                 "name": "apikey",
-                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
               },
               {
                 "name": "Authorization",
-                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlieXRlcmZ0ZnJxZ2toa3RrYWVnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODQ0OTgwMywiZXhwIjoyMDk0MDI1ODAzfQ.9ObjlZum0x9XQuZYVxBZJGzLKA_jbaz1wqxC4lMj_M8"
+                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
               },
               {
                 "name": "Content-Type",
