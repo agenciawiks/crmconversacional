@@ -10,7 +10,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "send",
+        "path": "send-prod",
         "responseMode": "lastNode",
         "options": {}
       },

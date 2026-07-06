@@ -10,7 +10,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "webhook/evolution",
+        "path": "evolution-prod",
         "options": {}
       },
       "id": "f79aec30-2f4a-4a5f-be76-a73d28679181",
