@@ -19,6 +19,21 @@ const initialFlowNodes = [
   { id: '5', type: 'webhook', label: 'Conexão n8n', x: 960, y: 120, data: { url: 'https://n8n.cloudcorp.com/webhook/lead' } }
 ];
 
+const normalizeMessage = (rawMsg) => {
+  return {
+    id: rawMsg.id,
+    sender: rawMsg.sender || (rawMsg.direction === 'in' ? 'client' : 'agent'),
+    text: rawMsg.text || rawMsg.content || '',
+    time: rawMsg.time || (rawMsg.timestamp ? new Date(rawMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+    timestamp: rawMsg.timestamp instanceof Date ? rawMsg.timestamp : (rawMsg.timestamp ? new Date(rawMsg.timestamp) : new Date()),
+    channel_id: rawMsg.channel_id || null,
+    contact_id: rawMsg.contact_id || null,
+    content_type: rawMsg.content_type || 'text',
+    media_url: rawMsg.media_url || null,
+    status: rawMsg.status || (rawMsg.direction === 'out' ? 'sent' : 'received')
+  };
+};
+
 export const CrmProvider = ({ children }) => {
   const [activeScreen, setActiveScreen] = useState(() => {
     return localStorage.getItem('crm_active_screen') || 'dashboard';
@@ -105,17 +120,7 @@ export const CrmProvider = ({ children }) => {
           const contactMeta = meta[c.id] || {};
           const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id && !(m.content || '').startsWith('[SYSTEM_RESET]')).map(m => {
             idSet.add(m.id);
-            return {
-              id: m.id,
-              sender: m.direction === 'in' ? 'client' : 'agent',
-              text: m.content,
-              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              timestamp: new Date(m.timestamp),
-              channel_id: m.channel_id,
-              content_type: m.content_type,
-              media_url: m.media_url,
-              status: m.direction === 'out' ? 'sent' : undefined
-            };
+            return normalizeMessage(m);
           });
 
           // Compute provider and channel type from last message channel_id
@@ -367,10 +372,12 @@ export const CrmProvider = ({ children }) => {
 
   // Merge a new message into contacts state (deduplicating by id)
   const mergeMessage = useCallback((payload) => {
-    const newMsg = payload.new || payload; // support both realtime payload and raw message object
+    const rawMsg = payload.new || payload; // support both realtime payload and raw message object
     
     // Ignore invisible system reset messages in the UI
-    if ((newMsg.content || '').startsWith('[SYSTEM_RESET]')) return;
+    if ((rawMsg.content || '').startsWith('[SYSTEM_RESET]')) return;
+
+    const newMsg = normalizeMessage(rawMsg);
 
     if (knownMsgIdsRef.current.has(newMsg.id)) return;
     knownMsgIdsRef.current.add(newMsg.id);
@@ -398,16 +405,21 @@ export const CrmProvider = ({ children }) => {
         if (c.id === newMsg.contact_id) {
           exists = true;
           
-          // Look for matching optimistic temp message to replace
-          const optIdx = c.messages.findIndex(m => 
+          // 1. Evita duplicados por ID real
+          if (newMsg.id && c.messages.some(m => m.id === newMsg.id)) {
+            return c;
+          }
+
+          // 2. Tenta parear com mensagem otimista temporária pendente de envio
+          const optimisticIdx = c.messages.findIndex(m =>
             typeof m.id === 'string' && m.id.startsWith('temp-') &&
             m.sender === newMsg.sender &&
-            m.text === newMsg.text
+            (m.text === newMsg.text || (m.whatsapp_msg_id && newMsg.whatsapp_msg_id && m.whatsapp_msg_id === newMsg.whatsapp_msg_id))
           );
 
-          if (optIdx !== -1) {
+          if (optimisticIdx !== -1) {
             const newMsgs = [...c.messages];
-            newMsgs[optIdx] = newMsg;
+            newMsgs[optimisticIdx] = newMsg;
             return {
               ...c,
               messages: newMsgs,
@@ -416,16 +428,14 @@ export const CrmProvider = ({ children }) => {
             };
           }
 
-          const existsMsg = c.messages.find(m => m.id === newMsg.id);
-          if (!existsMsg) {
-            return {
-              ...c,
-              unread: newMsg.sender === 'client',
-              messages: [...c.messages, newMsg],
-              provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
-              channel: resolvedChannel
-            };
-          }
+          // 3. Insere nova mensagem genuína
+          return {
+            ...c,
+            unread: newMsg.sender === 'client',
+            messages: [...c.messages, newMsg],
+            provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
+            channel: resolvedChannel
+          };
         }
         return c;
       });
@@ -514,18 +524,7 @@ export const CrmProvider = ({ children }) => {
           const newMsg = payload.new;
           console.log('[Supabase Realtime] Direct message insert received:', newMsg);
           
-          mergeMessage({
-            id: newMsg.id,
-            sender: newMsg.direction === 'in' ? 'client' : 'agent',
-            text: newMsg.content,
-            time: new Date(newMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            timestamp: new Date(newMsg.timestamp),
-            channel_id: newMsg.channel_id,
-            contact_id: newMsg.contact_id,
-            content_type: newMsg.content_type,
-            media_url: newMsg.media_url,
-            status: newMsg.status
-          });
+          mergeMessage(newMsg);
         }
       )
       .subscribe((status) => {
@@ -581,16 +580,15 @@ export const CrmProvider = ({ children }) => {
 
               return {
                 ...c,
-                // Selectively merge only safe fields from raw DB row
-                // DO NOT spread ...updatedContact — it overwrites messages, notes, etc.
-                phone: updatedContact.phone || c.phone,
-                email: updatedContact.email || c.email,
+                ...updatedContact, // Sobrescreve as colunas brutas do banco
                 name: displayName,
                 username: username || c.username,
-                tags: updatedContact.tags || [],
-                status: updatedContact.pipeline_stage || c.status,
-                value: updatedContact.value !== undefined ? updatedContact.value : c.value,
-                notes: parsedNotes
+                // Preserva propriedades críticas da interface de UI / em memória após o spread
+                messages: c.messages ?? [],
+                notes: parsedNotes,
+                tags: Array.isArray(updatedContact.tags) ? updatedContact.tags : (c.tags ?? []),
+                status: updatedContact.pipeline_stage ?? c.status,
+                value: updatedContact.value !== undefined ? updatedContact.value : c.value
               };
             }
             return c;
@@ -676,18 +674,7 @@ export const CrmProvider = ({ children }) => {
           lastPollRef.current = newMsgs[newMsgs.length - 1].created_at;
 
           for (const m of newMsgs) {
-            mergeMessage({
-              id: m.id,
-              sender: m.direction === 'in' ? 'client' : 'agent',
-              text: m.content,
-              time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              timestamp: new Date(m.timestamp),
-              channel_id: m.channel_id,
-              contact_id: m.contact_id,
-              content_type: m.content_type,
-              media_url: m.media_url,
-              status: m.direction === 'out' ? 'sent' : undefined
-            });
+            mergeMessage(m);
           }
 
           // Also check for new contacts we don't have yet
@@ -1140,10 +1127,17 @@ export const CrmProvider = ({ children }) => {
     if (!text.trim()) return;
     
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const tempId = 'temp-' + Date.now().toString();
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     
-    // Optimistic UI update with "sending" status
-    const newMessage = { id: tempId, sender, text, time, timestamp: new Date(), status: sender === 'agent' ? 'sending' : undefined };
+    // Optimistic UI update with "sending" status (fully normalized)
+    const newMessage = normalizeMessage({
+      id: tempId,
+      sender,
+      text,
+      time,
+      timestamp: new Date(),
+      status: sender === 'agent' ? 'sending' : 'received'
+    });
 
     setContacts(prev => prev.map(c => {
       if (c.id === contactId) {

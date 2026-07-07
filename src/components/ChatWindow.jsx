@@ -3,6 +3,7 @@ import { useCrm } from '../context/CrmContext';
 import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import TagBadge from './TagBadge';
+import ErrorBoundary from './ErrorBoundary';
 
 const tagColorsPalette = [
   '#10B981', // Emerald
@@ -212,7 +213,8 @@ export default function ChatWindow() {
   };
 
   return (
-    <div className="chat-workspace animated-fade-in" style={{ 
+    <ErrorBoundary>
+      <div className="chat-workspace animated-fade-in" style={{ 
       position: 'absolute', 
       top: '24px', 
       bottom: '24px', 
@@ -1071,5 +1073,6 @@ export default function ChatWindow() {
         </div>
       )}
     </div>
+    </ErrorBoundary>
   );
 }
