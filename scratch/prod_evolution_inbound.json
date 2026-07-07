@@ -138,7 +138,7 @@
           "parameters": [
             {
               "name": "channel_id",
-              "value": "50df1e49-8f4c-4f90-b3c5-e9b95e37d8ed"
+              "value": "={{ $('Fetch Channel ID').first().json[0]?.id || $('Fetch Channel ID').first().json.id }}"
             },
             {
               "name": "contact_id",
@@ -207,7 +207,7 @@
           "parameters": [
             {
               "name": "channel_id",
-              "value": "50df1e49-8f4c-4f90-b3c5-e9b95e37d8ed"
+              "value": "={{ $('Fetch Channel ID').first().json[0]?.id || $('Fetch Channel ID').first().json.id }}"
             },
             {
               "name": "event_type",
@@ -509,6 +509,34 @@
         1500,
         600
       ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://rjcuoxvutrrzknicyuev.supabase.co/rest/v1/channels?instance=eq.{{ encodeURIComponent($('Parse Evolution Payload').item.json.instance) }}&select=id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqY3VveHZ1dHJyemtuaWN5dWV2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzM0ODEyMCwiZXhwIjoyMDk4OTI0MTIwfQ.p0MiiM1RHbV9K0lEBDnJwopAveSCa64T7ogUG7Cy-rE"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e458e0a3-bf45-42a9-a931-e40f1e4a29a3",
+      "name": "Fetch Channel ID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -32,
+        950
+      ]
     }
   ],
   "connections": {
@@ -528,6 +556,11 @@
         [
           {
             "node": "Is Message?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Channel ID",
             "type": "main",
             "index": 0
           }
