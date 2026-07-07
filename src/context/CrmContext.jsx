@@ -564,14 +564,33 @@ export const CrmProvider = ({ children }) => {
                 displayName = parts.slice(0, -1).join(' | @');
               }
               
+              // Parse notes from raw DB format (string JSON or null) into array
+              let parsedNotes = c.notes; // keep existing
+              if (updatedContact.notes !== undefined) {
+                if (!updatedContact.notes) {
+                  parsedNotes = [];
+                } else {
+                  try {
+                    const parsed = JSON.parse(updatedContact.notes);
+                    parsedNotes = Array.isArray(parsed) ? parsed : [{ id: 1, text: updatedContact.notes, date: updatedContact.updated_at }];
+                  } catch (e) {
+                    parsedNotes = [{ id: 1, text: updatedContact.notes, date: updatedContact.updated_at }];
+                  }
+                }
+              }
+
               return {
                 ...c,
-                ...updatedContact,
+                // Selectively merge only safe fields from raw DB row
+                // DO NOT spread ...updatedContact — it overwrites messages, notes, etc.
+                phone: updatedContact.phone || c.phone,
+                email: updatedContact.email || c.email,
                 name: displayName,
                 username: username || c.username,
                 tags: updatedContact.tags || [],
                 status: updatedContact.pipeline_stage || c.status,
-                value: updatedContact.value !== undefined ? updatedContact.value : c.value
+                value: updatedContact.value !== undefined ? updatedContact.value : c.value,
+                notes: parsedNotes
               };
             }
             return c;
