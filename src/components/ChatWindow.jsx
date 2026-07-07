@@ -983,7 +983,7 @@ export default function ChatWindow() {
           </div>
 
           <div className="notes-history-list">
-            {activeContact.notes.map(note => (
+            {(activeContact.notes || []).map(note => (
               <div key={note.id} className="note-bubble">
                 <span className="note-text">{note.text}</span>
                 <div className="note-date">{note.date}</div>

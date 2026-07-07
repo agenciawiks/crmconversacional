@@ -348,7 +348,7 @@ export default function ContactsList() {
                 {/* Personal labels rows */}
                 <td>
                   <div className="contact-tags-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    {contact.tags.map(tag => {
+                    {(contact.tags || []).map(tag => {
                       const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
                       const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
                       return (
