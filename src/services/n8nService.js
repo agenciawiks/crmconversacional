@@ -1,4 +1,5 @@
 const N8N_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
+const OUTBOUND_PATH = import.meta.env.VITE_N8N_OUTBOUND_PATH || '/webhook/send';
 
 class N8nService {
   static async sendOutboundMessage(channelId, contactId, phone, content) {
@@ -7,7 +8,7 @@ class N8nService {
       return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
     }
 
-    const response = await fetch(`${N8N_URL}/webhook/send`, {
+    const response = await fetch(`${N8N_URL}${OUTBOUND_PATH}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

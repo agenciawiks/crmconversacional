@@ -47,8 +47,8 @@ export default function ContactsList() {
     : 0;
  
   const filteredContacts = dateFilteredContacts.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 

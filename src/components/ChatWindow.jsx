@@ -84,7 +84,7 @@ export default function ChatWindow() {
   // Filters contacts list
   const filteredContacts = contacts.filter(c => {
     const matchesChannel = channelFilter === 'all' || c.channel === channelFilter;
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
                           c.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesChannel && matchesSearch;
   });
