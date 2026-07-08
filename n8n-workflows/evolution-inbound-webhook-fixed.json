@@ -533,39 +533,6 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $('Evolution Webhook Trigger').item.json.body.server_url || 'https://evo.yourserver.com' }}/chat/getBase64FromMediaMessage",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $('Evolution Webhook Trigger').item.json.body.apikey || 'YOUR_EVO_APIKEY' }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "message",
-              "value": "={{ $('Evolution Webhook Trigger').item.json.body.data.message }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "node-fetch-media-evo",
-      "name": "Fetch Media Base64",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 3,
-      "position": [
-        420,
-        824
-      ]
-    },
-    {
-      "parameters": {
         "mode": "jsonToBinary",
         "convertAllData": false,
         "sourceKey": "base64",
@@ -643,16 +610,16 @@
       ]
     },
     {
-      "id": "node-strip-base64-new",
-      "name": "Strip Base64 Prefix",
+      "id": "node-extract-webhook-base64",
+      "name": "Extract Webhook Base64",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        520,
+        420,
         824
       ],
       "parameters": {
-        "jsCode": "for (const item of $input.all()) {\n  if (item.json.base64 && typeof item.json.base64 === 'string') {\n    if (item.json.base64.includes('base64,')) {\n      item.json.base64 = item.json.base64.split('base64,')[1];\n    }\n  }\n}\nreturn $input.all();"
+        "jsCode": "const triggerData = $('Evolution Webhook Trigger').first().json;\nconst messageData = triggerData.body.data.message;\nconst base64Raw = messageData.base64;\n\nfor (const item of $input.all()) {\n  item.json.base64 = base64Raw;\n  item.json.mimetype = messageData.mimetype || messageData.mediaType || 'application/octet-stream';\n  \n  if (item.json.base64 && typeof item.json.base64 === 'string') {\n    if (item.json.base64.includes('base64,')) {\n      item.json.base64 = item.json.base64.split('base64,')[1];\n    }\n  }\n}\nreturn $input.all();"
       }
     }
   ],
@@ -834,7 +801,7 @@
       "main": [
         [
           {
-            "node": "Fetch Media Base64",
+            "node": "Extract Webhook Base64",
             "type": "main",
             "index": 0
           }
@@ -842,17 +809,6 @@
         [
           {
             "node": "Insert Message to Supabase",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Fetch Media Base64": {
-      "main": [
-        [
-          {
-            "node": "Strip Base64 Prefix",
             "type": "main",
             "index": 0
           }
@@ -903,7 +859,7 @@
         ]
       ]
     },
-    "Strip Base64 Prefix": {
+    "Extract Webhook Base64": {
       "main": [
         [
           {
