@@ -577,7 +577,7 @@
       "type": "n8n-nodes-base.moveBinaryData",
       "typeVersion": 1,
       "position": [
-        620,
+        720,
         824
       ]
     },
@@ -641,6 +641,19 @@
         1220,
         824
       ]
+    },
+    {
+      "id": "node-strip-base64-new",
+      "name": "Strip Base64 Prefix",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        824
+      ],
+      "parameters": {
+        "jsCode": "for (const item of $input.all()) {\n  if (item.json.base64 && typeof item.json.base64 === 'string') {\n    if (item.json.base64.includes('base64,')) {\n      item.json.base64 = item.json.base64.split('base64,')[1];\n    }\n  }\n}\nreturn $input.all();"
+      }
     }
   ],
   "connections": {
@@ -839,7 +852,7 @@
       "main": [
         [
           {
-            "node": "Convert to Binary",
+            "node": "Strip Base64 Prefix",
             "type": "main",
             "index": 0
           }
@@ -884,6 +897,17 @@
         [
           {
             "node": "Insert Message to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip Base64 Prefix": {
+      "main": [
+        [
+          {
+            "node": "Convert to Binary",
             "type": "main",
             "index": 0
           }
