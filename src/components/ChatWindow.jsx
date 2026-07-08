@@ -401,31 +401,63 @@ export default function ChatWindow() {
           {activeContact.messages.map(msg => (
             <div key={msg.id} className={`message-bubble-wrapper ${msg.sender}`}>
               <div className="message-bubble">
-                {msg.content_type === 'image' && msg.media_url ? (
-                  <div>
-                    <img 
-                      src={msg.media_url} 
-                      alt="Imagem enviada" 
-                      style={{ maxWidth: '280px', borderRadius: '8px', display: 'block', marginBottom: '8px', cursor: 'pointer' }}
-                      onClick={() => window.open(msg.media_url, '_blank')}
-                    />
-                    {msg.text && msg.text !== '[Imagem]' && <div>{msg.text}</div>}
-                  </div>
+                {msg.content_type === 'image' ? (
+                  msg.media_url ? (
+                    <div>
+                      <img 
+                        src={msg.media_url} 
+                        alt="Imagem enviada" 
+                        style={{ maxWidth: '280px', borderRadius: '8px', display: 'block', marginBottom: '8px', cursor: 'pointer' }}
+                        onClick={() => window.open(msg.media_url, '_blank')}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                      <div className="media-error-fallback" style={{ display: 'none', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                        <XCircle size={16} /> Mídia indisponível
+                      </div>
+                      {msg.text && msg.text !== '[Imagem]' && <div>{msg.text}</div>}
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div className="media-error-fallback" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                        <XCircle size={16} /> Mídia indisponível
+                      </div>
+                      {msg.text && msg.text !== '[Imagem]' && <div>{msg.text}</div>}
+                    </div>
+                  )
                 ) : msg.content_type === 'sticker' && msg.media_url ? (
                   <div>
                     <img 
                       src={msg.media_url} 
                       alt="Figurinha enviada" 
                       style={{ width: '120px', height: '120px', objectFit: 'contain', background: 'transparent', display: 'block' }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
                     />
                   </div>
-                ) : msg.content_type === 'audio' && msg.media_url ? (
-                  <AudioPlayer src={msg.media_url} />
-                ) : msg.content_type === 'video' && msg.media_url ? (
-                  <div>
-                    <video src={msg.media_url} controls style={{ maxWidth: '280px', borderRadius: '8px', display: 'block', marginBottom: '8px' }} />
-                    {msg.text && msg.text !== '[Vídeo]' && <div>{msg.text}</div>}
-                  </div>
+                ) : msg.content_type === 'audio' ? (
+                  msg.media_url ? (
+                    <AudioPlayer src={msg.media_url} />
+                  ) : (
+                    <div className="media-error-fallback" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)' }}>
+                      <XCircle size={16} /> Áudio não disponível
+                    </div>
+                  )
+                ) : msg.content_type === 'video' ? (
+                  msg.media_url ? (
+                    <div>
+                      <video src={msg.media_url} controls style={{ maxWidth: '280px', borderRadius: '8px', display: 'block', marginBottom: '8px' }} />
+                      {msg.text && msg.text !== '[Vídeo]' && <div>{msg.text}</div>}
+                    </div>
+                  ) : (
+                    <div style={{ marginBottom: '8px' }}>
+                      <div className="media-error-fallback" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                        <XCircle size={16} /> Vídeo não disponível
+                      </div>
+                      {msg.text && msg.text !== '[Vídeo]' && <div>{msg.text}</div>}
+                    </div>
+                  )
                 ) : msg.content_type === 'document' && msg.media_url ? (
                   <div>
                     <a 

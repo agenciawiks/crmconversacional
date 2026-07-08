@@ -9,6 +9,7 @@ export default function AudioPlayer({ src }) {
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [waveformBars] = useState(() =>
     Array.from({ length: 28 }, () => 0.15 + Math.random() * 0.85)
   );
@@ -24,7 +25,10 @@ export default function AudioPlayer({ src }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onLoadedMetadata = () => setDuration(audio.duration);
+    const onLoadedMetadata = () => {
+      setDuration(audio.duration);
+      setHasError(false);
+    };
     const onTimeUpdate = () => {
       if (!isDragging) {
         setCurrentTime(audio.currentTime);
@@ -32,14 +36,17 @@ export default function AudioPlayer({ src }) {
       }
     };
     const onEnded = () => { setIsPlaying(false); setProgress(0); setCurrentTime(0); };
+    const onError = () => { setHasError(true); setIsPlaying(false); };
 
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
     return () => {
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
     };
   }, [isDragging]);
 
@@ -79,29 +86,31 @@ export default function AudioPlayer({ src }) {
 
       {/* Play/Pause Button */}
       <button
-        onClick={togglePlay}
+        onClick={hasError ? undefined : togglePlay}
+        disabled={hasError}
         style={{
           width: '36px',
           height: '36px',
           minWidth: '36px',
           borderRadius: '50%',
           border: 'none',
-          background: 'linear-gradient(135deg, #8b5cf6, #6366f1)',
-          color: '#fff',
-          cursor: 'pointer',
+          background: hasError ? 'var(--bg-surface-hover)' : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+          color: hasError ? 'var(--text-muted)' : '#fff',
+          cursor: hasError ? 'not-allowed' : 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 2px 12px rgba(139, 92, 246, 0.4)',
+          boxShadow: hasError ? 'none' : '0 2px 12px rgba(139, 92, 246, 0.4)',
           transition: 'transform 0.15s ease, box-shadow 0.15s ease',
         }}
-        onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }}
-        onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+        onMouseDown={(e) => { if(!hasError) e.currentTarget.style.transform = 'scale(0.92)'; }}
+        onMouseUp={(e) => { if(!hasError) e.currentTarget.style.transform = 'scale(1)'; }}
+        onMouseLeave={(e) => { if(!hasError) e.currentTarget.style.transform = 'scale(1)'; }}
+        title={hasError ? "Áudio indisponível" : ""}
       >
         {isPlaying
           ? <Pause size={16} strokeWidth={2.5} fill="#fff" />
-          : <Play size={16} strokeWidth={2.5} fill="#fff" style={{ marginLeft: '2px' }} />
+          : <Play size={16} strokeWidth={2.5} fill={hasError ? "var(--text-muted)" : "#fff"} style={{ marginLeft: '2px' }} />
         }
       </button>
 
@@ -132,9 +141,11 @@ export default function AudioPlayer({ src }) {
                   height: `${h * 100}%`,
                   minHeight: '3px',
                   borderRadius: '2px',
-                  background: isActive
-                    ? 'linear-gradient(180deg, #a78bfa, #8b5cf6)'
-                    : 'rgba(148, 163, 184, 0.25)',
+                  background: hasError
+                    ? 'rgba(148, 163, 184, 0.15)'
+                    : isActive
+                      ? 'linear-gradient(180deg, #a78bfa, #8b5cf6)'
+                      : 'rgba(148, 163, 184, 0.25)',
                   transition: 'background 0.15s ease',
                 }}
               />
@@ -151,11 +162,11 @@ export default function AudioPlayer({ src }) {
           <span style={{
             fontSize: '10px',
             fontWeight: '500',
-            color: 'var(--text-secondary, #94a3b8)',
+            color: hasError ? 'var(--text-muted)' : 'var(--text-secondary, #94a3b8)',
             fontFamily: "'Inter', sans-serif",
             letterSpacing: '0.3px',
           }}>
-            {formatTime(currentTime)}
+            {hasError ? '--:--' : formatTime(currentTime)}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Volume2 size={10} strokeWidth={2} color="rgba(139, 92, 246, 0.6)" />
