@@ -1,9 +1,14 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
-import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut } from 'lucide-react';
 
 export default function Sidebar() {
   const { activeScreen, setActiveScreen, theme, toggleTheme } = useCrm();
+  const { user, signOut } = useAuth();
+  
+  const displayName = user?.user_metadata?.name || user?.email || 'Usuário Logado';
+  const displayInitials = displayName.substring(0, 2).toUpperCase();
 
   const menuItems = [
     {
@@ -170,44 +175,79 @@ export default function Sidebar() {
           }}>ATV</span>
         </button>
 
-        {/* Agent active card status */}
+        {/* User profile & Logout */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          justifyContent: 'space-between',
+          gap: '8px'
         }}>
           <div style={{
-            width: '38px',
-            height: '38px',
-            borderRadius: 'var(--radius-round)',
-            background: 'hsl(260, 60%, 50%)',
-            color: '#fff',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: '700',
-            fontSize: '14px',
-            border: '2px solid var(--border-glass)'
+            gap: '10px',
+            overflow: 'hidden'
           }}>
-            CA
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{
-              fontSize: '13px',
-              fontWeight: '600',
-              color: 'var(--text-primary)'
-            }}>Caio Agent</span>
-            <span style={{
-              fontSize: '11px',
-              color: 'var(--color-status-won)',
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: 'var(--radius-round)',
+              background: 'var(--accent-primary)',
+              color: '#fff',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              fontWeight: '500'
+              justifyContent: 'center',
+              fontWeight: '700',
+              fontSize: '13px',
+              border: '2px solid var(--border-glass)',
+              flexShrink: 0
             }}>
-              <span className="pulsing-dot" style={{ width: '6px', height: '6px' }}></span> Ativo
-            </span>
+              {displayInitials}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: '600',
+                color: 'var(--text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }} title={displayName}>
+                {displayName}
+              </span>
+              <span style={{
+                fontSize: '10px',
+                color: 'var(--color-status-won)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: '500'
+              }}>
+                <span className="pulsing-dot" style={{ width: '5px', height: '5px' }}></span> Logado
+              </span>
+            </div>
           </div>
+          
+          <button 
+            onClick={signOut}
+            title="Sair da Conta"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              padding: '6px',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = 'var(--color-status-lost)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+          >
+            <LogOut size={16} strokeWidth={2} />
+          </button>
         </div>
       </div>
     </aside>

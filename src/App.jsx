@@ -1,5 +1,8 @@
 import React from 'react';
 import { CrmProvider, useCrm } from './context/CrmContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginScreen from './components/LoginScreen';
+import { Loader2 } from 'lucide-react';
 
 // Import CSS stylesheets in sequence
 import './styles/variables.css';
@@ -69,12 +72,38 @@ function AppContent() {
   );
 }
 
+// O AuthGuard fica RESPONSÁVEL por decidir o que montar
+// Apenas se tivermos sessão, montamos o CrmProvider (que contém os dados sensíveis)
+function AuthGuard() {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent-primary)' }} />
+      </div>
+    );
+  }
+
+  if (!session) {
+    // Se não há sessão, renderiza APENAS o login. O CrmContext NUNCA monta.
+    return <LoginScreen />;
+  }
+
+  // Com sessão confirmada, o CrmProvider e o restante do app montam.
+  return (
+    <CrmProvider>
+      <AppContent />
+    </CrmProvider>
+  );
+}
+
 export default function App() {
   return (
     <GlobalErrorBoundary>
-      <CrmProvider>
-        <AppContent />
-      </CrmProvider>
+      <AuthProvider>
+        <AuthGuard />
+      </AuthProvider>
     </GlobalErrorBoundary>
   );
 }
