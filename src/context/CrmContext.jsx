@@ -116,7 +116,7 @@ export const CrmProvider = ({ children }) => {
 
         const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
         const idSet = new Set();
-        const mappedContacts = dbContacts.map(c => {
+        const mappedContacts = (dbContacts || []).map(c => {
           const contactMeta = meta[c.id] || {};
           const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id && !(m.content || '').startsWith('[SYSTEM_RESET]')).map(m => {
             idSet.add(m.id);
@@ -406,19 +406,19 @@ export const CrmProvider = ({ children }) => {
           exists = true;
           
           // 1. Evita duplicados por ID real
-          if (newMsg.id && c.messages && c.messages.some(m => m.id === newMsg.id)) {
+          if (newMsg.id && c.messages && (c.messages || []).some(m => m.id === newMsg.id)) {
             return c;
           }
 
           // 2. Tenta parear com mensagem otimista temporária pendente de envio
-          const optimisticIdx = c.messages.findIndex(m =>
+          const optimisticIdx = (c.messages || []).findIndex(m =>
             typeof m.id === 'string' && m.id.startsWith('temp-') &&
             m.sender === newMsg.sender &&
             (m.text === newMsg.text || (m.whatsapp_msg_id && newMsg.whatsapp_msg_id && m.whatsapp_msg_id === newMsg.whatsapp_msg_id))
           );
 
           if (optimisticIdx !== -1) {
-            const newMsgs = [...c.messages];
+            const newMsgs = [...(c.messages || [])];
             newMsgs[optimisticIdx] = newMsg;
             return {
               ...c,
@@ -432,7 +432,7 @@ export const CrmProvider = ({ children }) => {
           return {
             ...c,
             unread: newMsg.sender === 'client',
-            messages: [...c.messages, newMsg],
+            messages: [...(c.messages || []), newMsg],
             provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
             channel: resolvedChannel
           };
@@ -443,7 +443,7 @@ export const CrmProvider = ({ children }) => {
       if (!exists) {
         // Fetch contact info for brand new contacts
         SupabaseService.fetchContacts().then(dbContacts => {
-          const freshC = dbContacts.find(dc => dc.id === newMsg.contact_id);
+          const freshC = (dbContacts || []).find(dc => dc.id === newMsg.contact_id);
           if (freshC) {
             const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
             const contactMeta = meta[freshC.id] || {};
@@ -685,7 +685,7 @@ export const CrmProvider = ({ children }) => {
               SupabaseService.fetchContacts().then(dbContacts => {
                 const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
                 setContacts(prev2 => {
-                  const toAdd = dbContacts.filter(dc => missing.includes(dc.id) && !prev2.find(c => c.id === dc.id));
+                  const toAdd = (dbContacts || []).filter(dc => missing.includes(dc.id) && !prev2.find(c => c.id === dc.id));
                   if (toAdd.length > 0) {
                     const mappedToAdd = toAdd.map(c => {
                       const contactMeta = meta[c.id] || {};
@@ -944,9 +944,9 @@ export const CrmProvider = ({ children }) => {
         
         // Update local state for contacts immediately to prevent UI lag/flicker
         setContacts(prev => (prev || []).map(c => {
-          if (c.tags && c.tags.includes(cleanedOld)) {
+          if (c.tags && (c.tags || []).includes(cleanedOld)) {
             // Replace oldName with newName and deduplicate
-            const filtered = c.tags.map(t => t === cleanedOld ? cleanedNew : t);
+            const filtered = (c.tags || []).map(t => t === cleanedOld ? cleanedNew : t);
             const deduplicated = [...new Set(filtered)];
             
             // Also update localStorage metadata
@@ -993,8 +993,8 @@ export const CrmProvider = ({ children }) => {
 
       // 4. Update local state for contacts immediately to prevent UI lag/flicker
       setContacts(prev => (prev || []).map(c => {
-        if (c.tags && c.tags.includes(cleanedName)) {
-          const filtered = c.tags.filter(t => t !== cleanedName);
+        if (c.tags && (c.tags || []).includes(cleanedName)) {
+          const filtered = (c.tags || []).filter(t => t !== cleanedName);
           
           // Also update localStorage metadata
           const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
@@ -1141,7 +1141,7 @@ export const CrmProvider = ({ children }) => {
 
     setContacts(prev => (prev || []).map(c => {
       if (c.id === contactId) {
-        return { ...c, messages: [...c.messages, newMessage], unread: sender === 'client' };
+        return { ...c, messages: [...(c.messages || []), newMessage], unread: sender === 'client' };
       }
       return c;
     }));
@@ -1180,7 +1180,7 @@ export const CrmProvider = ({ children }) => {
             if (c.id === contactId) {
               return {
                 ...c,
-                messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'sent' } : m)
+                messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'sent' } : m)
               };
             }
             return c;
@@ -1192,7 +1192,7 @@ export const CrmProvider = ({ children }) => {
             if (c.id === contactId) {
               return {
                 ...c,
-                messages: c.messages.map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+                messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
               };
             }
             return c;
