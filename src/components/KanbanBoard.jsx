@@ -29,6 +29,7 @@ export default function KanbanBoard() {
   const columns = [
     { id: 'new', title: 'Novos Leads', class: 'new' },
     { id: 'contacted', title: 'Em Contato', class: 'contacted' },
+    { id: 'no_answer', title: 'Sem Resposta', class: 'no-answer' },
     { id: 'proposal', title: 'Tem Interesse', class: 'proposal' },
     { id: 'won', title: 'Vendas Ganhas', class: 'won' },
     { id: 'lost', title: 'Perdidos', class: 'lost' }
@@ -70,15 +71,17 @@ export default function KanbanBoard() {
   const RenderFunnelChart = () => {
     const newCount = filteredContacts.filter(c => c.status === 'new').length;
     const contactedCount = filteredContacts.filter(c => c.status === 'contacted').length;
+    const noAnswerCount = filteredContacts.filter(c => c.status === 'no_answer').length;
     const proposalCount = filteredContacts.filter(c => c.status === 'proposal').length;
     const wonCount = filteredContacts.filter(c => c.status === 'won').length;
 
-    // Cylinder widths and Y positioning
+    // Cylinder widths and Y positioning (5 stages now)
     const stages = [
-      { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 280, wBottom: 220, y: 30, h: 54 },
-      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 216, wBottom: 160, y: 100, h: 54 },
-      { title: 'Tem Interesse', count: proposalCount, color: '#eab308', wTop: 156, wBottom: 100, y: 170, h: 54 },
-      { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 96, wBottom: 40, y: 240, h: 54 }
+      { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 280, wBottom: 220, y: 20, h: 42 },
+      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 216, wBottom: 170, y: 74, h: 42 },
+      { title: 'Sem Resposta', count: noAnswerCount, color: '#f97316', wTop: 166, wBottom: 120, y: 128, h: 42 },
+      { title: 'Tem Interesse', count: proposalCount, color: '#eab308', wTop: 116, wBottom: 76, y: 182, h: 42 },
+      { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 72, wBottom: 36, y: 236, h: 42 }
     ];
 
     const cx = 228; // Centered on a 500px wide SVG canvas: left margin 98px, right margin 98px
@@ -285,6 +288,7 @@ export default function KanbanBoard() {
   const RenderDonutChart = () => {
     const newCount = filteredContacts.filter(c => c.status === 'new').length;
     const contactedCount = filteredContacts.filter(c => c.status === 'contacted').length;
+    const noAnswerCount = filteredContacts.filter(c => c.status === 'no_answer').length;
     const proposalCount = filteredContacts.filter(c => c.status === 'proposal').length;
     const wonCount = filteredContacts.filter(c => c.status === 'won').length;
     const lostCount = filteredContacts.filter(c => c.status === 'lost').length;
@@ -295,6 +299,7 @@ export default function KanbanBoard() {
     const rawSegments = [
       { name: "Novos Leads", value: newCount, color: "url(#donut-grad-new)", solidColor: "#a855f7" },
       { name: "Em Contato", value: contactedCount, color: "url(#donut-grad-contacted)", solidColor: "#3b82f6" },
+      { name: "Sem Resposta", value: noAnswerCount, color: "url(#donut-grad-no-answer)", solidColor: "#f97316" },
       { name: "Tem Interesse", value: proposalCount, color: "url(#donut-grad-proposal)", solidColor: "#eab308" },
       { name: "Vendas Ganhas", value: wonCount, color: "url(#donut-grad-won)", solidColor: "#10b981" },
       { name: "Perdidos", value: lostCount, color: "url(#donut-grad-lost)", solidColor: "#ef4444" }
@@ -423,6 +428,10 @@ export default function KanbanBoard() {
                 <linearGradient id="donut-grad-contacted" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0%" stopColor="#2563eb" />
                   <stop offset="100%" stopColor="#60a5fa" />
+                </linearGradient>
+                <linearGradient id="donut-grad-no-answer" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#ea580c" />
+                  <stop offset="100%" stopColor="#fb923c" />
                 </linearGradient>
                 <linearGradient id="donut-grad-proposal" x1="0" y1="0" x2="1" y2="1">
                   <stop offset="0%" stopColor="#ca8a04" />

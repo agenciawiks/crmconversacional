@@ -23,6 +23,7 @@
   /* Status colors mapping */
   --color-status-new: #07a7e1;      /* Sky Blue */
   --color-status-contacted: #f59e0b;/* Yellow */
+  --color-status-no-answer: #f97316;/* Orange */
   --color-status-proposal: #d946ef; /* Magenta */
   --color-status-won: #10b981;      /* Green */
   --color-status-lost: #ef4444;     /* Red */
