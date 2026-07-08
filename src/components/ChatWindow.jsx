@@ -54,6 +54,7 @@ export default function ChatWindow() {
   const [selectedNewColor, setSelectedNewColor] = useState('#10B981');
   const [editingTag, setEditingTag] = useState(null);
   const [confirmDeleteTag, setConfirmDeleteTag] = useState(null);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   
   const scrollRef = useRef(null);
 
@@ -642,32 +643,153 @@ export default function ChatWindow() {
         </div>
 
         {/* PIPELINE & FINANCIAL DETAILS */}
-        <div className="profile-section">
-          <span className="profile-section-title">Funil & Negócios</span>
-          <div className="profile-field">
+        <div className="profile-section" style={{
+          background: 'rgba(20, 20, 28, 0.4)',
+          borderRadius: '12px',
+          padding: '16px',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 20px rgba(0, 0, 0, 0.2)'
+        }}>
+          <span className="profile-section-title" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-primary)', boxShadow: '0 0 10px var(--accent-primary)' }}></span>
+            Funil & Negócios
+          </span>
+          
+          <div className="profile-field" style={{ position: 'relative' }}>
             <span className="profile-field-label">Fase no CRM</span>
-            <select
-              className="crm-status-dropdown"
-              value={activeContact.status}
-              onChange={(e) => changeContactStatus(activeContact.id, e.target.value)}
+            
+            {/* MODERN CUSTOM DROPDOWN */}
+            <div 
+              className="modern-status-selector" 
+              style={{
+                position: 'relative',
+                width: '100%'
+              }}
             >
-              <option value="new">Novo Lead</option>
-              <option value="contacted">Em Contato</option>
-              <option value="proposal">Tem Interesse</option>
-              <option value="won">Ganho (Venda)</option>
-              <option value="lost">Perdido</option>
-            </select>
+              <div 
+                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  background: 'rgba(255, 255, 255, 0.03)',
+                  border: isStatusDropdownOpen ? '1px solid var(--accent-primary)' : '1px solid var(--border-glass)',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: isStatusDropdownOpen ? '0 0 0 3px rgba(139, 92, 246, 0.15)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span className={`tag status-${activeContact.status}`} style={{ margin: 0, padding: '2px 8px', fontSize: '11px', borderRadius: '4px' }}>
+                    {activeContact.status === 'new' && 'Novos Leads'}
+                    {activeContact.status === 'contacted' && 'Em Contato'}
+                    {activeContact.status === 'no_answer' && 'Sem Resposta'}
+                    {activeContact.status === 'proposal' && 'Tem Interesse'}
+                    {activeContact.status === 'won' && 'Vendas Ganhas'}
+                    {activeContact.status === 'lost' && 'Perdidos'}
+                  </span>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isStatusDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                  <path d="m6 9 6 6 6-6"/>
+                </svg>
+              </div>
+
+              {/* DROPDOWN MENU */}
+              {isStatusDropdownOpen && (
+                <div 
+                  className="modern-status-menu animated-fade-in"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: '8px',
+                    background: '#1a1a24',
+                    border: '1px solid var(--border-glass)',
+                    borderRadius: '8px',
+                    padding: '8px',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
+                    zIndex: 100,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px'
+                  }}
+                >
+                  {[
+                    { id: 'new', label: 'Novos Leads', class: 'new' },
+                    { id: 'contacted', label: 'Em Contato', class: 'contacted' },
+                    { id: 'no_answer', label: 'Sem Resposta', class: 'no_answer' },
+                    { id: 'proposal', label: 'Tem Interesse', class: 'proposal' },
+                    { id: 'won', label: 'Vendas Ganhas', class: 'won' },
+                    { id: 'lost', label: 'Perdidos', class: 'lost' }
+                  ].map(stage => (
+                    <div
+                      key={stage.id}
+                      onClick={() => {
+                        changeContactStatus(activeContact.id, stage.id);
+                        setIsStatusDropdownOpen(false);
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        background: activeContact.status === stage.id ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
+                      onMouseLeave={(e) => {
+                        if (activeContact.status !== stage.id) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <span className={`tag status-${stage.id}`} style={{ margin: 0 }}>
+                        {stage.label}
+                      </span>
+                      {activeContact.status === stage.id && (
+                        <CheckCheck size={14} style={{ marginLeft: 'auto', color: 'var(--accent-primary)' }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* END CUSTOM DROPDOWN */}
+            
+            {/* Invisible backdrop to close dropdown when clicking outside */}
+            {isStatusDropdownOpen && (
+              <div 
+                onClick={() => setIsStatusDropdownOpen(false)}
+                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }}
+              />
+            )}
           </div>
 
-          <div className="profile-field">
+          <div className="profile-field" style={{ marginTop: '16px' }}>
             <span className="profile-field-label">Valor do Negócio (R$)</span>
-            <input
-              type="number"
-              className="glass-input"
-              value={activeContact.value || ''}
-              onChange={(e) => updateContactValue(activeContact.id, e.target.value)}
-              placeholder="R$ 0,00"
-            />
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 'bold' }}>R$</span>
+              <input
+                type="number"
+                className="glass-input modern-currency-input"
+                value={activeContact.value || ''}
+                onChange={(e) => updateContactValue(activeContact.id, e.target.value)}
+                placeholder="0,00"
+                style={{
+                  paddingLeft: '38px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderColor: 'var(--border-glass)',
+                  fontSize: '15px',
+                  fontWeight: '600',
+                  color: 'var(--accent-primary)'
+                }}
+                onFocus={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.05)'}
+                onBlur={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.02)'}
+              />
+            </div>
           </div>
         </div>
 
