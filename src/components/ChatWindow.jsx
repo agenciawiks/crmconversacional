@@ -44,6 +44,7 @@ export default function ChatWindow() {
   } = useCrm();
 
   const [channelFilter, setChannelFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -86,9 +87,10 @@ export default function ChatWindow() {
   // Filters contacts list
   const filteredContacts = contacts.filter(c => {
     const matchesChannel = channelFilter === 'all' || c.channel === channelFilter;
+    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
     const matchesSearch = (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          c.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesChannel && matchesSearch;
+                          (c.tags || []).some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesChannel && matchesStatus && matchesSearch;
   });
 
   const handleSend = () => {
@@ -266,6 +268,55 @@ export default function ChatWindow() {
               className={`channel-tab-btn ${channelFilter === 'webchat' ? 'active' : ''}`}
             >
               Tiktok
+            </button>
+          </div>
+
+          <div className="chat-channels-filter" style={{ marginTop: '8px', paddingBottom: '4px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`channel-tab-btn ${statusFilter === 'all' ? 'active' : ''}`}
+            >
+              Qualquer Fase
+            </button>
+            <button
+              onClick={() => setStatusFilter('new')}
+              className={`channel-tab-btn ${statusFilter === 'new' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-new)', marginRight: '4px' }}></span>
+              Novos Leads
+            </button>
+            <button
+              onClick={() => setStatusFilter('contacted')}
+              className={`channel-tab-btn ${statusFilter === 'contacted' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-contacted)', marginRight: '4px' }}></span>
+              Em Contato
+            </button>
+            <button
+              onClick={() => setStatusFilter('no_answer')}
+              className={`channel-tab-btn ${statusFilter === 'no_answer' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-no-answer)', marginRight: '4px' }}></span>
+              Sem Resposta
+            </button>
+            <button
+              onClick={() => setStatusFilter('proposal')}
+              className={`channel-tab-btn ${statusFilter === 'proposal' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-proposal)', marginRight: '4px' }}></span>
+              Interesse
+            </button>
+            <button
+              onClick={() => setStatusFilter('won')}
+              className={`channel-tab-btn ${statusFilter === 'won' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-won)', marginRight: '4px' }}></span>
+              Ganho
             </button>
           </div>
         </div>
