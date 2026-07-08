@@ -276,7 +276,7 @@ export default function ChatWindow() {
               onClick={() => setStatusFilter('all')}
               className={`channel-tab-btn ${statusFilter === 'all' ? 'active' : ''}`}
             >
-              Qualquer Fase
+              Qualquer Fase {statusFilter === 'all' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
               onClick={() => setStatusFilter('new')}
@@ -284,7 +284,7 @@ export default function ChatWindow() {
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-new)', marginRight: '4px' }}></span>
-              Novos Leads
+              Novos Leads {statusFilter === 'new' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
               onClick={() => setStatusFilter('contacted')}
@@ -292,7 +292,7 @@ export default function ChatWindow() {
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-contacted)', marginRight: '4px' }}></span>
-              Em Contato
+              Em Contato {statusFilter === 'contacted' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
               onClick={() => setStatusFilter('no_answer')}
@@ -300,7 +300,7 @@ export default function ChatWindow() {
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-no-answer)', marginRight: '4px' }}></span>
-              Sem Resposta
+              Sem Resposta {statusFilter === 'no_answer' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
               onClick={() => setStatusFilter('proposal')}
@@ -308,7 +308,7 @@ export default function ChatWindow() {
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-proposal)', marginRight: '4px' }}></span>
-              Interesse
+              Interesse {statusFilter === 'proposal' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
               onClick={() => setStatusFilter('won')}
@@ -316,7 +316,7 @@ export default function ChatWindow() {
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-won)', marginRight: '4px' }}></span>
-              Ganho
+              Ganho {statusFilter === 'won' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
           </div>
         </div>
