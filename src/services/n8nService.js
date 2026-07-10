@@ -25,6 +25,33 @@ class N8nService {
 
     return { success: true };
   }
+
+  static async sendOutboundMedia({ channelId, contactId, phone, mediaUrl, contentType, fileName, caption }) {
+    if (!N8N_URL) {
+      console.warn('[N8nService] VITE_N8N_WEBHOOK_URL not configured.');
+      return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
+    }
+
+    const response = await fetch(`${N8N_URL}/webhook/send-media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel_id: channelId,
+        contact_id: contactId,
+        phone: phone,
+        media_url: mediaUrl,
+        content_type: contentType,
+        file_name: fileName,
+        caption: caption
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return { success: true };
+  }
 }
 
 export default N8nService;

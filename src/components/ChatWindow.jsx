@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain, Paperclip } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import TagBadge from './TagBadge';
 import ErrorBoundary from './ErrorBoundary';
@@ -40,9 +40,12 @@ export default function ChatWindow() {
     globalTags,
     addGlobalTag,
     updateGlobalTag,
-    deleteGlobalTag
+    deleteGlobalTag,
+    appointments,
+    sendMedia
   } = useCrm();
 
+  const fileInputRef = useRef(null);
   const [channelFilter, setChannelFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,6 +100,23 @@ export default function ChatWindow() {
     if (!inputText.trim()) return;
     sendMessage(activeContact.id, inputText, 'agent');
     setInputText('');
+  };
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate size (16MB = 16 * 1024 * 1024 bytes)
+    if (file.size > 16 * 1024 * 1024) {
+      alert("O arquivo excede o limite de 16MB. Por favor, escolha um arquivo menor.");
+      e.target.value = '';
+      return;
+    }
+
+    // Call sendMedia
+    await sendMedia(activeContact.id, file, inputText);
+    setInputText('');
+    e.target.value = '';
   };
 
   const handleKeyPress = (e) => {
@@ -602,6 +622,21 @@ export default function ChatWindow() {
           </div>
 
           <div className="chat-input-bar">
+            <button 
+              onClick={() => fileInputRef.current?.click()} 
+              className="glass-btn secondary" 
+              style={{ padding: '12px', borderRadius: '50%' }}
+              title="Anexar arquivo"
+            >
+              <Paperclip size={18} strokeWidth={2.5} />
+            </button>
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              onChange={handleFileSelect}
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+            />
             <input
               type="text"
               placeholder="Digite sua mensagem aqui..."

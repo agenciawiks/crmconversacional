@@ -1202,6 +1202,97 @@ export const CrmProvider = ({ children }) => {
     }
   };
 
+  const sendMedia = async (contactId, file, caption = '') => {
+    if (!file) return;
+
+    const time = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    // Optimistic update
+    const newMessage = normalizeMessage({
+      id: tempId,
+      sender: 'agent',
+      text: caption || `Arquivo enviado: ${file.name}`,
+      time,
+      timestamp: new Date(),
+      status: 'sending',
+      content_type: file.type,
+      media_url: '' // will be updated later if needed, or left as sending preview
+    });
+
+    setContacts(prev => (prev || []).map(c => {
+      if (c.id === contactId) {
+        return { ...c, messages: [...(c.messages || []), newMessage], unread: false };
+      }
+      return c;
+    }));
+
+    const activeC = contacts.find(c => c.id === contactId);
+    if (!activeC) return;
+
+    if (!activeC.tags.includes("IA Inativa")) {
+      updateContactTags(contactId, [...activeC.tags, "IA Inativa"]);
+    }
+
+    try {
+      // 1. Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${contactId}_${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('media')
+        .upload(fileName, file, { contentType: file.type, upsert: false });
+
+      if (uploadError) throw new Error("Storage upload failed: " + uploadError.message);
+
+      const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(fileName);
+      const mediaUrl = publicUrlData.publicUrl;
+
+      // Determine channel
+      const lastMsg = activeC.messages?.findLast(m => m.channel_id);
+      let channelId = lastMsg?.channel_id;
+      if (!channelId) {
+        const matchedChannel = channels.find(ch => ch.provider === activeC.provider) || channels.find(ch => ch.provider === 'meta' || ch.provider === 'meta_cloud');
+        channelId = matchedChannel ? matchedChannel.id : (channels[0]?.id || META_CHANNEL_ID);
+      }
+
+      // 2. Call n8n Webhook
+      await N8nService.sendOutboundMedia({
+        channelId,
+        contactId: activeC.id,
+        phone: activeC.phone,
+        mediaUrl,
+        contentType: file.type,
+        fileName: file.name,
+        caption: caption
+      });
+
+      // Mark as sent
+      setContacts(prev => (prev || []).map(c => {
+        if (c.id === contactId) {
+          return {
+            ...c,
+            messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'sent', media_url: mediaUrl } : m)
+          };
+        }
+        return c;
+      }));
+
+    } catch (e) {
+      console.error("Failed sending media:", e);
+      // Mark as failed
+      setContacts(prev => (prev || []).map(c => {
+        if (c.id === contactId) {
+          return {
+            ...c,
+            messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+          };
+        }
+        return c;
+      }));
+    }
+  };
+
   // Sort contacts by the most recent message timestamp descending (WhatsApp-like order)
   const sortedContacts = [...contacts].sort((a, b) => {
     const lastMsgA = a.messages && a.messages.length > 0 ? a.messages[a.messages.length - 1] : null;
@@ -1272,7 +1363,7 @@ export const CrmProvider = ({ children }) => {
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
-      updateNodeData, addFlowNode, deleteFlowNode, channels, addChannel, toggleChannelStatus, deleteChannel,
+      updateNodeData, addFlowNode, deleteFlowNode, sendMedia, channels, addChannel, toggleChannelStatus, deleteChannel,
       followupRules, setFollowupRules, globalTags, addGlobalTag, updateGlobalTag, deleteGlobalTag,
       dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts,
       appointments, setAppointments

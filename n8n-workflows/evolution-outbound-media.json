@@ -1,0 +1,407 @@
+{
+  "name": "Evolution Outbound Media",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-media",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Send Media",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "EVO_URL",
+              "value": "http://SEU_IP:8080"
+            },
+            {
+              "name": "INSTANCE_NAME",
+              "value": "nome_da_instancia"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "Configuração Evolution",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [200, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.content_type }}",
+              "operation": "startsWith",
+              "value2": "audio/"
+            }
+          ]
+        }
+      },
+      "id": "3",
+      "name": "É Áudio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuração Evolution').item.json.EVO_URL }}/message/sendWhatsAppAudio/{{ $('Configuração Evolution').item.json.INSTANCE_NAME }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Webhook Send Media').item.json.body.phone }}"
+            },
+            {
+              "name": "audio",
+              "value": "={{ $('Webhook Send Media').item.json.body.media_url }}"
+            },
+            {
+              "name": "encoding",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4",
+      "name": "Send Audio (URL)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [640, -120],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.error != undefined }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "5",
+      "name": "URL Falhou?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [860, -120]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Webhook Send Media').item.json.body.media_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "6",
+      "name": "Download Audio File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1080, -260]
+    },
+    {
+      "parameters": {
+        "jsCode": "const buffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn { base64: buffer.toString('base64') };"
+      },
+      "id": "7",
+      "name": "Convert Base64 Puro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, -260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuração Evolution').item.json.EVO_URL }}/message/sendWhatsAppAudio/{{ $('Configuração Evolution').item.json.INSTANCE_NAME }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Webhook Send Media').item.json.body.phone }}"
+            },
+            {
+              "name": "audio",
+              "value": "={{ $json.base64 }}"
+            },
+            {
+              "name": "encoding",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8",
+      "name": "Send Audio (Base64)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1520, -260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuração Evolution').item.json.EVO_URL }}/message/sendMedia/{{ $('Configuração Evolution').item.json.INSTANCE_NAME }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('Webhook Send Media').item.json.body.phone }}"
+            },
+            {
+              "name": "mediatype",
+              "value": "={{ $('Webhook Send Media').item.json.body.content_type.startsWith('video') ? 'video' : ($('Webhook Send Media').item.json.body.content_type.startsWith('image') ? 'image' : 'document') }}"
+            },
+            {
+              "name": "mimetype",
+              "value": "={{ $('Webhook Send Media').item.json.body.content_type }}"
+            },
+            {
+              "name": "media",
+              "value": "={{ $('Webhook Send Media').item.json.body.media_url }}"
+            },
+            {
+              "name": "fileName",
+              "value": "={{ $('Webhook Send Media').item.json.body.file_name }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Webhook Send Media').item.json.body.caption || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9",
+      "name": "Send Media (Image/Video/Doc)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [640, 160]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex",
+        "options": {}
+      },
+      "id": "10",
+      "name": "Merge Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1800, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.error != undefined }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "11",
+      "name": "Evolution Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2000, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": false,\n  \"error\": \"Falha ao enviar mídia pela Evolution API\"\n}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "12",
+      "name": "Respond Error to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2200, -100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"whatsapp_msg_id\": \"={{ $json.key?.id || $json.messageId || '' }}\"\n}",
+        "options": {}
+      },
+      "id": "13",
+      "name": "Respond Success to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2200, 140]
+    }
+  ],
+  "connections": {
+    "Webhook Send Media": {
+      "main": [
+        [
+          {
+            "node": "Configuração Evolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuração Evolution": {
+      "main": [
+        [
+          {
+            "node": "É Áudio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "É Áudio?": {
+      "main": [
+        [
+          {
+            "node": "Send Audio (URL)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Media (Image/Video/Doc)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Audio (URL)": {
+      "main": [
+        [
+          {
+            "node": "URL Falhou?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL Falhou?": {
+      "main": [
+        [
+          {
+            "node": "Download Audio File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Audio File": {
+      "main": [
+        [
+          {
+            "node": "Convert Base64 Puro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Base64 Puro": {
+      "main": [
+        [
+          {
+            "node": "Send Audio (Base64)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Audio (Base64)": {
+      "main": [
+        [
+          {
+            "node": "Merge Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Media (Image/Video/Doc)": {
+      "main": [
+        [
+          {
+            "node": "Merge Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Paths": {
+      "main": [
+        [
+          {
+            "node": "Evolution Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evolution Error?": {
+      "main": [
+        [
+          {
+            "node": "Respond Error to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Success to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
