@@ -24,7 +24,7 @@ const normalizeMessage = (rawMsg) => {
     id: rawMsg.id,
     sender: rawMsg.sender || (rawMsg.direction === 'in' ? 'client' : 'agent'),
     text: rawMsg.text || rawMsg.content || '',
-    time: rawMsg.time || (rawMsg.timestamp ? new Date(rawMsg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+    time: rawMsg.time || (rawMsg.timestamp ? new Date(rawMsg.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '') : new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '')),
     timestamp: rawMsg.timestamp instanceof Date ? rawMsg.timestamp : (rawMsg.timestamp ? new Date(rawMsg.timestamp) : new Date()),
     channel_id: rawMsg.channel_id || null,
     contact_id: rawMsg.contact_id || null,
@@ -318,7 +318,7 @@ export const CrmProvider = ({ children }) => {
             id: m.id,
             sender: m.direction === 'in' ? 'client' : 'agent',
             text: m.content,
-            time: new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date(m.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''),
             timestamp: new Date(m.timestamp),
             channel_id: m.channel_id,
             content_type: m.content_type,
@@ -1091,7 +1091,7 @@ export const CrmProvider = ({ children }) => {
               id: insertedMsg[0].id,
               sender: 'client',
               text: insertedMsg[0].content,
-              time: new Date(insertedMsg[0].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              time: new Date(insertedMsg[0].timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''),
               timestamp: new Date(insertedMsg[0].timestamp),
               channel_id: insertedMsg[0].channel_id
             };
@@ -1126,7 +1126,7 @@ export const CrmProvider = ({ children }) => {
   const sendMessage = async (contactId, text, sender = 'agent') => {
     if (!text.trim()) return;
     
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     
     // Optimistic UI update with "sending" status (fully normalized)

@@ -55,7 +55,7 @@ class SupabaseService {
       id: msg.id,
       sender: msg.direction === 'in' ? 'client' : 'agent',
       text: msg.content,
-      time: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(msg.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''),
       timestamp: new Date(msg.timestamp),
       channel_id: msg.channel_id,
       contact_id: msg.contact_id,
