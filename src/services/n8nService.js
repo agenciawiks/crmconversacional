@@ -26,7 +26,7 @@ class N8nService {
     return { success: true };
   }
 
-  static async sendOutboundMedia({ channelId, contactId, phone, mediaUrl, contentType, fileName, caption }) {
+  static async sendOutboundMedia({ channelId, contactId, phone, mediaUrl, contentType, mimeType, fileName, caption }) {
     if (!N8N_URL) {
       console.warn('[N8nService] VITE_N8N_WEBHOOK_URL not configured.');
       return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
@@ -41,6 +41,7 @@ class N8nService {
         phone: phone,
         media_url: mediaUrl,
         content_type: contentType,
+        mime_type: mimeType,
         file_name: fileName,
         caption: caption
       })

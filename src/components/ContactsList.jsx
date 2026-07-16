@@ -289,8 +289,12 @@ export default function ContactsList() {
                 {/* Visual profile detail */}
                 <td>
                   <div className="contact-profile-cell">
-                    <div className="avatar" style={{ background: contact.avatarColor }}>
-                      {contact.name.substring(0, 2).toUpperCase()}
+                    <div className="avatar" style={{ background: contact.avatar_url ? 'transparent' : contact.avatarColor }}>
+                      {contact.avatar_url ? (
+                        <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      ) : (
+                        contact.name.substring(0, 2).toUpperCase()
+                      )}
                     </div>
                     <div>
                       <span className="contact-name-bold" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -473,16 +477,21 @@ export default function ContactsList() {
                 width: '54px', 
                 height: '54px', 
                 borderRadius: '50%', 
-                background: selectedContact.avatarColor, 
+                background: selectedContact.avatar_url ? 'transparent' : selectedContact.avatarColor, 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center', 
                 fontWeight: '700', 
                 fontSize: '20px',
                 color: '#fff',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                overflow: 'hidden'
               }}>
-                {selectedContact.name.substring(0, 2).toUpperCase()}
+                {selectedContact.avatar_url ? (
+                  <img src={selectedContact.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  selectedContact.name.substring(0, 2).toUpperCase()
+                )}
               </div>
               <div>
                 <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{editName || selectedContact.name}</div>

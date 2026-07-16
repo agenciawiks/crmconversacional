@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../supabase';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, Mail, Lock, Sun, Moon, AlertCircle } from 'lucide-react';
 import '../styles/variables.css';
 
 export default function LoginScreen() {
@@ -8,6 +8,25 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Local theme state for unauthenticated screen
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('crm_theme') || 'dark';
+  });
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('crm_theme', nextTheme);
+    const root = document.documentElement;
+    if (nextTheme === 'dark') {
+      root.classList.add('dark-theme');
+      root.classList.remove('light-theme');
+    } else {
+      root.classList.add('light-theme');
+      root.classList.remove('dark-theme');
+    }
+  };
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -46,52 +65,73 @@ export default function LoginScreen() {
       background: 'var(--bg-app)',
       position: 'relative',
       overflow: 'hidden',
-      fontFamily: 'var(--font-sans)'
+      fontFamily: 'var(--font-sans)',
+      transition: 'background-color var(--transition-normal)'
     }}>
-      {/* Premium glowing background orbs */}
+      {/* Background Subtle Grid Pattern */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundImage: 'linear-gradient(to right, var(--bg-grid-color) 1px, transparent 1px), linear-gradient(to bottom, var(--bg-grid-color) 1px, transparent 1px)',
+        backgroundSize: '40px 40px',
+        opacity: 0.8,
+        zIndex: 0
+      }}></div>
+
+      {/* Brand Glowing Orbs */}
       <div style={{
         position: 'absolute',
         width: '600px',
         height: '600px',
-        background: 'var(--accent-glow)',
+        background: 'var(--bg-glow-1)',
         filter: 'blur(120px)',
         borderRadius: '50%',
-        top: '-10%',
-        left: '-10%',
+        top: '-15%',
+        left: '-15%',
         zIndex: 0,
-        opacity: 0.8
+        transition: 'background var(--transition-normal)'
       }}></div>
       <div style={{
         position: 'absolute',
         width: '500px',
         height: '500px',
-        background: 'rgba(6, 182, 212, 0.1)',
+        background: 'var(--bg-glow-2)',
         filter: 'blur(100px)',
         borderRadius: '50%',
-        bottom: '-10%',
-        right: '-10%',
+        bottom: '-15%',
+        right: '-15%',
         zIndex: 0,
-        opacity: 0.6
+        transition: 'background var(--transition-normal)'
       }}></div>
 
-      <div style={{
-        position: 'relative',
-        zIndex: 10,
-        width: '100%',
-        maxWidth: '400px',
-        padding: '48px 40px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '32px',
-        background: 'rgba(18, 18, 26, 0.6)',
-        backdropFilter: 'blur(32px)',
-        WebkitBackdropFilter: 'blur(32px)',
-        borderRadius: 'var(--radius-xl)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        boxShadow: '0 24px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.1)'
-      }}>
-        {/* Logo and Title */}
+      {/* Theme Switcher Toggle */}
+      <button 
+        onClick={toggleTheme} 
+        className="login-theme-btn"
+        aria-label="Alternar tema"
+        title="Alternar tema"
+      >
+        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+
+      {/* Glassmorphism Card */}
+      <div 
+        className="glass-panel" 
+        style={{
+          position: 'relative',
+          zIndex: 10,
+          width: '90%',
+          maxWidth: '420px',
+          padding: '48px 40px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '32px',
+          boxSizing: 'border-box'
+        }}
+      >
+        {/* Brand/Logo Area */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          {/* Logo container matching Sidebar style but scaled */}
           <div style={{
             width: '64px',
             height: '64px',
@@ -102,19 +142,20 @@ export default function LoginScreen() {
             justifyContent: 'center',
             overflow: 'hidden',
             padding: '6px',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)'
+            boxShadow: '0 8px 24px var(--accent-glow)',
+            border: '1px solid var(--border-glass)'
           }}>
             <img 
               src="/logo.jpg" 
-              alt="FaceAll Institute" 
+              alt="Wiks Logo" 
               style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '4px' }} 
             />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
             <h1 style={{
               fontFamily: 'var(--font-display)',
-              fontSize: '26px',
-              fontWeight: '700',
+              fontSize: '28px',
+              fontWeight: '800',
               color: 'var(--text-primary)',
               margin: 0,
               letterSpacing: '-0.5px'
@@ -132,103 +173,85 @@ export default function LoginScreen() {
           </div>
         </div>
 
-        {/* Inputs */}
+        {/* Form Inputs Section */}
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Styled Error Alert */}
           {errorMsg && (
-            <div style={{
-              background: 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid rgba(239, 68, 68, 0.2)',
-              color: '#FCA5A5',
-              padding: '12px 16px',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '13px',
-              textAlign: 'center',
-              fontWeight: '500',
-              animation: 'fadeIn 0.3s ease-out'
-            }}>
-              {errorMsg}
+            <div className="login-error-alert">
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>{errorMsg}</span>
             </div>
           )}
 
+          {/* Email field */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)', letterSpacing: '0.3px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', letterSpacing: '0.3px' }}>
               E-mail corporativo
             </label>
-            <input
-              type="email"
-              placeholder="seu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={handleKeyDown}
-              style={{ 
-                padding: '14px 16px',
-                background: 'rgba(0,0,0,0.2)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                fontSize: '15px',
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                width: '100%',
-                boxSizing: 'border-box'
-              }}
-              onFocus={(e) => e.target.style.border = '1px solid var(--accent-primary)'}
-              onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'}
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Mail 
+                size={18} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '14px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  color: 'var(--text-muted)' 
+                }} 
+              />
+              <input
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="glass-input"
+                style={{ paddingLeft: '44px' }}
+                disabled={loading}
+              />
+            </div>
           </div>
 
+          {/* Password field */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)', letterSpacing: '0.3px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', letterSpacing: '0.3px' }}>
               Senha
             </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={handleKeyDown}
-              style={{ 
-                padding: '14px 16px',
-                background: 'rgba(0,0,0,0.2)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text-primary)',
-                fontSize: '15px',
-                outline: 'none',
-                transition: 'all 0.2s ease',
-                width: '100%',
-                boxSizing: 'border-box'
-              }}
-              onFocus={(e) => e.target.style.border = '1px solid var(--accent-primary)'}
-              onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'}
-            />
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Lock 
+                size={18} 
+                style={{ 
+                  position: 'absolute', 
+                  left: '14px', 
+                  top: '50%', 
+                  transform: 'translateY(-50%)', 
+                  color: 'var(--text-muted)' 
+                }} 
+              />
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="glass-input"
+                style={{ paddingLeft: '44px' }}
+                disabled={loading}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Submit Button */}
+        {/* Action Button */}
         <button
           onClick={handleLogin}
           disabled={loading}
+          className="glass-btn"
           style={{
             marginTop: '8px',
-            padding: '16px',
-            background: 'var(--accent-primary)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 'var(--radius-md)',
-            fontSize: '16px',
-            fontWeight: '600',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.8 : 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            transition: 'all 0.3s ease',
-            boxShadow: '0 4px 20px var(--accent-glow)'
+            padding: '12px 18px',
+            width: '100%'
           }}
-          onMouseEnter={(e) => { if(!loading) e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={(e) => { if(!loading) e.currentTarget.style.transform = 'translateY(0)'; }}
         >
           {loading ? (
             <Loader2 size={20} className="animate-spin" />
@@ -239,7 +262,6 @@ export default function LoginScreen() {
             </>
           )}
         </button>
-
       </div>
     </div>
   );

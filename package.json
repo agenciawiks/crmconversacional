@@ -15,6 +15,7 @@
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "lucide-react": "^1.16.0",
+    "opus-media-recorder": "^0.8.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "recharts": "^2.12.7"

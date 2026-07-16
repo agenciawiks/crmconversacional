@@ -296,6 +296,40 @@ export const CrmProvider = ({ children }) => {
     localStorage.setItem('crm_theme', theme);
   }, [theme]);
 
+  // Keep a ref always sync'd with current contacts state
+  const contactsRef = useRef(contacts);
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
+  // On-Demand Profile Picture Sync with 1.5s Debounce (Anti-Ban & Ref-Based)
+  useEffect(() => {
+    if (!activeContactId) return;
+
+    const timer = setTimeout(async () => {
+      const contact = contactsRef.current.find(c => c.id === activeContactId);
+      if (!contact) return;
+
+      // Sync if missing photo OR if photo is expired (> 15 days)
+      const needsSync = !contact.avatar_url || (contact.avatar_updated_at && 
+        (Date.now() - new Date(contact.avatar_updated_at)) > 15 * 24 * 60 * 60 * 1000);
+      if (!needsSync) return;
+
+      try {
+        console.log(`[CRM] Secured debounced fetch triggered for contact_id: ${contact.id}`);
+        await fetch('https://n8n-n8n.rh3fr2.easypanel.host/webhook/fetch-profile-photo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contact_id: contact.id })
+        });
+      } catch (err) {
+        console.error('[CRM] Fetch avatar error:', err);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [activeContactId]);
+
   // Load full message history for active contact on selection
   useEffect(() => {
     if (!activeContactId) return;
@@ -1208,6 +1242,10 @@ export const CrmProvider = ({ children }) => {
     const time = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', '');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
+    const baseType = file.type.startsWith('image/') ? 'image' : 
+                     file.type.startsWith('video/') ? 'video' : 
+                     file.type.startsWith('audio/') ? 'audio' : 'document';
+
     // Optimistic update
     const newMessage = normalizeMessage({
       id: tempId,
@@ -1216,7 +1254,7 @@ export const CrmProvider = ({ children }) => {
       time,
       timestamp: new Date(),
       status: 'sending',
-      content_type: file.type,
+      content_type: baseType,
       media_url: '' // will be updated later if needed, or left as sending preview
     });
 
@@ -1234,19 +1272,33 @@ export const CrmProvider = ({ children }) => {
       updateContactTags(contactId, [...activeC.tags, "IA Inativa"]);
     }
 
+    let mediaUrl = '';
     try {
-      // 1. Upload to Supabase Storage
       const fileExt = file.name.split('.').pop();
       const fileName = `${contactId}_${Date.now()}.${fileExt}`;
       
+      let finalMimeType = file.type;
+      if (fileExt.toLowerCase() === 'ogg') {
+        finalMimeType = 'audio/ogg; codecs=opus';
+      }
+      
+      console.log("[UPLOAD DIAGNOSTIC] Iniciando upload para bucket 'media'...");
+      console.log("[UPLOAD DIAGNOSTIC] fileName:", fileName, "fileType:", finalMimeType, "size:", file.size);
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('media')
-        .upload(fileName, file, { contentType: file.type, upsert: false });
+        .upload(fileName, file, { contentType: finalMimeType, upsert: false });
 
-      if (uploadError) throw new Error("Storage upload failed: " + uploadError.message);
+      console.log("[UPLOAD DIAGNOSTIC] Retorno do upload:", { uploadData, uploadError });
+
+      if (uploadError) {
+        console.error("[UPLOAD DIAGNOSTIC] Erro EXATO do Supabase Storage:", uploadError);
+        throw new Error("Storage upload failed: " + uploadError.message);
+      }
 
       const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(fileName);
-      const mediaUrl = publicUrlData.publicUrl;
+      console.log("[UPLOAD DIAGNOSTIC] URL Pública gerada:", publicUrlData);
+      mediaUrl = publicUrlData.publicUrl;
 
       // Determine channel
       const lastMsg = activeC.messages?.findLast(m => m.channel_id);
@@ -1262,7 +1314,8 @@ export const CrmProvider = ({ children }) => {
         contactId: activeC.id,
         phone: activeC.phone,
         mediaUrl,
-        contentType: file.type,
+        contentType: baseType,
+        mimeType: finalMimeType,
         fileName: file.name,
         caption: caption
       });
@@ -1285,7 +1338,7 @@ export const CrmProvider = ({ children }) => {
         if (c.id === contactId) {
           return {
             ...c,
-            messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'failed' } : m)
+            messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'failed', media_url: mediaUrl } : m)
           };
         }
         return c;

@@ -367,3 +367,59 @@ p {
   transition-duration: 0.1s;
 }
 
+/* Redesigned Login Screen Styles */
+.login-theme-btn {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+  z-index: 100;
+}
+
+.login-theme-btn:hover {
+  background: var(--bg-surface-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.login-theme-btn:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.login-error-alert {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #fca5a5; /* High contrast default red for dark theme background */
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  text-align: center;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  animation: fadeIn var(--transition-normal) ease-out;
+}
+
+.light-theme .login-error-alert {
+  color: #b91c1c; /* High contrast red for light theme background */
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+

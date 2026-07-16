@@ -34,6 +34,18 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('crm_theme') || 'dark';
+    const root = document.documentElement;
+    if (savedTheme === 'dark') {
+      root.classList.add('dark-theme');
+      root.classList.remove('light-theme');
+    } else {
+      root.classList.add('light-theme');
+      root.classList.remove('dark-theme');
+    }
+  }, []);
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };

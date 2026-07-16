@@ -23,6 +23,8 @@ class SupabaseService {
       tags: c.tags || [],
       unread: false,
       avatarColor: `hsl(${Math.abs(this._hashCode(c.phone)) % 360}, 75%, 60%)`,
+      avatar_url: c.avatar_url || null,
+      avatar_updated_at: c.avatar_updated_at || null,
       notes: (function() {
         if (!c.notes) return [];
         try {
@@ -265,7 +267,7 @@ class SupabaseService {
           system_prompt: parsedPrompt.system_prompt ?? '',
           negative_prompt: parsedPrompt.negative_prompt ?? '',
           welcome_message: parsedPrompt.welcome_message ?? '',
-          is_enabled: parsedPrompt.is_enabled ?? false
+          is_enabled: row.is_enabled ?? false
         };
       }
     } catch(e) {
@@ -281,8 +283,7 @@ class SupabaseService {
       api_key: settings.api_key,
       system_prompt: settings.system_prompt,
       negative_prompt: settings.negative_prompt,
-      welcome_message: settings.welcome_message,
-      is_enabled: settings.is_enabled
+      welcome_message: settings.welcome_message
     });
 
     const body = {
@@ -290,7 +291,8 @@ class SupabaseService {
       channel_id: settings.channel_id,
       system_prompt: systemPromptJson,
       temperature: Number(settings.temperature) ?? 0.7,
-      pause_trigger_phrases: settings.pause_trigger_phrases || []
+      pause_trigger_phrases: settings.pause_trigger_phrases || [],
+      is_enabled: settings.is_enabled
     };
 
     try {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain, Paperclip } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain, Paperclip, Mic } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
+import VoiceRecorder from './VoiceRecorder';
 import TagBadge from './TagBadge';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -50,6 +51,7 @@ export default function ChatWindow() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [inputText, setInputText] = useState('');
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [newTagText, setNewTagText] = useState('');
   
@@ -96,7 +98,18 @@ export default function ChatWindow() {
     return matchesChannel && matchesStatus && matchesSearch;
   });
 
-  const handleSend = () => {
+  const handleSendVoice = async (file) => {
+    setIsRecordingVoice(false);
+    if (!activeContact) return;
+    try {
+      await sendMedia(activeContact.id, file);
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao enviar áudio.');
+    }
+  };
+
+  const handleSend = async () => {
     if (!inputText.trim()) return;
     sendMessage(activeContact.id, inputText, 'agent');
     setInputText('');
@@ -355,8 +368,12 @@ export default function ChatWindow() {
                 className={`chat-item-row ${isSelected ? 'active' : ''} ${contact.unread ? 'unread' : ''}`}
               >
                 <div className="chat-avatar-wrapper">
-                  <div className="avatar" style={{ background: contact.avatarColor }}>
-                    {contact.name.substring(0, 2).toUpperCase()}
+                  <div className="avatar" style={{ background: contact.avatar_url ? 'transparent' : contact.avatarColor }}>
+                    {contact.avatar_url ? (
+                      <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      contact.name.substring(0, 2).toUpperCase()
+                    )}
                   </div>
                   <span className={`channel-icon-badge ${contact.channel}`}>
                     {contact.channel === 'whatsapp' && 'W'}
@@ -426,8 +443,12 @@ export default function ChatWindow() {
       <div className="chat-active-panel">
         <div className="active-chat-header">
           <div className="active-contact-title">
-            <div className="avatar" style={{ background: activeContact.avatarColor }}>
-              {activeContact.name.substring(0, 2).toUpperCase()}
+            <div className="avatar" style={{ background: activeContact.avatar_url ? 'transparent' : activeContact.avatarColor }}>
+              {activeContact.avatar_url ? (
+                <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : (
+                activeContact.name.substring(0, 2).toUpperCase()
+              )}
             </div>
             <div>
               <span className="active-contact-name">{activeContact.name}</span>
@@ -637,18 +658,32 @@ export default function ChatWindow() {
               onChange={handleFileSelect}
               accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
             />
-            <input
-              type="text"
-              placeholder="Digite sua mensagem aqui..."
-              className="glass-input"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyPress}
-            />
-            <button onClick={handleSend} className="glass-btn" style={{ padding: '12px 20px' }}>
-              <span>Enviar</span>
-              <Send size={14} strokeWidth={2.5} />
-            </button>
+            {isRecordingVoice ? (
+              <VoiceRecorder 
+                onSend={handleSendVoice} 
+                onCancel={() => setIsRecordingVoice(false)} 
+              />
+            ) : (
+              <>
+                <input
+                  type="text"
+                  placeholder="Digite sua mensagem aqui..."
+                  className="glass-input"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                />
+                {!inputText.trim() && (
+                  <button onClick={() => setIsRecordingVoice(true)} className="glass-btn secondary" style={{ padding: '12px', borderRadius: '50%' }} title="Gravar Áudio">
+                    <Mic size={18} strokeWidth={2.5} />
+                  </button>
+                )}
+                <button onClick={handleSend} className="glass-btn" style={{ padding: '12px 20px' }}>
+                  <span>Enviar</span>
+                  <Send size={14} strokeWidth={2.5} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -660,17 +695,22 @@ export default function ChatWindow() {
             width: '64px',
             height: '64px',
             fontSize: '22px',
-            background: activeContact.avatarColor,
+            background: activeContact.avatar_url ? 'transparent' : activeContact.avatarColor,
             border: '2px solid var(--border-glass)'
           }}>
-            {activeContact.name.substring(0, 2).toUpperCase()}
+            {activeContact.avatar_url ? (
+              <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              activeContact.name.substring(0, 2).toUpperCase()
+            )}
           </div>
           <span className="profile-name">{activeContact.name}</span>
           <div className="profile-meta-chips">
             <span className={`tag tag-${activeContact.channel}`}>
               {activeContact.channel === 'whatsapp' ? (
                 activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' : 'WhatsApp'
-              ) : activeContact.channel === 'telegram' ? 'Instagram' :
+              ) : activeContact.channel === 'telegram' ? 'Telegram' :
+                  activeContact.channel === 'instagram' ? 'Instagram' :
                   activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
             </span>
             <span className={`tag status-${activeContact.status}`}>
