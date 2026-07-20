@@ -134,6 +134,7 @@ export default function AiAgentSettings() {
           setId(result.id);
           setTenantId(result.tenant_id);
         }
+        if (apiKey) setApiKey('');
         showStatus('success', 'Configurações do Agente de IA salvas com sucesso!');
       } else {
         showStatus('error', 'Ocorreu um erro ao salvar as configurações.');
@@ -360,8 +361,8 @@ export default function AiAgentSettings() {
               />
             </div>
 
-            {/* API Key Status Display */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* API Key Status & Write-Only Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status da Chave de API</label>
               <div style={{
                 padding: '10px 14px',
@@ -377,9 +378,44 @@ export default function AiAgentSettings() {
                   Gerenciada com segurança via Servidor Proxy (n8n)
                 </span>
               </div>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: '1.3' }}>
-                Por motivos de segurança (RLS), a chave de API da OpenAI é mantida em cofre no banco de dados e não é exposta no navegador.
-              </span>
+
+              {/* Write-Only Rotation Input */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                  Atualizar / Rotacionar Chave (Write-Only)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showApiKey ? 'text' : 'password'} 
+                    className="glass-input" 
+                    style={{ paddingRight: '40px' }}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Cole uma nova chave sk-proj-... para atualizar"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: '1.3' }}>
+                  Este campo opera em modo <strong>Write-Only</strong> (apenas gravação): a chave salva é enviada ao banco com segurança e nunca é lida ou exposta no navegador.
+                </span>
+              </div>
             </div>
           </div>
         </div>
