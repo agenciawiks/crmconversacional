@@ -1,12 +1,13 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX, RotateCw } from 'lucide-react';
 
 export default function Sidebar() {
   const { 
     activeScreen, setActiveScreen, theme, toggleTheme,
-    soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, requestNotificationPermission
+    soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, requestNotificationPermission,
+    realtimeStatus, reconnectRealtime
   } = useCrm();
   const { user, signOut } = useAuth();
   
@@ -207,6 +208,88 @@ export default function Sidebar() {
             {notificationsEnabled ? <Bell size={13} /> : <BellOff size={13} />}
             <span>{notificationsEnabled ? 'Notif' : 'Sem Notif'}</span>
           </button>
+        </div>
+
+        {/* Realtime Connection Health Indicator */}
+        <div 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            borderRadius: 'var(--radius-md)',
+            background: realtimeStatus === 'disconnected' ? 'rgba(239, 68, 68, 0.12)' : 'var(--bg-surface-hover)',
+            border: realtimeStatus === 'disconnected' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid var(--border-glass)',
+            transition: 'all 0.2s ease',
+            marginBottom: '4px'
+          }}
+          title={
+            realtimeStatus === 'connected' 
+              ? "Tempo real conectado (WebSocket ativo)" 
+              : realtimeStatus === 'connecting'
+                ? "Reconectando servidor em tempo real..."
+                : "Sem conexão WebSocket. As mensagens continuam sendo recebidas via Polling automático (5s)."
+          }
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <div style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              flexShrink: 0,
+              background: realtimeStatus === 'connected' 
+                ? 'var(--color-status-won)' 
+                : realtimeStatus === 'connecting'
+                  ? 'var(--warning-color)'
+                  : 'var(--color-status-lost)',
+              boxShadow: realtimeStatus === 'connected'
+                ? '0 0 8px var(--color-status-won)'
+                : realtimeStatus === 'connecting'
+                  ? '0 0 8px var(--warning-color)'
+                  : '0 0 8px var(--color-status-lost)',
+              animation: realtimeStatus === 'connecting' ? 'pulse 1.5s infinite' : 'none'
+            }} />
+            <span style={{
+              fontSize: '11px',
+              fontWeight: '600',
+              color: realtimeStatus === 'disconnected' ? 'var(--color-status-lost)' : 'var(--text-secondary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}>
+              {realtimeStatus === 'connected' && 'Tempo real ativo'}
+              {realtimeStatus === 'connecting' && 'Reconectando...'}
+              {realtimeStatus === 'disconnected' && 'Sem tempo real'}
+            </span>
+          </div>
+
+          {realtimeStatus === 'disconnected' ? (
+            <button
+              type="button"
+              onClick={reconnectRealtime}
+              style={{
+                background: 'var(--color-status-lost)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '3px 8px',
+                fontSize: '10px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+              title="Forçar reconexão dos canais em tempo real"
+            >
+              <RotateCw size={10} strokeWidth={2.5} />
+              Reconectar
+            </button>
+          ) : (
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+              {realtimeStatus === 'connected' ? 'WebSocket' : 'Polling'}
+            </span>
+          )}
         </div>
 
         {/* Theme Switcher Toggle */}

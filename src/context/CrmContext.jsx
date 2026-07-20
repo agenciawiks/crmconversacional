@@ -59,6 +59,43 @@ export const CrmProvider = ({ children }) => {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [audioSpeed, setAudioSpeed] = useState(1);
 
+  // Realtime Connection Health Monitor
+  const [realtimeStatus, setRealtimeStatus] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
+  const [reconnectTrigger, setReconnectTrigger] = useState(0);
+
+  const channelStatusesRef = useRef({
+    messages: 'connecting',
+    contacts: 'connecting'
+  });
+
+  const updateChannelStatus = useCallback((channelName, statusStr) => {
+    let state = 'connecting';
+    if (statusStr === 'SUBSCRIBED') {
+      state = 'connected';
+    } else if (['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'].includes(statusStr)) {
+      state = 'disconnected';
+    } else {
+      state = 'connecting';
+    }
+
+    channelStatusesRef.current[channelName] = state;
+    const statuses = Object.values(channelStatusesRef.current);
+
+    if (statuses.some(s => s === 'disconnected')) {
+      setRealtimeStatus('disconnected');
+    } else if (statuses.every(s => s === 'connected')) {
+      setRealtimeStatus('connected');
+    } else {
+      setRealtimeStatus('connecting');
+    }
+  }, []);
+
+  const reconnectRealtime = useCallback(() => {
+    setRealtimeStatus('connecting');
+    channelStatusesRef.current = { messages: 'connecting', contacts: 'connecting' };
+    setReconnectTrigger(prev => prev + 1);
+  }, []);
+
   const soundEnabledRef = useRef(soundEnabled);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
@@ -701,7 +738,7 @@ export const CrmProvider = ({ children }) => {
     if (!supabase) return;
 
     const channel = supabase
-      .channel('public:messages:direct')
+      .channel(`public:messages:direct:${reconnectTrigger}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
@@ -714,12 +751,13 @@ export const CrmProvider = ({ children }) => {
       )
       .subscribe((status) => {
         console.log('[Supabase Realtime] Direct channel status:', status);
+        updateChannelStatus('messages', status);
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [mergeMessage]);
+  }, [mergeMessage, updateChannelStatus, reconnectTrigger]);
 
   // Realtime subscription on contacts table to sync pipeline stage & tags in realtime
   useEffect(() => {
@@ -783,12 +821,13 @@ export const CrmProvider = ({ children }) => {
       )
       .subscribe((status) => {
         console.log('[Supabase Realtime] Contacts channel status:', status);
+        updateChannelStatus('contacts', status);
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [updateChannelStatus, reconnectTrigger]);
 
   // Realtime subscription on followup_queue to trigger alert when a follow-up is dispatched
   useEffect(() => {
@@ -1573,7 +1612,8 @@ export const CrmProvider = ({ children }) => {
       dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts,
       appointments, setAppointments,
       soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled,
-      requestNotificationPermission, audioSpeed, setAudioSpeed
+      requestNotificationPermission, audioSpeed, setAudioSpeed,
+      realtimeStatus, reconnectRealtime
     }}>
       {children}
     </CrmContext.Provider>
