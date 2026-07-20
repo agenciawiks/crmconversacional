@@ -77,14 +77,14 @@ export default function KanbanBoard() {
 
     // Cylinder widths and Y positioning (5 stages now)
     const stages = [
-      { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 280, wBottom: 220, y: 20, h: 42 },
-      { title: 'Sem Resposta', count: noAnswerCount, color: '#f97316', wTop: 216, wBottom: 170, y: 74, h: 42 },
-      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 166, wBottom: 120, y: 128, h: 42 },
-      { title: 'Tem Interesse', count: proposalCount, color: '#eab308', wTop: 116, wBottom: 76, y: 182, h: 42 },
-      { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 72, wBottom: 36, y: 236, h: 42 }
+      { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 340, wBottom: 270, y: 20, h: 44 },
+      { title: 'Sem Resposta', count: noAnswerCount, color: '#f97316', wTop: 266, wBottom: 210, y: 76, h: 44 },
+      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 206, wBottom: 156, y: 132, h: 44 },
+      { title: 'Tem Interesse', count: proposalCount, color: '#eab308', wTop: 152, wBottom: 110, y: 188, h: 44 },
+      { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 106, wBottom: 70, y: 244, h: 44 }
     ];
 
-    const cx = 228; // Centered on a 500px wide SVG canvas: left margin 98px, right margin 98px
+    const cx = 250; // Centered on a 500px wide SVG canvas
 
     return (
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
@@ -131,10 +131,6 @@ export default function KanbanBoard() {
                 
                 const isHovered = hoveredFunnelStage === i;
                 
-                const conversionRate = i > 0 && stages[i-1].count > 0 
-                  ? Math.round((st.count / stages[i-1].count) * 100) 
-                  : 100;
-                
                 return (
                   <g 
                     key={i} 
@@ -174,50 +170,16 @@ export default function KanbanBoard() {
                     {/* Inner text metric */}
                     <text 
                       x={cx} 
-                      y={y1 + st.h/2 + 4} 
-                      fill="#fff" 
-                      fontSize="12" 
-                      fontWeight="800" 
+                      y={y1 + st.h / 2} 
+                      fill="#ffffff" 
+                      fontSize="13" 
+                      fontWeight="700" 
                       textAnchor="middle" 
-                      style={{ pointerEvents: 'none', fontFamily: 'var(--font-sans)', letterSpacing: '0.5px' }}
+                      dominantBaseline="central"
+                      style={{ pointerEvents: 'none', fontFamily: 'var(--font-sans)', letterSpacing: '0.4px', filter: 'drop-shadow(0px 1px 2px rgba(0, 0, 0, 0.7))' }}
                     >
                       {st.title}: {st.count}
                     </text>
-  
-                    {/* Conversion rate indicator to the right */}
-                    {i > 0 && (
-                      <g style={{ transition: 'opacity 0.3s ease', opacity: hoveredFunnelStage === null || isHovered ? 1 : 0.4 }}>
-                        {/* Connecting curve */}
-                        <path 
-                          d={`M ${cx + rx1 + 10} ${y1 - 12} Q ${cx + rx1 + 25} ${y1} ${cx + rx1 + 10} ${y1 + 12}`}
-                          fill="transparent"
-                          stroke="rgba(255,255,255,0.2)"
-                          strokeWidth="1.5"
-                          strokeDasharray="3,3"
-                        />
-                        {/* Conversion label box */}
-                        <rect 
-                          x={cx + rx1 + 24} 
-                          y={y1 - 10} 
-                          width="52" 
-                          height="20" 
-                          rx="6" 
-                          fill="rgba(16, 185, 129, 0.08)" 
-                          stroke="rgba(16, 185, 129, 0.35)" 
-                          strokeWidth="1" 
-                        />
-                        <text 
-                          x={cx + rx1 + 50} 
-                          y={y1 + 3} 
-                          fill="#10b981" 
-                          fontSize="10" 
-                          fontWeight="800" 
-                          textAnchor="middle"
-                        >
-                          {conversionRate}%
-                        </text>
-                      </g>
-                    )}
                   </g>
                 );
               })}
