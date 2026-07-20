@@ -372,7 +372,7 @@ export default function ChatWindow() {
                     {contact.avatar_url ? (
                       <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
-                      contact.name.substring(0, 2).toUpperCase()
+                      (contact.name || 'Sem nome').substring(0, 2).toUpperCase()
                     )}
                   </div>
                   <span className={`channel-icon-badge ${contact.channel}`}>
@@ -447,7 +447,7 @@ export default function ChatWindow() {
               {activeContact.avatar_url ? (
                 <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
-                activeContact.name.substring(0, 2).toUpperCase()
+                (activeContact.name || 'Sem nome').substring(0, 2).toUpperCase()
               )}
             </div>
             <div>
@@ -701,7 +701,7 @@ export default function ChatWindow() {
             {activeContact.avatar_url ? (
               <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
-              activeContact.name.substring(0, 2).toUpperCase()
+              (activeContact.name || 'Sem nome').substring(0, 2).toUpperCase()
             )}
           </div>
           <span className="profile-name">{activeContact.name}</span>

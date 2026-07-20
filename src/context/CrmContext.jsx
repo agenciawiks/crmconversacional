@@ -190,7 +190,7 @@ export const CrmProvider = ({ children }) => {
 
           const resolvedStatus = c.status || contactMeta.status || defaultStage;
           const resolvedValue = c.value !== undefined ? c.value : defaultValue;
-          const rawName = contactMeta.name || c.name;
+          const rawName = contactMeta.name || c.name || 'Sem nome';
           const resolvedTags = c.tags || contactMeta.tags || [];
 
           let displayName = rawName;
@@ -199,11 +199,12 @@ export const CrmProvider = ({ children }) => {
             if (rawName.includes(' | @')) {
               const parts = rawName.split(' | @');
               username = parts[parts.length - 1];
-              displayName = parts.slice(0, -1).join(' | @');
+              displayName = parts.slice(0, -1).join(' | @') || 'Sem nome';
             } else if (channelType === 'telegram' && !rawName.includes(' ')) {
               username = rawName;
             }
           }
+          if (!displayName) displayName = 'Sem nome';
 
           return { 
             ...c, 
@@ -535,18 +536,19 @@ export const CrmProvider = ({ children }) => {
             
             let defaultValue = 0;
 
-            const rawName = contactMeta.name || freshC.name;
+            const rawName = contactMeta.name || freshC.name || 'Novo Contato';
             let displayName = rawName;
             let username = '';
             if (rawName) {
               if (rawName.includes(' | @')) {
                 const parts = rawName.split(' | @');
                 username = parts[parts.length - 1];
-                displayName = parts.slice(0, -1).join(' | @');
+                displayName = parts.slice(0, -1).join(' | @') || 'Novo Contato';
               } else if (resolvedChannel === 'telegram' && !rawName.includes(' ')) {
                 username = rawName;
               }
             }
+            if (!displayName) displayName = 'Novo Contato';
             const mappedFreshC = {
               ...freshC,
               name: displayName,
@@ -635,14 +637,15 @@ export const CrmProvider = ({ children }) => {
               const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
               const contactMeta = meta[updatedContact.id] || {};
               
-              const rawName = contactMeta.name || updatedContact.name;
+              const rawName = contactMeta.name || updatedContact.name || c.name || 'Sem nome';
               let displayName = rawName;
               let username = '';
               if (rawName && rawName.includes(' | @')) {
                 const parts = rawName.split(' | @');
                 username = parts[parts.length - 1];
-                displayName = parts.slice(0, -1).join(' | @');
+                displayName = parts.slice(0, -1).join(' | @') || 'Sem nome';
               }
+              if (!displayName) displayName = 'Sem nome';
               
               // Parse notes from raw DB format (string JSON or null) into array
               let parsedNotes = c.notes; // keep existing
@@ -779,7 +782,7 @@ export const CrmProvider = ({ children }) => {
 
                       return {
                         ...c,
-                        name: contactMeta.name || c.name,
+                        name: contactMeta.name || c.name || 'Sem nome',
                         tags: c.tags || contactMeta.tags || [],
                         status: c.status || contactMeta.status || defaultStage,
                         value: contactMeta.value !== undefined ? contactMeta.value : (c.value || defaultValue),

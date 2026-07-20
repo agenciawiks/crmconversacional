@@ -369,7 +369,7 @@ export default function Dashboard() {
                   <tr key={contact.id} className="proposal-table-row" style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                     <td style={{ padding: '14px 8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div className="avatar" style={{ background: contact.avatarColor, width: '28px', height: '28px', fontSize: '11px' }}>
-                        {contact.name.substring(0, 2).toUpperCase()}
+                        {(contact.name || 'Sem nome').substring(0, 2).toUpperCase()}
                       </div>
                       <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>{contact.name}</span>
                     </td>
@@ -424,7 +424,7 @@ export default function Dashboard() {
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                   <div className="avatar" style={{ background: contact.avatarColor, width: '28px', height: '28px', fontSize: '11px', flexShrink: 0 }}>
-                    {contact.name.substring(0, 2).toUpperCase()}
+                    {(contact.name || 'Sem nome').substring(0, 2).toUpperCase()}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                     <span style={{ fontWeight: '600', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name}</span>

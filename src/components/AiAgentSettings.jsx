@@ -119,7 +119,7 @@ export default function AiAgentSettings() {
       is_enabled: isEnabled,
       agent_name: agentName,
       model,
-      api_key: apiKey,
+      ...(apiKey ? { api_key: apiKey } : {}),
       temperature: Number(temperature),
       system_prompt: systemPrompt,
       negative_prompt: negativePrompt,
@@ -360,39 +360,25 @@ export default function AiAgentSettings() {
               />
             </div>
 
-            {/* API Key */}
+            {/* API Key Status Display */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>OpenAI API Key</label>
-              <div style={{ position: 'relative' }}>
-                <input 
-                  type={showApiKey ? 'text' : 'password'} 
-                  className="glass-input" 
-                  style={{ paddingRight: '40px' }}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-proj-..."
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
-                >
-                  {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status da Chave de API</label>
+              <div style={{
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--bg-surface-hover)',
+                border: '1px solid var(--border-glass)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-status-won)', boxShadow: '0 0 8px var(--color-status-won)' }} />
+                <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                  Gerenciada com segurança via Servidor Proxy (n8n)
+                </span>
               </div>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: '1.3' }}>
-                A chave de API é necessária para que o n8n execute as chamadas de inferência de forma autônoma.
+                Por motivos de segurança (RLS), a chave de API da OpenAI é mantida em cofre no banco de dados e não é exposta no navegador.
               </span>
             </div>
           </div>

@@ -293,7 +293,7 @@ export default function ContactsList() {
                       {contact.avatar_url ? (
                         <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                       ) : (
-                        contact.name.substring(0, 2).toUpperCase()
+                        (contact.name || 'Sem nome').substring(0, 2).toUpperCase()
                       )}
                     </div>
                     <div>
@@ -490,7 +490,7 @@ export default function ContactsList() {
                 {selectedContact.avatar_url ? (
                   <img src={selectedContact.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  selectedContact.name.substring(0, 2).toUpperCase()
+                  (selectedContact.name || 'Sem nome').substring(0, 2).toUpperCase()
                 )}
               </div>
               <div>

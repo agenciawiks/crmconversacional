@@ -8,7 +8,7 @@ export default function Sidebar() {
   const { user, signOut } = useAuth();
   
   const displayName = user?.user_metadata?.name || user?.email || 'Usuário Logado';
-  const displayInitials = displayName.substring(0, 2).toUpperCase();
+  const displayInitials = (displayName || 'UA').substring(0, 2).toUpperCase();
 
   const menuItems = [
     {
