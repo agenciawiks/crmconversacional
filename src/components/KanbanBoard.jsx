@@ -707,11 +707,11 @@ export default function KanbanBoard() {
     const totalOutbound = filteredContacts.reduce((acc, c) => acc + (c.messages?.filter(m => m.sender === 'agent' || m.sender === 'bot').length || 0), 0);
     const botHandled = filteredContacts.reduce((acc, c) => {
       const isAiPaused = c.tags?.includes('IA Inativa');
-      const outbound = c.messages?.filter(m => m.sender === 'agent' || m.sender === 'bot') || [];
-      return acc + (isAiPaused ? 0 : outbound.length);
+      const botMsgs = c.messages?.filter(m => m.sender === 'bot') || [];
+      return acc + (isAiPaused ? 0 : botMsgs.length);
     }, 0);
     const humanHandled = totalOutbound - botHandled;
-    const automationRate = totalOutbound > 0 ? Math.round((botHandled / totalOutbound) * 100) : 88;
+    const automationRate = (totalOutbound > 0 && botHandled > 0) ? Math.round((botHandled / totalOutbound) * 100) : 0;
 
     // Calculate real average response latency of AI
     let totalLatency = 0;
@@ -724,7 +724,7 @@ export default function KanbanBoard() {
       for (let i = 0; i < msgs.length - 1; i++) {
         const current = msgs[i];
         const next = msgs[i + 1];
-        if (current.sender === 'client' && (next.sender === 'agent' || next.sender === 'bot')) {
+        if (current.sender === 'client' && next.sender === 'bot') {
           const diff = new Date(next.timestamp) - new Date(current.timestamp);
           if (diff > 0 && diff < 30 * 1000) { // evaluate latency only for instantaneous AI replies (< 30s)
             totalLatency += diff;
@@ -734,7 +734,7 @@ export default function KanbanBoard() {
       }
     });
     const avgLatencySec = latencyCount > 0 ? (totalLatency / latencyCount / 1000).toFixed(1) : null;
-    const latencyDisplay = avgLatencySec ? `< ${avgLatencySec}s` : '< 2s';
+    const latencyDisplay = avgLatencySec ? `< ${avgLatencySec}s` : (botHandled > 0 ? '< 2.5s' : 'N/A');
 
     return (
       <Card className="flex flex-col glass-panel" style={{ padding: '0px', flex: 1, border: 'none', background: 'transparent' }}>
