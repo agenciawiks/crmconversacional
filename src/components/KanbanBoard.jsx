@@ -28,8 +28,8 @@ export default function KanbanBoard() {
 
   const columns = [
     { id: 'new', title: 'Novos Leads', class: 'new' },
-    { id: 'contacted', title: 'Em Contato', class: 'contacted' },
     { id: 'no_answer', title: 'Sem Resposta', class: 'no-answer' },
+    { id: 'contacted', title: 'Em Contato', class: 'contacted' },
     { id: 'proposal', title: 'Tem Interesse', class: 'proposal' },
     { id: 'won', title: 'Vendas Ganhas', class: 'won' },
     { id: 'lost', title: 'Perdidos', class: 'lost' }
@@ -78,8 +78,8 @@ export default function KanbanBoard() {
     // Cylinder widths and Y positioning (5 stages now)
     const stages = [
       { title: 'Novos Leads', count: newCount, color: '#a855f7', wTop: 280, wBottom: 220, y: 20, h: 42 },
-      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 216, wBottom: 170, y: 74, h: 42 },
-      { title: 'Sem Resposta', count: noAnswerCount, color: '#f97316', wTop: 166, wBottom: 120, y: 128, h: 42 },
+      { title: 'Sem Resposta', count: noAnswerCount, color: '#f97316', wTop: 216, wBottom: 170, y: 74, h: 42 },
+      { title: 'Em Contato', count: contactedCount, color: '#3b82f6', wTop: 166, wBottom: 120, y: 128, h: 42 },
       { title: 'Tem Interesse', count: proposalCount, color: '#eab308', wTop: 116, wBottom: 76, y: 182, h: 42 },
       { title: 'Vendas Ganhas', count: wonCount, color: '#10b981', wTop: 72, wBottom: 36, y: 236, h: 42 }
     ];
@@ -298,8 +298,8 @@ export default function KanbanBoard() {
 
     const rawSegments = [
       { name: "Novos Leads", value: newCount, color: "url(#donut-grad-new)", solidColor: "#a855f7" },
-      { name: "Em Contato", value: contactedCount, color: "url(#donut-grad-contacted)", solidColor: "#3b82f6" },
       { name: "Sem Resposta", value: noAnswerCount, color: "url(#donut-grad-no-answer)", solidColor: "#f97316" },
+      { name: "Em Contato", value: contactedCount, color: "url(#donut-grad-contacted)", solidColor: "#3b82f6" },
       { name: "Tem Interesse", value: proposalCount, color: "url(#donut-grad-proposal)", solidColor: "#eab308" },
       { name: "Vendas Ganhas", value: wonCount, color: "url(#donut-grad-won)", solidColor: "#10b981" },
       { name: "Perdidos", value: lostCount, color: "url(#donut-grad-lost)", solidColor: "#ef4444" }

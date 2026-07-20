@@ -551,8 +551,8 @@ export default function ContactsList() {
                     style={{ width: '100%', height: '42px' }}
                   >
                     <option value="new">Novo Lead</option>
-                    <option value="contacted">Em Contato</option>
                     <option value="no_answer">Sem Resposta</option>
+                    <option value="contacted">Em Contato</option>
                     <option value="proposal">Tem Interesse</option>
                     <option value="won">Vendido</option>
                     <option value="lost">Perdido</option>

@@ -320,20 +320,20 @@ export default function ChatWindow() {
               Novos Leads {statusFilter === 'new' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
-              onClick={() => setStatusFilter('contacted')}
-              className={`channel-tab-btn ${statusFilter === 'contacted' ? 'active' : ''}`}
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-contacted)', marginRight: '4px' }}></span>
-              Em Contato {statusFilter === 'contacted' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
-            </button>
-            <button
               onClick={() => setStatusFilter('no_answer')}
               className={`channel-tab-btn ${statusFilter === 'no_answer' ? 'active' : ''}`}
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-no-answer)', marginRight: '4px' }}></span>
               Sem Resposta {statusFilter === 'no_answer' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
+            </button>
+            <button
+              onClick={() => setStatusFilter('contacted')}
+              className={`channel-tab-btn ${statusFilter === 'contacted' ? 'active' : ''}`}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-contacted)', marginRight: '4px' }}></span>
+              Em Contato {statusFilter === 'contacted' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
               onClick={() => setStatusFilter('proposal')}
@@ -857,8 +857,8 @@ export default function ChatWindow() {
                 >
                   {[
                     { id: 'new', label: 'Novos Leads', class: 'new' },
-                    { id: 'contacted', label: 'Em Contato', class: 'contacted' },
                     { id: 'no_answer', label: 'Sem Resposta', class: 'no_answer' },
+                    { id: 'contacted', label: 'Em Contato', class: 'contacted' },
                     { id: 'proposal', label: 'Tem Interesse', class: 'proposal' },
                     { id: 'won', label: 'Vendas Ganhas', class: 'won' },
                     { id: 'lost', label: 'Perdidos', class: 'lost' }
