@@ -34,44 +34,6 @@ const normalizeMessage = (rawMsg) => {
   };
 };
 
-const playNotificationChime = () => {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
-
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
-  } catch (e) {}
-};
-
-const sendPrivacyNotification = (contactName) => {
-  if (typeof Notification === 'undefined') return;
-  if (Notification.permission === 'granted') {
-    try {
-      new Notification("Nova mensagem recebida", {
-        body: `Você recebeu uma nova mensagem de ${contactName || 'um contato'}.`,
-        icon: '/favicon.ico',
-        tag: 'crm-new-message-privacy'
-      });
-    } catch (e) {}
-  } else if (Notification.permission !== 'denied') {
-    try { Notification.requestPermission(); } catch (e) {}
-  }
-};
-
 export const CrmProvider = ({ children }) => {
   const [activeScreen, setActiveScreen] = useState(() => {
     return localStorage.getItem('crm_active_screen') || 'dashboard';
@@ -91,6 +53,109 @@ export const CrmProvider = ({ children }) => {
   const [followupRules, setFollowupRules] = useState([]);
   const [globalTags, setGlobalTags] = useState([]);
   const [channels, setChannels] = useState([]);
+
+  // Operator Notification & Audio Speed States (In-Memory Session Only)
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [audioSpeed, setAudioSpeed] = useState(1);
+
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
+
+  const notificationsEnabledRef = useRef(notificationsEnabled);
+  useEffect(() => { notificationsEnabledRef.current = notificationsEnabled; }, [notificationsEnabled]);
+
+  const activeContactIdRef = useRef(activeContactId);
+  useEffect(() => { activeContactIdRef.current = activeContactId; }, [activeContactId]);
+
+  const activeScreenRef = useRef(activeScreen);
+  useEffect(() => { activeScreenRef.current = activeScreen; }, [activeScreen]);
+
+  const lastSoundTimeRef = useRef(0);
+  const audioCtxRef = useRef(null);
+
+  // Web Audio API Discrete Sound Chime (Throttled max 1 sound per 3s)
+  const playNotificationChime = useCallback(() => {
+    if (!soundEnabledRef.current) return;
+    const now = Date.now();
+    if (now - lastSoundTimeRef.current < 3000) return;
+    lastSoundTimeRef.current = now;
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    } catch (e) {}
+  }, []);
+
+  // Privacy-Compliant Desktop Notification (No Message Snippet, No Preview)
+  const sendPrivacyNotification = useCallback((contactName, contactId) => {
+    if (!notificationsEnabledRef.current) return;
+    if (typeof Notification === 'undefined') return;
+
+    if (Notification.permission === 'granted') {
+      try {
+        const notif = new Notification("Nova mensagem", {
+          body: `Nova mensagem de ${contactName || 'um contato'}.`,
+          icon: '/favicon.ico',
+          tag: `crm-msg-${contactId || 'unknown'}`
+        });
+
+        notif.onclick = () => {
+          try { window.focus(); } catch (e) {}
+          if (contactId) {
+            setActiveContactId(contactId);
+            setActiveScreen('chat');
+          }
+          notif.close();
+        };
+      } catch (e) {}
+    }
+  }, [setActiveContactId, setActiveScreen]);
+
+  // Non-Invasive Notification Permission Request
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof Notification === 'undefined') return 'unsupported';
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        setNotificationsEnabled(true);
+      }
+      return perm;
+    } catch (e) {
+      return 'denied';
+    }
+  }, []);
+
+  // AudioContext Cleanup on Unmount
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        try { audioCtxRef.current.close(); } catch (e) {}
+      }
+    };
+  }, []);
 
   const lastPollRef = useRef(new Date().toISOString());
   const knownMsgIdsRef = useRef(new Set());
@@ -476,9 +541,14 @@ export const CrmProvider = ({ children }) => {
 
     // Trigger privacy-compliant sound & desktop notification for incoming client messages
     if (newMsg.sender === 'client') {
-      playNotificationChime();
-      const matchedContact = (contactsRef.current || []).find(c => c.id === newMsg.contact_id);
-      sendPrivacyNotification(matchedContact?.name);
+      const isBackground = document.hidden;
+      const isOtherChat = newMsg.contact_id !== activeContactIdRef.current || activeScreenRef.current !== 'chat';
+
+      if (isBackground || isOtherChat) {
+        playNotificationChime();
+        const matchedContact = (contactsRef.current || []).find(c => c.id === newMsg.contact_id);
+        sendPrivacyNotification(matchedContact?.name, newMsg.contact_id);
+      }
     }
 
     setContacts(prev => {
@@ -1469,7 +1539,9 @@ export const CrmProvider = ({ children }) => {
       updateNodeData, addFlowNode, deleteFlowNode, sendMedia, channels, addChannel, toggleChannelStatus, deleteChannel,
       followupRules, setFollowupRules, globalTags, addGlobalTag, updateGlobalTag, deleteGlobalTag,
       dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts,
-      appointments, setAppointments
+      appointments, setAppointments,
+      soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled,
+      requestNotificationPermission, audioSpeed, setAudioSpeed
     }}>
       {children}
     </CrmContext.Provider>

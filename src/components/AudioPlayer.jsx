@@ -1,16 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2 } from 'lucide-react';
+import { useCrm } from '../context/CrmContext';
 
 const SPEEDS = [1, 1.25, 1.5, 2];
 
 export default function AudioPlayer({ src }) {
+  const crm = useCrm() || {};
+  const audioSpeed = crm.audioSpeed || 1;
+  const setAudioSpeed = crm.setAudioSpeed || (() => {});
+
   const audioRef = useRef(null);
   const progressRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [speed, setSpeed] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [waveformBars] = useState(() =>
@@ -24,16 +28,26 @@ export default function AudioPlayer({ src }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const applyPlaybackRate = useCallback((audio, speedVal) => {
+    if (!audio) return;
+    try {
+      audio.preservesPitch = true;
+      audio.webkitPreservesPitch = true;
+      audio.mozPreservesPitch = true;
+      audio.playbackRate = speedVal;
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    audio.playbackRate = speed;
+    applyPlaybackRate(audio, audioSpeed);
 
     const onLoadedMetadata = () => {
       setDuration(audio.duration);
       setHasError(false);
-      audio.playbackRate = speed;
+      applyPlaybackRate(audio, audioSpeed);
     };
     const onTimeUpdate = () => {
       if (!isDragging) {
@@ -54,7 +68,7 @@ export default function AudioPlayer({ src }) {
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
     };
-  }, [isDragging, speed]);
+  }, [isDragging, audioSpeed, applyPlaybackRate]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -62,19 +76,19 @@ export default function AudioPlayer({ src }) {
     if (isPlaying) { 
       audio.pause(); 
     } else { 
-      audio.playbackRate = speed;
-      audio.play(); 
+      applyPlaybackRate(audio, audioSpeed);
+      audio.play().catch(() => setHasError(true)); 
     }
     setIsPlaying(!isPlaying);
   };
 
   const cycleSpeed = (e) => {
     e.stopPropagation();
-    const currentIndex = SPEEDS.indexOf(speed);
+    const currentIndex = SPEEDS.indexOf(audioSpeed);
     const nextSpeed = SPEEDS[(currentIndex + 1) % SPEEDS.length];
-    setSpeed(nextSpeed);
+    setAudioSpeed(nextSpeed);
     if (audioRef.current) {
-      audioRef.current.playbackRate = nextSpeed;
+      applyPlaybackRate(audioRef.current, nextSpeed);
     }
   };
 
@@ -89,6 +103,8 @@ export default function AudioPlayer({ src }) {
     setProgress(pct * 100);
     setCurrentTime(audio.currentTime);
   }, []);
+
+  const isSpeedActive = audioSpeed !== 1;
 
   return (
     <div style={{
@@ -184,31 +200,33 @@ export default function AudioPlayer({ src }) {
             fontSize: '10px',
             fontWeight: '500',
             color: hasError ? 'var(--text-muted)' : 'var(--text-secondary, #94a3b8)',
-            fontFamily: "'Inter', sans-serif",
+            fontFamily: "var(--font-sans, 'Inter', sans-serif)",
             letterSpacing: '0.3px',
           }}>
             {hasError ? '--:--' : formatTime(currentTime)}
           </span>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {/* Speed Pill Selector */}
             <button
               onClick={cycleSpeed}
               type="button"
-              title="Velocidade de reprodução"
+              title="Alternar velocidade de reprodução"
               style={{
-                background: 'rgba(139, 92, 246, 0.2)',
-                border: '1px solid rgba(139, 92, 246, 0.3)',
-                color: '#a78bfa',
+                background: isSpeedActive ? 'var(--accent-primary)' : 'var(--bg-surface-hover)',
+                border: isSpeedActive ? 'none' : '1px solid var(--border-glass)',
+                color: isSpeedActive ? '#ffffff' : 'var(--text-secondary)',
                 fontSize: '10px',
                 fontWeight: '700',
-                padding: '1px 5px',
+                padding: '2px 6px',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
-                lineHeight: '1.2'
+                lineHeight: '1.2',
+                boxShadow: isSpeedActive ? '0 0 8px var(--accent-glow)' : 'none'
               }}
             >
-              {speed}x
+              {audioSpeed}x
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -217,7 +235,7 @@ export default function AudioPlayer({ src }) {
                 fontSize: '10px',
                 fontWeight: '500',
                 color: 'var(--text-secondary, #94a3b8)',
-                fontFamily: "'Inter', sans-serif",
+                fontFamily: "var(--font-sans, 'Inter', sans-serif)",
                 letterSpacing: '0.3px',
               }}>
                 {formatTime(duration)}

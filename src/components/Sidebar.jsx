@@ -1,10 +1,13 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX } from 'lucide-react';
 
 export default function Sidebar() {
-  const { activeScreen, setActiveScreen, theme, toggleTheme } = useCrm();
+  const { 
+    activeScreen, setActiveScreen, theme, toggleTheme,
+    soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, requestNotificationPermission
+  } = useCrm();
   const { user, signOut } = useAuth();
   
   const displayName = user?.user_metadata?.name || user?.email || 'Usuário Logado';
@@ -147,6 +150,65 @@ export default function Sidebar() {
         flexDirection: 'column',
         gap: '16px'
       }}>
+        {/* Operator Alert & Notification Controls */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+          <button
+            type="button"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? "Alertas Sonoros: Ativados (Clique para silenciar)" : "Alertas Sonoros: Silenciados (Clique para ativar)"}
+            style={{
+              flex: 1,
+              padding: '6px 8px',
+              borderRadius: 'var(--radius-md)',
+              background: soundEnabled ? 'var(--bg-surface-hover)' : 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid var(--border-glass)',
+              color: soundEnabled ? 'var(--text-primary)' : 'var(--color-status-lost)',
+              fontSize: '11px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+            <span>{soundEnabled ? 'Som' : 'Muto'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (!notificationsEnabled) {
+                await requestNotificationPermission();
+              } else {
+                setNotificationsEnabled(false);
+              }
+            }}
+            title={notificationsEnabled ? "Notificações Desktop: Ativas (Clique para desativar)" : "Notificações Desktop: Desativadas (Clique para ativar)"}
+            style={{
+              flex: 1,
+              padding: '6px 8px',
+              borderRadius: 'var(--radius-md)',
+              background: notificationsEnabled ? 'var(--bg-surface-hover)' : 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid var(--border-glass)',
+              color: notificationsEnabled ? 'var(--text-primary)' : 'var(--color-status-lost)',
+              fontSize: '11px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            {notificationsEnabled ? <Bell size={13} /> : <BellOff size={13} />}
+            <span>{notificationsEnabled ? 'Notif' : 'Sem Notif'}</span>
+          </button>
+        </div>
+
         {/* Theme Switcher Toggle */}
         <button
           onClick={toggleTheme}
