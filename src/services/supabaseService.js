@@ -94,6 +94,26 @@ class SupabaseService {
     return data;
   }
 
+  static async fetchChannelsSafe() {
+    const { data, error } = await supabase
+      .from('channels_safe')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[SupabaseService] fetchChannelsSafe error:', error);
+      return [];
+    }
+
+    return (data || []).map(ch => ({
+      id: ch.id,
+      name: ch.name,
+      provider: ch.provider === 'meta' ? 'meta_cloud' : (ch.provider === 'instagram' ? 'instagram' : 'evolution'),
+      status: ch.status
+      // View removes sensitive columns like api_key, access_token, webhook_url
+    }));
+  }
+
   static async fetchChannels() {
     const { data, error } = await supabase
       .from('channels')
@@ -272,6 +292,27 @@ class SupabaseService {
       }
     } catch(e) {
       console.error('[SupabaseService] fetchAiSettings error:', e);
+    }
+    return null;
+  }
+
+  static async fetchAiSettingsSafe(channelId) {
+    if (!channelId) return null;
+    try {
+      const { data, error } = await supabase
+        .from('ai_settings_safe')
+        .select('*')
+        .eq('channel_id', channelId)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[SupabaseService] fetchAiSettingsSafe db error:', error);
+        return null;
+      }
+      return data; // Retorna apenas as colunas expostas na view (is_enabled, channel_id, id, etc)
+    } catch(e) {
+      console.error('[SupabaseService] fetchAiSettingsSafe error:', e);
     }
     return null;
   }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX, RotateCw } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX, RotateCw, Shield } from 'lucide-react';
 
 export default function Sidebar() {
   const { 
@@ -9,51 +9,65 @@ export default function Sidebar() {
     soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, requestNotificationPermission,
     realtimeStatus, reconnectRealtime
   } = useCrm();
-  const { user, signOut } = useAuth();
+  const { user, profile, permissions, signOut } = useAuth();
   
-  const displayName = user?.user_metadata?.name || user?.email || 'Usuário Logado';
+  const displayName = profile?.full_name || user?.user_metadata?.name || user?.email || 'Usuário Logado';
   const displayInitials = (displayName || 'UA').substring(0, 2).toUpperCase();
 
   const menuItems = [
     {
       id: 'dashboard',
       label: 'Painel Geral',
-      icon: <LayoutDashboard size={20} strokeWidth={2} />
+      icon: <LayoutDashboard size={20} strokeWidth={2} />,
+      permission: 'view_dashboard'
     },
     {
       id: 'chat',
       label: 'Chat Ao Vivo',
-      icon: <MessageSquare size={20} strokeWidth={2} />
+      icon: <MessageSquare size={20} strokeWidth={2} />,
+      permission: 'view_chat'
     },
     {
       id: 'kanban',
       label: 'Funil Comercial',
-      icon: <Kanban size={20} strokeWidth={2} />
+      icon: <Kanban size={20} strokeWidth={2} />,
+      permission: 'view_kanban'
     },
     {
       id: 'calendar',
       label: 'Agenda',
-      icon: <Calendar size={20} strokeWidth={2} />
+      icon: <Calendar size={20} strokeWidth={2} />,
+      permission: 'view_calendar'
     },
     {
       id: 'builder',
       label: 'Agente de IA',
-      icon: <Bot size={20} strokeWidth={2} />
+      icon: <Bot size={20} strokeWidth={2} />,
+      permission: 'manage_ai_agent'
     },
     {
       id: 'contacts',
       label: 'Leads & Contatos',
-      icon: <Users size={20} strokeWidth={2} />
+      icon: <Users size={20} strokeWidth={2} />,
+      permission: 'view_contacts'
     },
     {
       id: 'channels',
       label: 'Conectar Canais',
-      icon: <Link2 size={20} strokeWidth={2} />
+      icon: <Link2 size={20} strokeWidth={2} />,
+      permission: 'manage_channels'
     },
     {
       id: 'followup',
       label: 'Follow-Up',
-      icon: <Clock size={20} strokeWidth={2} />
+      icon: <Clock size={20} strokeWidth={2} />,
+      permission: 'manage_followup'
+    },
+    {
+      id: 'users',
+      label: 'Usuários & Acessos',
+      icon: <Shield size={20} strokeWidth={2} />,
+      permission: 'manage_users'
     }
   ];
 
@@ -124,9 +138,15 @@ export default function Sidebar() {
         padding: '20px 12px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '4px'
+        gap: '4px',
+        overflowY: 'auto'
       }}>
         {menuItems.map(item => {
+          // Checa a permissão. Se não houver permission definida no array, permite.
+          if (item.permission && permissions && permissions[item.permission] !== true) {
+            return null;
+          }
+          
           const isActive = activeScreen === item.id;
           return (
             <button

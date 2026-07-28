@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { CrmProvider, useCrm } from './context/CrmContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginScreen from './components/LoginScreen';
+import FirstLoginPrompt from './components/FirstLoginPrompt';
 import { Loader2 } from 'lucide-react';
 
 // Import CSS stylesheets in sequence
@@ -23,33 +24,63 @@ import FlowBuilder from './components/FlowBuilder';
 import ContactsList from './components/ContactsList';
 import ChannelsConfig from './components/ChannelsConfig';
 import FollowUpSettings from './components/FollowUpSettings';
+import UsersManager from './components/UsersManager';
 import OpenAIStatusBanner from './components/OpenAIStatusBanner';
 import CalendarView from './components/CalendarView';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 
+function getPermittedScreen(requestedScreen, permissions) {
+  const routes = {
+    dashboard: 'view_dashboard',
+    chat: 'view_chat',
+    kanban: 'view_kanban',
+    calendar: 'view_calendar',
+    builder: 'manage_ai_agent',
+    contacts: 'view_contacts',
+    channels: 'manage_channels',
+    followup: 'manage_followup',
+    users: 'manage_users'
+  };
+
+  if (!permissions) return 'dashboard';
+  
+  const reqPerm = routes[requestedScreen];
+  if (reqPerm && permissions[reqPerm] === true) return requestedScreen;
+  if (!reqPerm) return requestedScreen; // Fallback to let it pass if not explicitly protected
+
+  // Se negado, encontra a primeira tela permitida
+  for (const [screen, perm] of Object.entries(routes)) {
+    if (permissions[perm] === true) return screen;
+  }
+  
+  return 'dashboard'; // Ultimate fallback
+}
+
 function AppContent() {
-  const { activeScreen } = useCrm();
+  const { activeScreen, setActiveScreen } = useCrm();
+  const { permissions } = useAuth();
+  
+  const permittedScreen = getPermittedScreen(activeScreen, permissions);
+  
+  useEffect(() => {
+    if (activeScreen !== permittedScreen) {
+      console.warn(`[RBAC] Access to '${activeScreen}' denied. Redirecting to '${permittedScreen}'.`);
+      setActiveScreen(permittedScreen);
+    }
+  }, [activeScreen, permittedScreen, setActiveScreen]);
 
   const renderActiveScreen = () => {
-    switch (activeScreen) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'chat':
-        return <ChatWindow />;
-      case 'kanban':
-        return <KanbanBoard />;
-      case 'builder':
-        return <FlowBuilder />;
-      case 'contacts':
-        return <ContactsList />;
-      case 'channels':
-        return <ChannelsConfig />;
-      case 'followup':
-        return <FollowUpSettings />;
-      case 'calendar':
-        return <CalendarView />;
-      default:
-        return <Dashboard />;
+    switch (permittedScreen) {
+      case 'dashboard': return <Dashboard />;
+      case 'chat': return <ChatWindow />;
+      case 'kanban': return <KanbanBoard />;
+      case 'builder': return <FlowBuilder />;
+      case 'contacts': return <ContactsList />;
+      case 'channels': return <ChannelsConfig />;
+      case 'followup': return <FollowUpSettings />;
+      case 'calendar': return <CalendarView />;
+      case 'users': return <UsersManager />;
+      default: return <Dashboard />;
     }
   };
 
@@ -75,7 +106,7 @@ function AppContent() {
 // O AuthGuard fica RESPONSÁVEL por decidir o que montar
 // Apenas se tivermos sessão, montamos o CrmProvider (que contém os dados sensíveis)
 function AuthGuard() {
-  const { session, loading } = useAuth();
+  const { session, loading, profile } = useAuth();
 
   if (loading) {
     return (
@@ -90,7 +121,12 @@ function AuthGuard() {
     return <LoginScreen />;
   }
 
-  // Com sessão confirmada, o CrmProvider e o restante do app montam.
+  // Verifica se é o primeiro login e precisa tomar uma ação (mudar ou manter senha)
+  if (profile?.first_login) {
+    return <FirstLoginPrompt />;
+  }
+
+  // Com sessão confirmada e sem pendência, o CrmProvider e o restante do app montam.
   return (
     <CrmProvider>
       <AppContent />

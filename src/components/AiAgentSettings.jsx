@@ -432,7 +432,7 @@ export default function AiAgentSettings() {
             </div>
           </div>
           <textarea
-            className="node-textarea"
+            className="glass-input"
             style={{ minHeight: '80px', fontSize: '12.5px', padding: '12px', lineHeight: '1.5' }}
             value={welcomeMessage}
             onChange={(e) => setWelcomeMessage(e.target.value)}
@@ -450,7 +450,7 @@ export default function AiAgentSettings() {
             </div>
           </div>
           <textarea
-            className="node-textarea"
+            className="glass-input"
             style={{ minHeight: '160px', fontSize: '12.5px', padding: '12px', lineHeight: '1.5' }}
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
@@ -470,7 +470,7 @@ Seja simpático, use emojis e responda em parágrafos curtos."
             </div>
           </div>
           <textarea
-            className="node-textarea"
+            className="glass-input"
             style={{ minHeight: '100px', fontSize: '12.5px', padding: '12px', borderLeft: '3px solid var(--color-status-lost)', lineHeight: '1.5' }}
             value={negativePrompt}
             onChange={(e) => setNegativePrompt(e.target.value)}
@@ -544,18 +544,10 @@ Seja simpático, use emojis e responda em parágrafos curtos."
               />
               <button
                 type="button"
+                className="glass-btn secondary"
                 onClick={addPhrase}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--accent-primary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '4px'
-                }}
               >
-                <Plus size={16} style={{ strokeWidth: 3 }} />
+                Adicionar
               </button>
             </div>
           </div>
@@ -571,18 +563,7 @@ Seja simpático, use emojis e responda em parágrafos curtos."
             style={{
               padding: '12px 28px',
               fontSize: '14px',
-              fontWeight: '600',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--accent-primary)',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
               opacity: isSaving ? 0.7 : 1,
-              boxShadow: '0 4px 14px var(--accent-glow)',
-              transition: 'all 0.2s ease'
             }}
           >
             <Save size={16} />

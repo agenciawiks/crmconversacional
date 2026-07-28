@@ -244,7 +244,7 @@ export const CrmProvider = ({ children }) => {
         ] = await Promise.all([
           SupabaseService.fetchContacts(),
           supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
-          SupabaseService.fetchChannels(),
+          SupabaseService.fetchChannelsSafe(),
           followUpService.fetchRules(),
           followUpService.fetchSettings(),
           supabase.from('appointments').select('*, contacts(name, phone)').order('start_time', { ascending: true })
