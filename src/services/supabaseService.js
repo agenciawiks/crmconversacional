@@ -25,6 +25,8 @@ class SupabaseService {
       avatarColor: `hsl(${Math.abs(this._hashCode(c.phone)) % 360}, 75%, 60%)`,
       avatar_url: c.avatar_url || null,
       avatar_updated_at: c.avatar_updated_at || null,
+      is_group: Boolean(c.is_group),
+      whatsapp_jid: c.whatsapp_jid || null,
       notes: (function() {
         if (!c.notes) return [];
         try {
@@ -62,7 +64,15 @@ class SupabaseService {
       channel_id: msg.channel_id,
       contact_id: msg.contact_id,
       content_type: msg.content_type,
-      status: msg.status
+      whatsapp_msg_id: msg.whatsapp_msg_id,
+      status: msg.status,
+      delivered_at: msg.delivered_at,
+      read_at: msg.read_at,
+      played_at: msg.played_at,
+      is_group: Boolean(msg.is_group),
+      chat_jid: msg.chat_jid || null,
+      sender_jid: msg.sender_jid || null,
+      sender_name: msg.sender_name || null
     }));
   }
 
@@ -117,7 +127,7 @@ class SupabaseService {
   static async fetchChannels() {
     const { data, error } = await supabase
       .from('channels')
-      .select('*')
+      .select('id,name,provider,status,url,instance,phone_id,webhook_url,tenant_id,created_at,updated_at')
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -132,11 +142,9 @@ class SupabaseService {
       status: ch.status,
       url: ch.url,
       instance: ch.instance,
-      apiKey: ch.api_key,
       phoneId: ch.phone_id,
-      accessToken: ch.access_token,
       webhookUrl: ch.webhook_url,
-      lastSeen: ch.last_seen
+      tenantId: ch.tenant_id
     }));
   }
 
@@ -156,7 +164,7 @@ class SupabaseService {
     const { data, error } = await supabase
       .from('channels')
       .insert([row])
-      .select();
+      .select('id,name,provider,status,url,instance,phone_id,webhook_url,tenant_id,created_at,updated_at');
 
     if (error) {
       console.error('[SupabaseService] addChannel error:', error);
@@ -310,8 +318,8 @@ class SupabaseService {
         console.error('[SupabaseService] fetchAiSettingsSafe db error:', error);
         return null;
       }
-      return data; // Retorna apenas as colunas expostas na view (is_enabled, channel_id, id, etc)
-    } catch(e) {
+      return data;
+    } catch (e) {
       console.error('[SupabaseService] fetchAiSettingsSafe error:', e);
     }
     return null;

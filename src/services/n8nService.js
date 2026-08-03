@@ -4,7 +4,7 @@ const OUTBOUND_MEDIA_PATH = import.meta.env.VITE_N8N_OUTBOUND_MEDIA_PATH || '/we
 const CHECK_OPENAI_QUOTA_PATH = import.meta.env.VITE_N8N_CHECK_OPENAI_QUOTA_PATH || '/webhook/check-openai-quota-prod';
 
 class N8nService {
-  static async sendOutboundMessage(channelId, contactId, phone, content) {
+  static async sendOutboundMessage(channelId, contactId, phone, content, recipientJid = null, isGroup = false) {
     if (!N8N_URL) {
       console.warn('[N8nService] VITE_N8N_WEBHOOK_URL not configured.');
       return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
@@ -17,7 +17,9 @@ class N8nService {
         channel_id: channelId,
         contact_id: contactId,
         phone: phone,
-        content: content
+        content: content,
+        recipient_jid: recipientJid,
+        is_group: isGroup
       })
     });
 
@@ -28,7 +30,7 @@ class N8nService {
     return { success: true };
   }
 
-  static async sendOutboundMedia({ channelId, contactId, phone, mediaUrl, contentType, mimeType, fileName, caption }) {
+  static async sendOutboundMedia({ channelId, contactId, phone, recipientJid, isGroup, mediaUrl, contentType, mimeType, fileName, caption }) {
     if (!N8N_URL) {
       console.warn('[N8nService] VITE_N8N_WEBHOOK_URL not configured.');
       return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
@@ -41,6 +43,8 @@ class N8nService {
         channel_id: channelId,
         contact_id: contactId,
         phone: phone,
+        recipient_jid: recipientJid,
+        is_group: Boolean(isGroup),
         media_url: mediaUrl,
         content_type: contentType,
         mime_type: mimeType,
