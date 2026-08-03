@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, CheckCheck, XCircle, Bot, User, Tag, Brain, Paperclip, Mic } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, Check, CheckCheck, XCircle, Bot, User, Users, Tag, Brain, Paperclip, Mic } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import VoiceRecorder from './VoiceRecorder';
 import TagBadge from './TagBadge';
@@ -371,6 +371,8 @@ export default function ChatWindow() {
                   <div className="avatar" style={{ background: contact.avatar_url ? 'transparent' : contact.avatarColor }}>
                     {contact.avatar_url ? (
                       <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : contact.is_group ? (
+                      <Users size={18} strokeWidth={2.2} />
                     ) : (
                       (contact.name || 'Sem nome').substring(0, 2).toUpperCase()
                     )}
@@ -386,6 +388,9 @@ export default function ChatWindow() {
                   <div className="chat-info-header">
                     <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       {contact.name}
+                      {contact.is_group && (
+                        <Users size={12} strokeWidth={2.5} color="var(--accent-primary)" title="Grupo do WhatsApp" />
+                      )}
                       {contact.tags?.includes('IA Inativa') && (
                         <User size={12} strokeWidth={2.5} color="var(--warning-color)" title="Aguardando Atendente Humano" />
                       )}
@@ -395,7 +400,15 @@ export default function ChatWindow() {
                   <div className="chat-preview-row" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start', height: 'auto', marginBottom: '4px' }}>
                     <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className="chat-preview-text" style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                        {lastMsg ? (lastMsg.sender === 'agent' ? 'Você: ' : lastMsg.sender === 'bot' ? 'Bot: ' : '') + lastMsg.text : 'Sem mensagens'}
+                        {lastMsg ? (
+                          lastMsg.sender === 'agent'
+                            ? `Você: ${lastMsg.text}`
+                            : lastMsg.sender === 'bot'
+                              ? `Bot: ${lastMsg.text}`
+                              : contact.is_group && lastMsg.sender_name
+                                ? `${lastMsg.sender_name}: ${lastMsg.text}`
+                                : lastMsg.text
+                        ) : 'Sem mensagens'}
                       </span>
                       {contact.unread && <span className="unread-count-dot" style={{ marginLeft: '6px', flexShrink: 0 }}></span>}
                     </div>
@@ -446,6 +459,8 @@ export default function ChatWindow() {
             <div className="avatar" style={{ background: activeContact.avatar_url ? 'transparent' : activeContact.avatarColor }}>
               {activeContact.avatar_url ? (
                 <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              ) : activeContact.is_group ? (
+                <Users size={20} strokeWidth={2.2} />
               ) : (
                 (activeContact.name || 'Sem nome').substring(0, 2).toUpperCase()
               )}
@@ -459,28 +474,36 @@ export default function ChatWindow() {
                   ) : activeContact.channel === 'telegram' ? 'Instagram' :
                       activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
                 </span>
-                <span className={`tag status-${activeContact.status}`}>
-                  {activeContact.status === 'new' && 'Novo Lead'}
-                  {activeContact.status === 'contacted' && 'Em Contato'}
-                  {activeContact.status === 'no_answer' && 'Sem Resposta'}
-                  {activeContact.status === 'proposal' && 'Tem Interesse'}
-                  {activeContact.status === 'won' && 'Vendido'}
-                  {activeContact.status === 'lost' && 'Perdido'}
-                </span>
+                {activeContact.is_group ? (
+                  <span className="tag" style={{ color: 'var(--accent-primary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <Users size={11} strokeWidth={2.4} /> Grupo
+                  </span>
+                ) : (
+                  <span className={`tag status-${activeContact.status}`}>
+                    {activeContact.status === 'new' && 'Novo Lead'}
+                    {activeContact.status === 'contacted' && 'Em Contato'}
+                    {activeContact.status === 'no_answer' && 'Sem Resposta'}
+                    {activeContact.status === 'proposal' && 'Tem Interesse'}
+                    {activeContact.status === 'won' && 'Vendido'}
+                    {activeContact.status === 'lost' && 'Perdido'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              onClick={toggleAi}
-              className={`glass-btn ${isAiPaused ? 'primary' : ''}`}
-              style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center', background: isAiPaused ? 'var(--warning-color)' : 'var(--bg-surface-hover)', borderColor: isAiPaused ? 'transparent' : 'var(--border-glass)' }}
-              title={isAiPaused ? "Retornar atendimento para a Inteligência Artificial" : "Pausar IA e assumir a conversa"}
-            >
-              {isAiPaused ? <User size={12} strokeWidth={2.5} color="#fff" /> : <Bot size={12} strokeWidth={2.5} />}
-              {isAiPaused ? <span style={{ color: '#fff' }}>Humano Ativo</span> : 'IA Ativa'}
-            </button>
+            {!activeContact.is_group && (
+              <button
+                onClick={toggleAi}
+                className={`glass-btn ${isAiPaused ? 'primary' : ''}`}
+                style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center', background: isAiPaused ? 'var(--warning-color)' : 'var(--bg-surface-hover)', borderColor: isAiPaused ? 'transparent' : 'var(--border-glass)' }}
+                title={isAiPaused ? "Retornar atendimento para a Inteligência Artificial" : "Pausar IA e assumir a conversa"}
+              >
+                {isAiPaused ? <User size={12} strokeWidth={2.5} color="#fff" /> : <Bot size={12} strokeWidth={2.5} />}
+                {isAiPaused ? <span style={{ color: '#fff' }}>Humano Ativo</span> : 'IA Ativa'}
+              </button>
+            )}
 
             <button
               onClick={handleSimulateClient}
@@ -499,6 +522,11 @@ export default function ChatWindow() {
           {(activeContact.messages || []).map(msg => (
             <div key={msg.id} className={`message-bubble-wrapper ${msg.sender}`}>
               <div className="message-bubble">
+                {activeContact.is_group && msg.sender === 'client' && (
+                  <div style={{ color: 'var(--accent-primary)', fontSize: '11px', fontWeight: 700, marginBottom: '5px' }}>
+                    {msg.sender_name || 'Participante do grupo'}
+                  </div>
+                )}
                 {msg.content_type === 'image' ? (
                   msg.media_url ? (
                     <div>
@@ -578,7 +606,7 @@ export default function ChatWindow() {
                 )}
               </div>
               <div className="message-meta-row">
-                <span>{msg.sender === 'agent' ? 'Agente' : msg.sender === 'bot' ? 'Automação Bot' : 'Cliente'}</span>
+                <span>{msg.sender === 'agent' ? 'Agente' : msg.sender === 'bot' ? 'Automação Bot' : (activeContact.is_group ? (msg.sender_name || 'Participante') : 'Cliente')}</span>
                 <span>•</span>
                 <span>{msg.time}</span>
                 {msg.sender === 'agent' && msg.status && (
@@ -590,6 +618,24 @@ export default function ChatWindow() {
                     )}
                     {msg.status === 'sent' && (
                       <span className="status-sent" title="Enviado">
+                        <Check size={14} strokeWidth={2.5} />
+                      </span>
+                    )}
+                    {msg.status === 'delivered' && (
+                      <span className="status-delivered" title="Entregue">
+                        <CheckCheck size={14} strokeWidth={2.5} />
+                      </span>
+                    )}
+                    {msg.status === 'read' && (
+                      <span className="status-read" title="Visualizado">
+                        <CheckCheck size={14} strokeWidth={2.5} />
+                      </span>
+                    )}
+                    {msg.status === 'played' && (
+                      <span
+                        className="status-played"
+                        title="Áudio reproduzido"
+                      >
                         <CheckCheck size={14} strokeWidth={2.5} />
                       </span>
                     )}
@@ -700,6 +746,8 @@ export default function ChatWindow() {
           }}>
             {activeContact.avatar_url ? (
               <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : activeContact.is_group ? (
+              <Users size={28} strokeWidth={2.1} />
             ) : (
               (activeContact.name || 'Sem nome').substring(0, 2).toUpperCase()
             )}
@@ -713,22 +761,26 @@ export default function ChatWindow() {
                   activeContact.channel === 'instagram' ? 'Instagram' :
                   activeContact.channel === 'webchat' ? 'Tiktok' : activeContact.channel}
             </span>
-            <span className={`tag status-${activeContact.status}`}>
-              {activeContact.status === 'new' && 'Novo Lead'}
-              {activeContact.status === 'contacted' && 'Em Contato'}
-              {activeContact.status === 'no_answer' && 'Sem Resposta'}
-              {activeContact.status === 'proposal' && 'Tem Interesse'}
-              {activeContact.status === 'won' && 'Vendido'}
-              {activeContact.status === 'lost' && 'Perdido'}
-            </span>
+            {activeContact.is_group ? (
+              <span className="tag" style={{ color: 'var(--accent-primary)' }}>Grupo do WhatsApp</span>
+            ) : (
+              <span className={`tag status-${activeContact.status}`}>
+                {activeContact.status === 'new' && 'Novo Lead'}
+                {activeContact.status === 'contacted' && 'Em Contato'}
+                {activeContact.status === 'no_answer' && 'Sem Resposta'}
+                {activeContact.status === 'proposal' && 'Tem Interesse'}
+                {activeContact.status === 'won' && 'Vendido'}
+                {activeContact.status === 'lost' && 'Perdido'}
+              </span>
+            )}
           </div>
         </div>
 
         {/* CONTACT DATA INFO */}
         <div className="profile-section">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span className="profile-section-title" style={{ margin: 0 }}>Dados do Contato</span>
-            <button 
+            <span className="profile-section-title" style={{ margin: 0 }}>{activeContact.is_group ? 'Dados do Grupo' : 'Dados do Contato'}</span>
+            {!activeContact.is_group && <button 
               onClick={handleResetAiMemory}
               title="Resetar Memória da IA (inicia novo atendimento)"
               style={{
@@ -746,12 +798,12 @@ export default function ChatWindow() {
               }}
             >
               <Brain size={12} /> Resetar IA
-            </button>
+            </button>}
           </div>
-          <div className="profile-field">
+          {!activeContact.is_group && <div className="profile-field">
             <span className="profile-field-label">E-mail</span>
             <span className="profile-field-value">{activeContact.email}</span>
-          </div>
+          </div>}
           {activeContact.channel === 'telegram' ? (
             <>
               {activeContact.username ? (
@@ -774,14 +826,15 @@ export default function ChatWindow() {
             </>
           ) : (
             <div className="profile-field">
-              <span className="profile-field-label">Telefone</span>
-              <span className="profile-field-value">{activeContact.phone}</span>
+              <span className="profile-field-label">{activeContact.is_group ? 'Identificador do grupo' : 'Telefone'}</span>
+              <span className="profile-field-value">{activeContact.is_group ? (activeContact.whatsapp_jid || activeContact.phone) : activeContact.phone}</span>
             </div>
           )}
         </div>
 
         {/* PIPELINE & FINANCIAL DETAILS */}
         <div className="profile-section" style={{
+          display: activeContact.is_group ? 'none' : undefined,
           background: 'rgba(20, 20, 28, 0.4)',
           borderRadius: '12px',
           padding: '16px',
@@ -932,7 +985,7 @@ export default function ChatWindow() {
         </div>
 
         {/* TAGS MANAGER */}
-        <div className="profile-section">
+        <div className="profile-section" style={{ display: activeContact.is_group ? 'none' : undefined }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span className="profile-section-title" style={{ margin: 0 }}>Tags do Contato</span>
             <button
@@ -1264,7 +1317,7 @@ export default function ChatWindow() {
         </div>
 
         {/* CUSTOM NOTES REPOSITORY */}
-        <div className="profile-section" style={{ borderBottom: 'none' }}>
+        <div className="profile-section" style={{ borderBottom: 'none', display: activeContact.is_group ? 'none' : undefined }}>
           <span className="profile-section-title">Anotações do Cliente</span>
           
           <div className="notes-input-wrapper" style={{ marginBottom: '12px' }}>
