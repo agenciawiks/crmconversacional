@@ -46,14 +46,15 @@ export default function Dashboard() {
 
   const [activities, setActivities] = useState([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
+  const leadContacts = contacts.filter(c => !c.is_group);
 
   // Metrics calculators
-  const totalChats = contacts.length;
-  const newLeads = contacts.filter(c => c.status === 'new').length;
-  const proposalLeads = contacts.filter(c => c.status === 'proposal').length;
-  const wonLeadsTotal = contacts.filter(c => c.status === 'won').reduce((sum, c) => sum + c.value, 0);
-  const proposalContacts = contacts.filter(c => c.status === 'proposal');
-  const wonCount = contacts.filter(c => c.status === 'won').length;
+  const totalChats = leadContacts.length;
+  const newLeads = leadContacts.filter(c => c.status === 'new').length;
+  const proposalLeads = leadContacts.filter(c => c.status === 'proposal').length;
+  const wonLeadsTotal = leadContacts.filter(c => c.status === 'won').reduce((sum, c) => sum + c.value, 0);
+  const proposalContacts = leadContacts.filter(c => c.status === 'proposal');
+  const wonCount = leadContacts.filter(c => c.status === 'won').length;
 
   // Render a 3-column animated chart, so we need max value for scale
   const [isAnimating, setIsAnimating] = useState(false);
@@ -111,8 +112,8 @@ export default function Dashboard() {
   const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const startOfLastWeek = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-  const leadsThisWeek = contacts.filter(c => new Date(c.created_at) >= startOfWeek).length;
-  const leadsLastWeek = contacts.filter(c => {
+  const leadsThisWeek = leadContacts.filter(c => new Date(c.created_at) >= startOfWeek).length;
+  const leadsLastWeek = leadContacts.filter(c => {
     const d = new Date(c.created_at);
     return d >= startOfLastWeek && d < startOfWeek;
   }).length;
@@ -124,8 +125,8 @@ export default function Dashboard() {
   startOfToday.setHours(0,0,0,0);
   const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
 
-  const leadsToday = contacts.filter(c => c.status === 'new' && new Date(c.created_at) >= startOfToday).length;
-  const leadsYesterday = contacts.filter(c => {
+  const leadsToday = leadContacts.filter(c => c.status === 'new' && new Date(c.created_at) >= startOfToday).length;
+  const leadsYesterday = leadContacts.filter(c => {
     const d = new Date(c.created_at);
     return c.status === 'new' && d >= startOfYesterday && d < startOfToday;
   }).length;
@@ -134,8 +135,8 @@ export default function Dashboard() {
   const newLeadsTrend = `${deltaLeads >= 0 ? '+' : ''}${deltaLeads} hoje (vs ${leadsYesterday} ontem)`;
   const isNewLeadsTrendPositive = deltaLeads >= 0;
 
-  const proposalToday = contacts.filter(c => c.status === 'proposal' && new Date(c.updated_at || c.created_at) >= startOfToday).length;
-  const proposalYesterday = contacts.filter(c => {
+  const proposalToday = leadContacts.filter(c => c.status === 'proposal' && new Date(c.updated_at || c.created_at) >= startOfToday).length;
+  const proposalYesterday = leadContacts.filter(c => {
     const d = new Date(c.updated_at || c.created_at);
     return c.status === 'proposal' && d >= startOfYesterday && d < startOfToday;
   }).length;
@@ -148,8 +149,8 @@ export default function Dashboard() {
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-  const revenueThisMonth = contacts.filter(c => c.status === 'won' && new Date(c.created_at) >= startOfThisMonth).reduce((sum, c) => sum + (c.value || 0), 0);
-  const revenueLastMonth = contacts.filter(c => {
+  const revenueThisMonth = leadContacts.filter(c => c.status === 'won' && new Date(c.created_at) >= startOfThisMonth).reduce((sum, c) => sum + (c.value || 0), 0);
+  const revenueLastMonth = leadContacts.filter(c => {
     const d = new Date(c.created_at);
     return c.status === 'won' && d >= startOfLastMonth && d <= endOfLastMonth;
   }).reduce((sum, c) => sum + (c.value || 0), 0);
