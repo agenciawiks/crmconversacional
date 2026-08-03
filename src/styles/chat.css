@@ -337,6 +337,15 @@
 }
 
 .msg-status-sent {
+  color: var(--text-muted);
+}
+
+.msg-status-delivered {
+  color: var(--text-secondary);
+}
+
+.msg-status-read,
+.msg-status-played {
   color: #53bdeb;
 }
 
@@ -344,7 +353,12 @@
   color: #ef4444;
 }
 
-.status-sending, .status-sent, .status-failed {
+.status-sending,
+.status-sent,
+.status-delivered,
+.status-read,
+.status-played,
+.status-failed {
   display: inline-flex;
   align-items: center;
   line-height: 1;
