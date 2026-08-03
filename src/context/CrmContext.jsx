@@ -30,6 +30,17 @@ const normalizeMessage = (rawMsg) => {
     contact_id: rawMsg.contact_id || null,
     content_type: rawMsg.content_type || 'text',
     media_url: rawMsg.media_url || null,
+    media_mime_type: rawMsg.media_mime_type || null,
+    media_storage_status: rawMsg.media_storage_status || null,
+    media_storage_error: rawMsg.media_storage_error || null,
+    whatsapp_msg_id: rawMsg.whatsapp_msg_id || null,
+    delivered_at: rawMsg.delivered_at || null,
+    read_at: rawMsg.read_at || null,
+    played_at: rawMsg.played_at || null,
+    is_group: Boolean(rawMsg.is_group),
+    chat_jid: rawMsg.chat_jid || null,
+    sender_jid: rawMsg.sender_jid || null,
+    sender_name: rawMsg.sender_name || null,
     status: rawMsg.status || (rawMsg.direction === 'out' ? 'sent' : 'received')
   };
 };
@@ -350,7 +361,9 @@ export const CrmProvider = ({ children }) => {
             notes: contactMeta.notes || c.notes || [],
             messages: cMsgs, 
             provider,
-            channel: channelType
+            channel: channelType,
+            is_group: Boolean(c.is_group),
+            whatsapp_jid: c.whatsapp_jid || null
           };
         });
 
@@ -523,17 +536,7 @@ export const CrmProvider = ({ children }) => {
 
         const cMsgs = (dbMessages || []).map(m => {
           knownMsgIdsRef.current.add(m.id);
-          return {
-            id: m.id,
-            sender: m.direction === 'in' ? 'client' : 'agent',
-            text: m.content,
-            time: new Date(m.timestamp).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''),
-            timestamp: new Date(m.timestamp),
-            channel_id: m.channel_id,
-            content_type: m.content_type,
-            media_url: m.media_url,
-            status: m.direction === 'out' ? 'sent' : undefined
-          };
+          return normalizeMessage(m);
         });
 
         // Determine contact channel and provider
@@ -723,15 +726,49 @@ export const CrmProvider = ({ children }) => {
           unread: true,
           avatarColor: `hsl(200, 80%, 65%)`,
           notes: [],
-          messages: [newMsg],
-          provider: resolvedProvider,
-          created_at: new Date().toISOString()
+            messages: [newMsg],
+            provider: resolvedProvider,
+            is_group: Boolean(newMsg.is_group),
+            created_at: new Date().toISOString()
         };
         return [freshContact, ...updated];
       }
       return updated;
     });
   }, [channels]);
+
+  const mergeMessageUpdate = useCallback((payload) => {
+    const rawMsg = payload.new || payload;
+    if (!rawMsg?.id && !rawMsg?.whatsapp_msg_id) return;
+
+    const updatedMsg = normalizeMessage(rawMsg);
+
+    setContacts(prev => (prev || []).map(contact => {
+      if (rawMsg.contact_id && contact.id !== rawMsg.contact_id) {
+        return contact;
+      }
+
+      let changed = false;
+      const messages = (contact.messages || []).map(message => {
+        const sameDatabaseId = rawMsg.id && message.id === rawMsg.id;
+        const sameWhatsappId =
+          rawMsg.whatsapp_msg_id &&
+          message.whatsapp_msg_id === rawMsg.whatsapp_msg_id;
+
+        if (!sameDatabaseId && !sameWhatsappId) return message;
+
+        changed = true;
+        return {
+          ...message,
+          ...updatedMsg,
+          timestamp: updatedMsg.timestamp || message.timestamp,
+          time: updatedMsg.time || message.time,
+        };
+      });
+
+      return changed ? { ...contact, messages } : contact;
+    }));
+  }, []);
 
   // Robust direct realtime subscription (bypasses hook state-array batching)
   useEffect(() => {
@@ -749,6 +786,17 @@ export const CrmProvider = ({ children }) => {
           mergeMessage(newMsg);
         }
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          console.log(
+            '[Supabase Realtime] Message status update received:',
+            payload.new,
+          );
+          mergeMessageUpdate(payload);
+        },
+      )
       .subscribe((status) => {
         console.log('[Supabase Realtime] Direct channel status:', status);
         updateChannelStatus('messages', status);
@@ -757,7 +805,12 @@ export const CrmProvider = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [mergeMessage, updateChannelStatus, reconnectTrigger]);
+  }, [
+    mergeMessage,
+    mergeMessageUpdate,
+    updateChannelStatus,
+    reconnectTrigger,
+  ]);
 
   // Realtime subscription on contacts table to sync pipeline stage & tags in realtime
   useEffect(() => {
@@ -968,14 +1021,20 @@ export const CrmProvider = ({ children }) => {
         status: newDbChannel.status,
         url: newDbChannel.url,
         instance: newDbChannel.instance,
-        apiKey: newDbChannel.api_key,
         phoneId: newDbChannel.phone_id,
-        accessToken: newDbChannel.access_token
+        webhookUrl: newDbChannel.webhook_url,
+        tenantId: newDbChannel.tenant_id
       };
 
       setChannels(prev => [...prev, mappedChannel]);
       return mappedChannel;
     }
+  };
+
+  const refreshChannels = async () => {
+    const latestChannels = await SupabaseService.fetchChannels();
+    setChannels(latestChannels || []);
+    return latestChannels || [];
   };
 
   const toggleChannelStatus = async (id) => {
@@ -1397,7 +1456,9 @@ export const CrmProvider = ({ children }) => {
             channelId,
             activeC.id,
             activeC.phone,
-            text
+            text,
+            activeC.whatsapp_jid,
+            Boolean(activeC.is_group)
           );
 
           // Mark as sent
@@ -1504,6 +1565,8 @@ export const CrmProvider = ({ children }) => {
         channelId,
         contactId: activeC.id,
         phone: activeC.phone,
+        recipientJid: activeC.whatsapp_jid,
+        isGroup: Boolean(activeC.is_group),
         mediaUrl,
         contentType: baseType,
         mimeType: finalMimeType,
@@ -1566,7 +1629,8 @@ export const CrmProvider = ({ children }) => {
   const deleteFlowNode = (id) => setFlowNodes(prev => prev.filter(n => n.id !== id));
 
   const getFilteredContacts = useCallback(() => {
-    if (dateFilter === 'all') return sortedContacts;
+    const leadContacts = sortedContacts.filter(c => !c.is_group);
+    if (dateFilter === 'all') return leadContacts;
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1574,7 +1638,7 @@ export const CrmProvider = ({ children }) => {
     const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, -1);
     const startOf7DaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
 
-    return sortedContacts.filter(c => {
+    return leadContacts.filter(c => {
       if (!c.created_at) return true;
       const cDate = new Date(c.created_at);
       
@@ -1607,7 +1671,7 @@ export const CrmProvider = ({ children }) => {
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
-      updateNodeData, addFlowNode, deleteFlowNode, sendMedia, channels, addChannel, toggleChannelStatus, deleteChannel,
+      updateNodeData, addFlowNode, deleteFlowNode, sendMedia, channels, addChannel, refreshChannels, toggleChannelStatus, deleteChannel,
       followupRules, setFollowupRules, globalTags, addGlobalTag, updateGlobalTag, deleteGlobalTag,
       dateFilter, setDateFilter, customDateRange, setCustomDateRange, getFilteredContacts,
       appointments, setAppointments,
