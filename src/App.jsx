@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { CrmProvider, useCrm } from './context/CrmContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginScreen from './components/LoginScreen';
@@ -14,6 +14,7 @@ import './styles/kanban.css';
 import './styles/builder.css';
 import './styles/contacts.css';
 import './styles/followup.css';
+import './styles/provision.css';
 
 // Import subcomponents
 import Sidebar from './components/Sidebar';
@@ -25,11 +26,12 @@ import ContactsList from './components/ContactsList';
 import ChannelsConfig from './components/ChannelsConfig';
 import FollowUpSettings from './components/FollowUpSettings';
 import UsersManager from './components/UsersManager';
+import ProvisionTenant from './components/ProvisionTenant';
 import OpenAIStatusBanner from './components/OpenAIStatusBanner';
 import CalendarView from './components/CalendarView';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
 
-function getPermittedScreen(requestedScreen, permissions) {
+function getPermittedScreen(requestedScreen, permissions, isSuperAdmin) {
   const routes = {
     dashboard: 'view_dashboard',
     chat: 'view_chat',
@@ -39,12 +41,16 @@ function getPermittedScreen(requestedScreen, permissions) {
     contacts: 'view_contacts',
     channels: 'manage_channels',
     followup: 'manage_followup',
-    users: 'manage_users'
+    users: 'manage_users',
+    provision: 'superadmin'
   };
 
   if (!permissions) return 'dashboard';
   
   const reqPerm = routes[requestedScreen];
+  if (reqPerm === 'superadmin') {
+    return isSuperAdmin ? requestedScreen : 'dashboard';
+  }
   if (reqPerm && permissions[reqPerm] === true) return requestedScreen;
   if (!reqPerm) return requestedScreen; // Fallback to let it pass if not explicitly protected
 
@@ -58,9 +64,13 @@ function getPermittedScreen(requestedScreen, permissions) {
 
 function AppContent() {
   const { activeScreen, setActiveScreen } = useCrm();
-  const { permissions } = useAuth();
+  const { permissions, isSuperAdmin } = useAuth();
   
-  const permittedScreen = getPermittedScreen(activeScreen, permissions);
+  const permittedScreen = getPermittedScreen(
+    activeScreen,
+    permissions,
+    isSuperAdmin
+  );
   
   useEffect(() => {
     if (activeScreen !== permittedScreen) {
@@ -80,6 +90,7 @@ function AppContent() {
       case 'followup': return <FollowUpSettings />;
       case 'calendar': return <CalendarView />;
       case 'users': return <UsersManager />;
+      case 'provision': return <ProvisionTenant />;
       default: return <Dashboard />;
     }
   };
@@ -106,7 +117,7 @@ function AppContent() {
 // O AuthGuard fica RESPONSÁVEL por decidir o que montar
 // Apenas se tivermos sessão, montamos o CrmProvider (que contém os dados sensíveis)
 function AuthGuard() {
-  const { session, loading, profile } = useAuth();
+  const { session, loading, profile, effectiveTenantId } = useAuth();
 
   if (loading) {
     return (
@@ -128,7 +139,10 @@ function AuthGuard() {
 
   // Com sessão confirmada e sem pendência, o CrmProvider e o restante do app montam.
   return (
-    <CrmProvider>
+    <CrmProvider
+      key={effectiveTenantId || 'tenant-loading'}
+      tenantId={effectiveTenantId}
+    >
       <AppContent />
     </CrmProvider>
   );
