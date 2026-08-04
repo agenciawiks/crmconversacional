@@ -14,6 +14,7 @@ const statusLabels = {
 
 export default function ChannelsConfig() {
   const {
+    tenantId,
     channels,
     addChannel,
     refreshChannels,
@@ -65,9 +66,23 @@ export default function ChannelsConfig() {
           url: evoUrl,
           instance: evoInstance.trim(),
           apiKey: evoApiKey,
+          tenantId,
         });
 
-        await refreshChannels();
+        const refreshedChannels = await refreshChannels();
+        const persistedChannel = refreshedChannels.find((channel) =>
+          result.channelId
+            ? channel.id === result.channelId
+            : channel.provider === 'evolution' &&
+              channel.instance === evoInstance.trim(),
+        );
+
+        if (!persistedChannel) {
+          throw new Error(
+            'A Evolution API foi conectada, mas o canal não foi salvo para este cliente. Tente novamente.',
+          );
+        }
+
         setEvoApiKey('');
         setConnectionResult({
           type: result.connected ? 'success' : 'warning',

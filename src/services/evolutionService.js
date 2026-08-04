@@ -23,6 +23,7 @@ export async function connectEvolutionChannel({
   url,
   instance,
   apiKey,
+  tenantId,
 }) {
   if (!N8N_URL) {
     throw new Error('O endereço do n8n não está configurado neste ambiente.');
@@ -44,7 +45,7 @@ export async function connectEvolutionChannel({
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({ name, url, instance, apiKey }),
+      body: JSON.stringify({ name, url, instance, apiKey, tenantId }),
     });
   } catch {
     throw new Error(
