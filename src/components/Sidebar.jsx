@@ -1,7 +1,6 @@
-import React from 'react';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX, RotateCw, Shield } from 'lucide-react';
+import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX, RotateCw, Shield, Building2 } from 'lucide-react';
 
 export default function Sidebar() {
   const { 
@@ -9,7 +8,16 @@ export default function Sidebar() {
     soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, requestNotificationPermission,
     realtimeStatus, reconnectRealtime
   } = useCrm();
-  const { user, profile, permissions, signOut } = useAuth();
+  const {
+    user,
+    profile,
+    permissions,
+    tenants,
+    selectedTenantId,
+    isSuperAdmin,
+    switchTenant,
+    signOut
+  } = useAuth();
   
   const displayName = profile?.full_name || user?.user_metadata?.name || user?.email || 'Usuário Logado';
   const displayInitials = (displayName || 'UA').substring(0, 2).toUpperCase();
@@ -68,6 +76,12 @@ export default function Sidebar() {
       label: 'Usuários & Acessos',
       icon: <Shield size={20} strokeWidth={2} />,
       permission: 'manage_users'
+    },
+    {
+      id: 'provision',
+      label: 'Novo Cliente',
+      icon: <Building2 size={20} strokeWidth={2} />,
+      superAdminOnly: true
     }
   ];
 
@@ -132,6 +146,62 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {isSuperAdmin && (
+        <div style={{
+          padding: '14px 16px',
+          borderBottom: '1px solid var(--border-glass)',
+          background: 'rgba(124, 58, 237, 0.08)'
+        }}>
+          <label
+            htmlFor="superadmin-tenant-selector"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              marginBottom: '8px',
+              color: 'var(--text-secondary)',
+              fontSize: '10px',
+              fontWeight: '800',
+              letterSpacing: '0.8px',
+              textTransform: 'uppercase'
+            }}
+          >
+            <Building2 size={13} />
+            Cliente em visualização
+          </label>
+          <select
+            id="superadmin-tenant-selector"
+            className="glass-input"
+            value={selectedTenantId || ''}
+            onChange={(event) => switchTenant(event.target.value)}
+            style={{
+              width: '100%',
+              minHeight: '38px',
+              padding: '8px 10px',
+              fontSize: '12px',
+              fontWeight: '700'
+            }}
+          >
+            {tenants.length === 0 && (
+              <option value="">Nenhum cliente encontrado</option>
+            )}
+            {tenants.map(tenant => (
+              <option key={tenant.id} value={tenant.id}>
+                {tenant.name || tenant.slug || tenant.id}
+              </option>
+            ))}
+          </select>
+          <div style={{
+            marginTop: '7px',
+            color: 'var(--accent-secondary)',
+            fontSize: '10px',
+            fontWeight: '700'
+          }}>
+            Modo superadministrador
+          </div>
+        </div>
+      )}
+
       {/* Navigation menu list */}
       <nav style={{
         flex: 1,
@@ -142,6 +212,9 @@ export default function Sidebar() {
         overflowY: 'auto'
       }}>
         {menuItems.map(item => {
+          if (item.superAdminOnly && !isSuperAdmin) {
+            return null;
+          }
           // Checa a permissão. Se não houver permission definida no array, permite.
           if (item.permission && permissions && permissions[item.permission] !== true) {
             return null;

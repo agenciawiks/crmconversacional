@@ -1,9 +1,13 @@
 import { supabase } from '../supabase';
 
-export const fetchRules = async () => {
-  const { data, error } = await supabase
+export const fetchRules = async (tenantId) => {
+  let query = supabase
     .from('followup_rules')
-    .select('*')
+    .select('*');
+
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+
+  const { data, error } = await query
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -53,7 +57,7 @@ export const deleteRule = async (id) => {
   return true;
 };
 
-export const fetchQueue = async (filters = {}) => {
+export const fetchQueue = async (filters = {}, tenantId) => {
   let query = supabase
     .from('followup_queue')
     .select(`
@@ -62,6 +66,10 @@ export const fetchQueue = async (filters = {}) => {
       channels:channel_id ( id, name, provider )
     `)
     .order('scheduled_at', { ascending: true });
+
+  if (tenantId) {
+    query = query.eq('tenant_id', tenantId);
+  }
 
   if (filters.status) {
     query = query.eq('status', filters.status);
@@ -96,10 +104,14 @@ export const cancelQueueItem = async (id, reason) => {
   return data?.[0] || null;
 };
 
-export const fetchSettings = async () => {
-  const { data, error } = await supabase
+export const fetchSettings = async (tenantId) => {
+  let query = supabase
     .from('crm_settings')
     .select('*');
+
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('[followUpService] fetchSettings error:', error);
@@ -108,10 +120,10 @@ export const fetchSettings = async () => {
   return data || [];
 };
 
-export const updateSetting = async (key, value) => {
+export const updateSetting = async (key, value, tenantId) => {
   const { data, error } = await supabase
     .from('crm_settings')
-    .upsert({ key, value })
+    .upsert({ key, value, ...(tenantId ? { tenant_id: tenantId } : {}) })
     .select();
 
   if (error) {

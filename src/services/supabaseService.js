@@ -1,10 +1,14 @@
 import { supabase } from '../supabase';
 
 class SupabaseService {
-  static async fetchContacts() {
-    const { data, error } = await supabase
+  static async fetchContacts(tenantId) {
+    let query = supabase
       .from('contacts')
-      .select('*')
+      .select('*');
+
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+
+    const { data, error } = await query
       .order('updated_at', { ascending: false });
 
     if (error) {
@@ -27,6 +31,7 @@ class SupabaseService {
       avatar_updated_at: c.avatar_updated_at || null,
       is_group: Boolean(c.is_group),
       whatsapp_jid: c.whatsapp_jid || null,
+      tenant_id: c.tenant_id || null,
       notes: (function() {
         if (!c.notes) return [];
         try {
@@ -42,11 +47,15 @@ class SupabaseService {
     }));
   }
 
-  static async fetchMessages(channelId) {
-    const { data, error } = await supabase
+  static async fetchMessages(channelId, tenantId) {
+    let query = supabase
       .from('messages')
       .select('*')
-      .eq('channel_id', channelId)
+      .eq('channel_id', channelId);
+
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+
+    const { data, error } = await query
       .order('timestamp', { ascending: true })
       .limit(200);
 
@@ -72,7 +81,8 @@ class SupabaseService {
       is_group: Boolean(msg.is_group),
       chat_jid: msg.chat_jid || null,
       sender_jid: msg.sender_jid || null,
-      sender_name: msg.sender_name || null
+      sender_name: msg.sender_name || null,
+      tenant_id: msg.tenant_id || null
     }));
   }
 
@@ -124,10 +134,14 @@ class SupabaseService {
     }));
   }
 
-  static async fetchChannels() {
-    const { data, error } = await supabase
+  static async fetchChannels(tenantId) {
+    let query = supabase
       .from('channels')
-      .select('id,name,provider,status,url,instance,phone_id,webhook_url,tenant_id,created_at,updated_at')
+      .select('id,name,provider,status,url,instance,phone_id,webhook_url,tenant_id,created_at,updated_at');
+
+    if (tenantId) query = query.eq('tenant_id', tenantId);
+
+    const { data, error } = await query
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -148,7 +162,7 @@ class SupabaseService {
     }));
   }
 
-  static async addChannel(channelData) {
+  static async addChannel(channelData, tenantId) {
     const row = {
       name: channelData.name,
       provider: channelData.provider === 'meta_cloud' ? 'meta' : (channelData.provider === 'instagram' ? 'instagram' : 'evolution'),
@@ -158,7 +172,8 @@ class SupabaseService {
       api_key: channelData.apiKey || null,
       phone_id: channelData.phoneId || null,
       access_token: channelData.accessToken || null,
-      webhook_url: channelData.webhookUrl || null
+      webhook_url: channelData.webhookUrl || null,
+      tenant_id: tenantId || channelData.tenant_id || null
     };
 
     const { data, error } = await supabase
@@ -230,13 +245,14 @@ class SupabaseService {
     return true;
   }
 
-  static async createContact(contactData) {
+  static async createContact(contactData, tenantId) {
     const row = {
       phone: contactData.phone.replace(/\D/g, ''),
       name: contactData.name,
       pipeline_stage: contactData.status || 'new',
       email: contactData.email || null,
-      tags: contactData.tags || []
+      tags: contactData.tags || [],
+      tenant_id: tenantId || contactData.tenant_id || null
     };
 
     const { data, error } = await supabase
@@ -251,6 +267,7 @@ class SupabaseService {
           .from('contacts')
           .select('*')
           .eq('phone', row.phone)
+          .eq('tenant_id', row.tenant_id)
           .maybeSingle();
         return existing;
       }

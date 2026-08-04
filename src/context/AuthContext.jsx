@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 
 const AuthContext = createContext();
@@ -8,12 +8,57 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [permissions, setPermissions] = useState({});
+  const [tenants, setTenants] = useState([]);
+  const [selectedTenantId, setSelectedTenantId] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const isSuperAdmin = profile?.is_super_admin === true;
+  const effectiveTenantId = isSuperAdmin
+    ? selectedTenantId
+    : profile?.tenant_id || null;
+
+  const loadTenants = async (prof) => {
+    if (!prof?.is_super_admin) {
+      const ownTenant = prof?.tenants
+        ? [{ id: prof.tenant_id, ...prof.tenants }]
+        : [];
+      setTenants(ownTenant);
+      setSelectedTenantId(prof?.tenant_id || null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('tenants')
+      .select('id,name,slug,plan')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('[AuthContext] Erro ao carregar clientes:', error);
+      setTenants([]);
+      setSelectedTenantId(prof?.tenant_id || null);
+      return;
+    }
+
+    const availableTenants = data || [];
+    const savedTenantId = localStorage.getItem('crm_superadmin_tenant_id');
+    const preferredTenantId = availableTenants.some(
+      tenant => tenant.id === savedTenantId
+    )
+      ? savedTenantId
+      : availableTenants.some(tenant => tenant.id === prof?.tenant_id)
+        ? prof.tenant_id
+        : availableTenants[0]?.id || null;
+
+    setTenants(availableTenants);
+    setSelectedTenantId(preferredTenantId);
+  };
 
   const loadProfile = async (sessionUser) => {
     if (!sessionUser) {
       setProfile(null);
       setPermissions({});
+      setTenants([]);
+      setSelectedTenantId(null);
       setLoading(false);
       return;
     }
@@ -28,6 +73,11 @@ export function AuthProvider({ children }) {
               permission_key,
               allowed
             )
+          ),
+          tenants (
+            name,
+            slug,
+            plan
           )
         `)
         .eq('id', sessionUser.id)
@@ -57,8 +107,14 @@ export function AuthProvider({ children }) {
           });
         }
         
-        setProfile({ ...prof, role_name: prof.roles?.name });
+        const loadedProfile = {
+          ...prof,
+          role_name: prof.roles?.name,
+          tenant_name: prof.tenants?.name
+        };
+        setProfile(loadedProfile);
         setPermissions(permsObj);
+        await loadTenants(loadedProfile);
       }
     } catch(err) {
       console.error("[AuthContext] Catch:", err);
@@ -91,6 +147,8 @@ export function AuthProvider({ children }) {
         } else {
           setProfile(null);
           setPermissions({});
+          setTenants([]);
+          setSelectedTenantId(null);
           setLoading(false);
         }
       }
@@ -136,7 +194,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const completeFirstLogin = async (userId) => {
+  const completeFirstLogin = async () => {
     // We use an RPC call because RLS (Row Level Security) blocks direct UPDATEs from the frontend.
     const { error } = await supabase.rpc('complete_first_login');
 
@@ -153,8 +211,37 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   };
 
+  const switchTenant = (tenantId) => {
+    if (!isSuperAdmin) return;
+    if (!tenants.some(tenant => tenant.id === tenantId)) return;
+
+    localStorage.setItem('crm_superadmin_tenant_id', tenantId);
+    localStorage.removeItem('crm_active_contact_id');
+    setSelectedTenantId(tenantId);
+  };
+
+  const refreshTenants = async () => {
+    if (profile) {
+      await loadTenants(profile);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, permissions, loading, signOut, completeFirstLogin }}>
+    <AuthContext.Provider value={{
+      session,
+      user,
+      profile,
+      permissions,
+      tenants,
+      selectedTenantId,
+      effectiveTenantId,
+      isSuperAdmin,
+      loading,
+      signOut,
+      completeFirstLogin,
+      switchTenant,
+      refreshTenants
+    }}>
       {children}
     </AuthContext.Provider>
   );

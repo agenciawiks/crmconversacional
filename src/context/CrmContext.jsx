@@ -41,11 +41,12 @@ const normalizeMessage = (rawMsg) => {
     chat_jid: rawMsg.chat_jid || null,
     sender_jid: rawMsg.sender_jid || null,
     sender_name: rawMsg.sender_name || null,
+    tenant_id: rawMsg.tenant_id || null,
     status: rawMsg.status || (rawMsg.direction === 'out' ? 'sent' : 'received')
   };
 };
 
-export const CrmProvider = ({ children }) => {
+export const CrmProvider = ({ children, tenantId }) => {
   const [activeScreen, setActiveScreen] = useState(() => {
     return localStorage.getItem('crm_active_screen') || 'dashboard';
   });
@@ -244,6 +245,13 @@ export const CrmProvider = ({ children }) => {
   // Load Initial Data from Supabase
   useEffect(() => {
     async function loadData() {
+      if (!tenantId) {
+        setContacts([]);
+        setChannels([]);
+        setAppointments([]);
+        return;
+      }
+
       try {
         const [
           dbContacts, 
@@ -253,12 +261,12 @@ export const CrmProvider = ({ children }) => {
           dbSettings,
           dbAppointments
         ] = await Promise.all([
-          SupabaseService.fetchContacts(),
-          supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500),
-          SupabaseService.fetchChannelsSafe(),
-          followUpService.fetchRules(),
-          followUpService.fetchSettings(),
-          supabase.from('appointments').select('*, contacts(name, phone)').order('start_time', { ascending: true })
+          SupabaseService.fetchContacts(tenantId),
+          supabase.from('messages').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(500),
+          SupabaseService.fetchChannels(tenantId),
+          followUpService.fetchRules(tenantId),
+          followUpService.fetchSettings(tenantId),
+          supabase.from('appointments').select('*, contacts(name, phone)').eq('tenant_id', tenantId).order('start_time', { ascending: true })
         ]);
 
         const dbMessages = (dbMessagesRaw || []).reverse();
@@ -293,7 +301,7 @@ export const CrmProvider = ({ children }) => {
             { name: 'Urgente', color: '#EF4444' },
             { name: 'VIP', color: '#3B82F6' }
           ];
-          await followUpService.updateSetting('global_tags', JSON.stringify(loadedTags));
+          await followUpService.updateSetting('global_tags', JSON.stringify(loadedTags), tenantId);
         }
         setGlobalTags(loadedTags);
 
@@ -391,7 +399,7 @@ export const CrmProvider = ({ children }) => {
       }
     }
     loadData();
-  }, []);
+  }, [tenantId]);
 
   // Migração client-side dos valores de leads (localStorage -> Supabase) executada uma única vez
   useEffect(() => {
@@ -430,11 +438,12 @@ export const CrmProvider = ({ children }) => {
 
   // Realtime subscription for Appointments
   useEffect(() => {
+    if (!tenantId) return;
     const channel = supabase
-      .channel('public:appointments')
+      .channel(`public:appointments:${tenantId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'appointments' },
+        { event: '*', schema: 'public', table: 'appointments', filter: `tenant_id=eq.${tenantId}` },
         async (payload) => {
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
             // Fetch the updated appointment with contact info
@@ -442,6 +451,7 @@ export const CrmProvider = ({ children }) => {
               .from('appointments')
               .select('*, contacts(name, phone)')
               .eq('id', payload.new.id)
+              .eq('tenant_id', tenantId)
               .single();
               
             if (data) {
@@ -463,7 +473,7 @@ export const CrmProvider = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [tenantId]);
 
   // Synchronize state changes to localStorage
   useEffect(() => {
@@ -529,6 +539,7 @@ export const CrmProvider = ({ children }) => {
           .from('messages')
           .select('*')
           .eq('contact_id', activeContactId)
+          .eq('tenant_id', tenantId)
           .order('timestamp', { ascending: true });
 
         if (error) throw error;
@@ -580,7 +591,7 @@ export const CrmProvider = ({ children }) => {
     return () => {
       active = false;
     };
-  }, [activeContactId, channels]);
+  }, [activeContactId, channels, tenantId]);
 
   // Merge a new message into contacts state (deduplicating by id)
   const mergeMessage = useCallback((payload) => {
@@ -666,7 +677,7 @@ export const CrmProvider = ({ children }) => {
       
       if (!exists) {
         // Fetch contact info for brand new contacts
-        SupabaseService.fetchContacts().then(dbContacts => {
+        SupabaseService.fetchContacts(tenantId).then(dbContacts => {
           const freshC = (dbContacts || []).find(dc => dc.id === newMsg.contact_id);
           if (freshC) {
             const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
@@ -735,7 +746,7 @@ export const CrmProvider = ({ children }) => {
       }
       return updated;
     });
-  }, [channels]);
+  }, [channels, tenantId]);
 
   const mergeMessageUpdate = useCallback((payload) => {
     const rawMsg = payload.new || payload;
@@ -772,13 +783,13 @@ export const CrmProvider = ({ children }) => {
 
   // Robust direct realtime subscription (bypasses hook state-array batching)
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !tenantId) return;
 
     const channel = supabase
-      .channel(`public:messages:direct:${reconnectTrigger}`)
+      .channel(`public:messages:direct:${tenantId}:${reconnectTrigger}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
           const newMsg = payload.new;
           console.log('[Supabase Realtime] Direct message insert received:', newMsg);
@@ -788,7 +799,7 @@ export const CrmProvider = ({ children }) => {
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
           console.log(
             '[Supabase Realtime] Message status update received:',
@@ -810,17 +821,18 @@ export const CrmProvider = ({ children }) => {
     mergeMessageUpdate,
     updateChannelStatus,
     reconnectTrigger,
+    tenantId,
   ]);
 
   // Realtime subscription on contacts table to sync pipeline stage & tags in realtime
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !tenantId) return;
 
     const channel = supabase
-      .channel('public:contacts:direct')
+      .channel(`public:contacts:direct:${tenantId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'contacts' },
+        { event: 'UPDATE', schema: 'public', table: 'contacts', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
           const updatedContact = payload.new;
           console.log('[Supabase Realtime] Contact update received:', updatedContact);
@@ -880,17 +892,17 @@ export const CrmProvider = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [updateChannelStatus, reconnectTrigger]);
+  }, [updateChannelStatus, reconnectTrigger, tenantId]);
 
   // Realtime subscription on followup_queue to trigger alert when a follow-up is dispatched
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !tenantId) return;
 
     const queueChannel = supabase
-      .channel('public:followup_queue:direct')
+      .channel(`public:followup_queue:direct:${tenantId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'followup_queue' },
+        { event: 'UPDATE', schema: 'public', table: 'followup_queue', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
           const updatedItem = payload.new;
           if (updatedItem.status === 'sent') {
@@ -909,18 +921,19 @@ export const CrmProvider = ({ children }) => {
     return () => {
       supabase.removeChannel(queueChannel);
     };
-  }, [contacts]);
+  }, [contacts, tenantId]);
 
   // Realtime subscription for global tags in crm_settings
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !tenantId) return;
 
     const channel = supabase
-      .channel('public:crm_settings:tags')
+      .channel(`public:crm_settings:tags:${tenantId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'crm_settings', filter: 'key=eq.global_tags' },
+        { event: 'UPDATE', schema: 'public', table: 'crm_settings', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
+          if (payload.new.key !== 'global_tags') return;
           console.log('[Supabase Realtime] global_tags update received:', payload.new);
           try {
             const parsed = JSON.parse(payload.new.value || '[]');
@@ -935,15 +948,17 @@ export const CrmProvider = ({ children }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [tenantId]);
 
   // Polling fallback: fetch new messages every 5 seconds (uses DB created_at to avoid clock skew)
   useEffect(() => {
+    if (!tenantId) return;
     const interval = setInterval(async () => {
       try {
         const { data: newMsgs } = await supabase
           .from('messages')
           .select('*')
+          .eq('tenant_id', tenantId)
           .gt('created_at', lastPollRef.current)
           .order('timestamp', { ascending: true });
 
@@ -960,7 +975,7 @@ export const CrmProvider = ({ children }) => {
           setContacts(prev => {
             const missing = contactIds.filter(cid => !prev.find(c => c.id === cid));
             if (missing.length > 0) {
-              SupabaseService.fetchContacts().then(dbContacts => {
+              SupabaseService.fetchContacts(tenantId).then(dbContacts => {
                 const meta = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
                 setContacts(prev2 => {
                   const toAdd = (dbContacts || []).filter(dc => missing.includes(dc.id) && !prev2.find(c => c.id === dc.id));
@@ -999,7 +1014,7 @@ export const CrmProvider = ({ children }) => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [mergeMessage]);
+  }, [mergeMessage, tenantId]);
 
   const addChannel = async (name, provider, details) => {
     const channelData = {
@@ -1012,7 +1027,7 @@ export const CrmProvider = ({ children }) => {
       accessToken: details.accessToken
     };
 
-    const newDbChannel = await SupabaseService.addChannel(channelData);
+    const newDbChannel = await SupabaseService.addChannel(channelData, tenantId);
     if (newDbChannel) {
       const mappedChannel = {
         id: newDbChannel.id,
@@ -1032,7 +1047,7 @@ export const CrmProvider = ({ children }) => {
   };
 
   const refreshChannels = async () => {
-    const latestChannels = await SupabaseService.fetchChannels();
+    const latestChannels = await SupabaseService.fetchChannels(tenantId);
     setChannels(latestChannels || []);
     return latestChannels || [];
   };
@@ -1166,7 +1181,7 @@ export const CrmProvider = ({ children }) => {
     if (!name.trim()) return false;
     try {
       // 1. Race condition mitigation: Fetch latest tags from database first
-      const currentSettings = await followUpService.fetchSettings();
+      const currentSettings = await followUpService.fetchSettings(tenantId);
       const tagsSetting = currentSettings?.find(s => s.key === 'global_tags');
       let tagsList = [];
       if (tagsSetting) {
@@ -1183,7 +1198,7 @@ export const CrmProvider = ({ children }) => {
       
       // 3. Persist to DB and update local state
       setGlobalTags(updated);
-      await followUpService.updateSetting('global_tags', JSON.stringify(updated));
+      await followUpService.updateSetting('global_tags', JSON.stringify(updated), tenantId);
       return true;
     } catch(e) {
       console.error("[CrmContext] Error adding global tag:", e);
@@ -1198,7 +1213,7 @@ export const CrmProvider = ({ children }) => {
 
     try {
       // 1. Fetch latest catalogue
-      const currentSettings = await followUpService.fetchSettings();
+      const currentSettings = await followUpService.fetchSettings(tenantId);
       const tagsSetting = currentSettings?.find(s => s.key === 'global_tags');
       let tagsList = [];
       if (tagsSetting) {
@@ -1247,7 +1262,7 @@ export const CrmProvider = ({ children }) => {
 
       // 5. Save updated catalogue to database
       setGlobalTags(updated);
-      await followUpService.updateSetting('global_tags', JSON.stringify(updated));
+      await followUpService.updateSetting('global_tags', JSON.stringify(updated), tenantId);
       return true;
     } catch(e) {
       console.error("[CrmContext] Error updating global tag:", e);
@@ -1259,7 +1274,7 @@ export const CrmProvider = ({ children }) => {
     const cleanedName = name.trim();
     try {
       // 1. Fetch latest catalogue
-      const currentSettings = await followUpService.fetchSettings();
+      const currentSettings = await followUpService.fetchSettings(tenantId);
       const tagsSetting = currentSettings?.find(s => s.key === 'global_tags');
       let tagsList = [];
       if (tagsSetting) {
@@ -1293,7 +1308,7 @@ export const CrmProvider = ({ children }) => {
 
       // 5. Save updated catalogue to database
       setGlobalTags(updated);
-      await followUpService.updateSetting('global_tags', JSON.stringify(updated));
+      await followUpService.updateSetting('global_tags', JSON.stringify(updated), tenantId);
       return true;
     } catch(e) {
       console.error("[CrmContext] Error deleting global tag:", e);
@@ -1348,7 +1363,7 @@ export const CrmProvider = ({ children }) => {
         status: 'new',
         email: `${name.toLowerCase().replace(/\s+/g, '.')}@email.com`,
         tags: ['Novo Lead']
-      });
+      }, tenantId);
 
       if (dbContact) {
         const hue = Math.floor(Math.random() * 360);
@@ -1365,6 +1380,7 @@ export const CrmProvider = ({ children }) => {
             .from('messages')
             .insert([{
               contact_id: dbContact.id,
+              tenant_id: tenantId,
               direction: 'in',
               content: initialText,
               timestamp: new Date().toISOString()
@@ -1668,6 +1684,7 @@ export const CrmProvider = ({ children }) => {
 
   return (
     <CrmContext.Provider value={{
+      tenantId,
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
