@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
-import { Shield, UserPlus, Save, Loader2, AlertCircle, X } from 'lucide-react';
+import { Shield, UserPlus, Loader2, AlertCircle, X } from 'lucide-react';
 
 export default function UsersManager() {
-  const { permissions } = useAuth();
+  const {
+    permissions,
+    effectiveTenantId,
+    isSuperAdmin,
+    tenants
+  } = useAuth();
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [rolePermissions, setRolePermissions] = useState([]);
@@ -28,17 +33,19 @@ export default function UsersManager() {
     { key: 'delete_contacts', label: 'Excluir Contatos' }
   ];
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch users
-      const { data: profiles } = await supabase
+      let profilesQuery = supabase
         .from('profiles')
         .select('*, roles(name)');
+
+      if (effectiveTenantId) {
+        profilesQuery = profilesQuery.eq('tenant_id', effectiveTenantId);
+      }
+
+      const { data: profiles } = await profilesQuery;
       
       // Fetch roles
       const { data: dbRoles } = await supabase
@@ -57,7 +64,11 @@ export default function UsersManager() {
       console.error("Error fetching users data:", err);
     }
     setLoading(false);
-  };
+  }, [effectiveTenantId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const togglePermission = async (roleId, permKey, currentVal) => {
     const newVal = !currentVal;
@@ -107,7 +118,8 @@ export default function UsersManager() {
         },
         body: JSON.stringify({
           action: currentState ? 'deactivate' : 'activate',
-          target_user_id: userId
+          target_user_id: userId,
+          tenant_id: effectiveTenantId
         })
       });
       
@@ -145,7 +157,10 @@ export default function UsersManager() {
         },
         body: JSON.stringify({
           action: 'create',
-          userData: newUserData
+          userData: {
+            ...newUserData,
+            tenant_id: effectiveTenantId
+          }
         })
       });
       
@@ -178,7 +193,12 @@ export default function UsersManager() {
             <Shield size={24} style={{ color: 'var(--accent-primary)' }} />
             Gestão de Acessos
           </h1>
-          <p style={{ color: 'var(--text-muted)' }}>Controle de usuários e permissões RBAC.</p>
+          <p style={{ color: 'var(--text-muted)' }}>
+            Controle de usuários e permissões RBAC
+            {isSuperAdmin
+              ? ` — ${tenants.find(tenant => tenant.id === effectiveTenantId)?.name || 'cliente selecionado'}`
+              : ''}.
+          </p>
         </div>
       </div>
 
