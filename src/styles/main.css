@@ -258,6 +258,8 @@ p {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 0 0 auto;
+  min-height: 44px;
   width: 100%;
   padding: 10px 14px;
   background: transparent;
@@ -272,6 +274,25 @@ p {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
+}
+
+.sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 92, 246, 0.42) transparent;
+  overscroll-behavior: contain;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.42);
+  border-radius: 999px;
 }
 
 .sidebar-nav-btn::before {
@@ -365,6 +386,45 @@ p {
 .sidebar-theme-btn:active {
   transform: translateY(0) scale(0.98);
   transition-duration: 0.1s;
+}
+
+/* Keep the admin sidebar usable on notebooks and shorter windows. */
+@media (max-height: 820px) {
+  .crm-sidebar .sidebar-brand {
+    padding: 16px 20px !important;
+  }
+
+  .crm-sidebar .sidebar-tenant-switcher {
+    padding: 10px 16px !important;
+  }
+
+  .crm-sidebar .sidebar-nav {
+    padding: 10px 12px !important;
+  }
+
+  .crm-sidebar .sidebar-nav-btn {
+    min-height: 40px;
+    padding: 5px 10px;
+    gap: 10px;
+  }
+
+  .crm-sidebar .sidebar-nav-icon {
+    padding: 4px;
+  }
+
+  .crm-sidebar .sidebar-footer {
+    padding: 10px 16px !important;
+    gap: 8px !important;
+  }
+
+  .crm-sidebar .sidebar-footer-alerts,
+  .crm-sidebar .sidebar-realtime {
+    margin-bottom: 0 !important;
+  }
+
+  .crm-sidebar .sidebar-theme-btn {
+    padding: 8px 12px;
+  }
 }
 
 /* Redesigned Login Screen Styles */
