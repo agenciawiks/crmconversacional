@@ -11,6 +11,9 @@ const EMPTY_FORM = {
   adminPassword: ''
 };
 
+const DEFAULT_PROVISION_URL =
+  'https://n8n-n8n.rh3fr2.easypanel.host/webhook/provision-tenant';
+
 const slugify = (value) => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -31,7 +34,9 @@ export default function ProvisionTenant() {
 
     const baseUrl = String(import.meta.env.VITE_N8N_WEBHOOK_URL || '')
       .replace(/\/+$/, '');
-    return baseUrl ? `${baseUrl}/webhook/provision-tenant` : '';
+    return baseUrl
+      ? `${baseUrl}/webhook/provision-tenant`
+      : DEFAULT_PROVISION_URL;
   }, []);
 
   if (!isSuperAdmin) {
