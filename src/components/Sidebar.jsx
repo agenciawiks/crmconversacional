@@ -86,7 +86,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="glass-panel" style={{
+    <aside className="glass-panel crm-sidebar" style={{
       width: '260px',
       height: '100%',
       display: 'flex',
@@ -97,7 +97,7 @@ export default function Sidebar() {
       zIndex: 100
     }}>
       {/* Brand logo container */}
-      <div style={{
+      <div className="sidebar-brand" style={{
         padding: '24px 20px',
         display: 'flex',
         alignItems: 'center',
@@ -147,7 +147,7 @@ export default function Sidebar() {
       </div>
 
       {isSuperAdmin && (
-        <div style={{
+        <div className="sidebar-tenant-switcher" style={{
           padding: '14px 16px',
           borderBottom: '1px solid var(--border-glass)',
           background: 'rgba(124, 58, 237, 0.08)'
@@ -203,7 +203,7 @@ export default function Sidebar() {
       )}
 
       {/* Navigation menu list */}
-      <nav style={{
+      <nav className="sidebar-nav" style={{
         flex: 1,
         padding: '20px 12px',
         display: 'flex',
@@ -237,7 +237,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer controls: theme switcher & active agent profile */}
-      <div style={{
+      <div className="sidebar-footer" style={{
         padding: '16px 20px',
         borderTop: '1px solid var(--border-glass)',
         display: 'flex',
@@ -245,7 +245,7 @@ export default function Sidebar() {
         gap: '16px'
       }}>
         {/* Operator Alert & Notification Controls */}
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+        <div className="sidebar-footer-alerts" style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
           <button
             type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
@@ -304,7 +304,8 @@ export default function Sidebar() {
         </div>
 
         {/* Realtime Connection Health Indicator */}
-        <div 
+        <div
+          className="sidebar-realtime"
           style={{
             display: 'flex',
             alignItems: 'center',
