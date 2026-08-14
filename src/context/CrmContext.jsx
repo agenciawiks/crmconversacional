@@ -1468,21 +1468,42 @@ export const CrmProvider = ({ children, tenantId }) => {
             channelId = matchedChannel ? matchedChannel.id : (channels[0]?.id || META_CHANNEL_ID);
           }
 
-          await N8nService.sendOutboundMessage(
+          const savedMessage = await N8nService.sendOutboundMessage(
             channelId,
             activeC.id,
             activeC.phone,
             text,
             activeC.whatsapp_jid,
-            Boolean(activeC.is_group)
+            Boolean(activeC.is_group),
+            tenantId
           );
 
-          // Mark as sent
+          const persistedMessage = normalizeMessage({
+            ...newMessage,
+            id: savedMessage.id,
+            sender: 'agent',
+            direction: 'out',
+            channel_id: channelId,
+            contact_id: activeC.id,
+            tenant_id: tenantId,
+            whatsapp_msg_id: savedMessage.whatsapp_msg_id || null,
+            status: savedMessage.status || 'sent',
+            is_group: Boolean(activeC.is_group),
+            chat_jid: activeC.whatsapp_jid || null
+          });
+
+          knownMsgIdsRef.current.add(persistedMessage.id);
+
+          // Replace the optimistic item with the row confirmed by Supabase/n8n.
           setContacts(prev => (prev || []).map(c => {
             if (c.id === contactId) {
+              const messages = c.messages || [];
+              const alreadyMerged = messages.some(m => m.id === persistedMessage.id);
               return {
                 ...c,
-                messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'sent' } : m)
+                messages: alreadyMerged
+                  ? messages.filter(m => m.id !== tempId)
+                  : messages.map(m => m.id === tempId ? persistedMessage : m)
               };
             }
             return c;
@@ -1577,12 +1598,13 @@ export const CrmProvider = ({ children, tenantId }) => {
       }
 
       // 2. Call n8n Webhook
-      await N8nService.sendOutboundMedia({
+      const savedMessage = await N8nService.sendOutboundMedia({
         channelId,
         contactId: activeC.id,
         phone: activeC.phone,
         recipientJid: activeC.whatsapp_jid,
         isGroup: Boolean(activeC.is_group),
+        tenantId,
         mediaUrl,
         contentType: baseType,
         mimeType: finalMimeType,
@@ -1590,12 +1612,32 @@ export const CrmProvider = ({ children, tenantId }) => {
         caption: caption
       });
 
-      // Mark as sent
+      const persistedMessage = normalizeMessage({
+        ...newMessage,
+        id: savedMessage.id,
+        sender: 'agent',
+        direction: 'out',
+        channel_id: channelId,
+        contact_id: activeC.id,
+        tenant_id: tenantId,
+        media_url: mediaUrl,
+        whatsapp_msg_id: savedMessage.whatsapp_msg_id || null,
+        status: savedMessage.status || 'sent',
+        is_group: Boolean(activeC.is_group),
+        chat_jid: activeC.whatsapp_jid || null
+      });
+
+      knownMsgIdsRef.current.add(persistedMessage.id);
+
       setContacts(prev => (prev || []).map(c => {
         if (c.id === contactId) {
+          const messages = c.messages || [];
+          const alreadyMerged = messages.some(m => m.id === persistedMessage.id);
           return {
             ...c,
-            messages: (c.messages || []).map(m => m.id === tempId ? { ...m, status: 'sent', media_url: mediaUrl } : m)
+            messages: alreadyMerged
+              ? messages.filter(m => m.id !== tempId)
+              : messages.map(m => m.id === tempId ? persistedMessage : m)
           };
         }
         return c;

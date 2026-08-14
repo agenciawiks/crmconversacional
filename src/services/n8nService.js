@@ -1,13 +1,37 @@
-const N8N_URL = import.meta.env.VITE_N8N_WEBHOOK_URL || '';
-const OUTBOUND_PATH = import.meta.env.VITE_N8N_OUTBOUND_PATH || '/webhook/send';
-const OUTBOUND_MEDIA_PATH = import.meta.env.VITE_N8N_OUTBOUND_MEDIA_PATH || '/webhook/send-media';
-const CHECK_OPENAI_QUOTA_PATH = import.meta.env.VITE_N8N_CHECK_OPENAI_QUOTA_PATH || '/webhook/check-openai-quota-prod';
+const ENV = import.meta.env || {};
+const N8N_URL = ENV.VITE_N8N_WEBHOOK_URL || '';
+const OUTBOUND_PATH = ENV.VITE_N8N_OUTBOUND_PATH || '/webhook/send';
+const OUTBOUND_MEDIA_PATH = ENV.VITE_N8N_OUTBOUND_MEDIA_PATH || '/webhook/send-media';
+const CHECK_OPENAI_QUOTA_PATH = ENV.VITE_N8N_CHECK_OPENAI_QUOTA_PATH || '/webhook/check-openai-quota-prod';
+
+export function requirePersistedMessage(data) {
+  const payload = Array.isArray(data) ? data[0] : data;
+
+  if (!payload || payload.success === false) {
+    throw new Error(payload?.error || payload?.message || 'O envio não foi confirmado pelo servidor.');
+  }
+
+  if (!payload.id) {
+    throw new Error('A mensagem pode ter sido enviada, mas não foi confirmada no histórico.');
+  }
+
+  return { ...payload, success: true };
+}
+
+async function readResponse(response) {
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || data?.message || `HTTP ${response.status}`);
+  }
+
+  return requirePersistedMessage(data);
+}
 
 class N8nService {
-  static async sendOutboundMessage(channelId, contactId, phone, content, recipientJid = null, isGroup = false) {
+  static async sendOutboundMessage(channelId, contactId, phone, content, recipientJid = null, isGroup = false, tenantId = null) {
     if (!N8N_URL) {
-      console.warn('[N8nService] VITE_N8N_WEBHOOK_URL not configured.');
-      return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
+      throw new Error('VITE_N8N_WEBHOOK_URL não configurada.');
     }
 
     const response = await fetch(`${N8N_URL}${OUTBOUND_PATH}`, {
@@ -19,21 +43,17 @@ class N8nService {
         phone: phone,
         content: content,
         recipient_jid: recipientJid,
-        is_group: isGroup
+        is_group: isGroup,
+        tenant_id: tenantId
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    return { success: true };
+    return readResponse(response);
   }
 
-  static async sendOutboundMedia({ channelId, contactId, phone, recipientJid, isGroup, mediaUrl, contentType, mimeType, fileName, caption }) {
+  static async sendOutboundMedia({ channelId, contactId, phone, recipientJid, isGroup, tenantId, mediaUrl, contentType, mimeType, fileName, caption }) {
     if (!N8N_URL) {
-      console.warn('[N8nService] VITE_N8N_WEBHOOK_URL not configured.');
-      return { success: false, reason: 'VITE_N8N_WEBHOOK_URL not configured' };
+      throw new Error('VITE_N8N_WEBHOOK_URL não configurada.');
     }
 
     const response = await fetch(`${N8N_URL}${OUTBOUND_MEDIA_PATH}`, {
@@ -45,6 +65,7 @@ class N8nService {
         phone: phone,
         recipient_jid: recipientJid,
         is_group: Boolean(isGroup),
+        tenant_id: tenantId,
         media_url: mediaUrl,
         content_type: contentType,
         mime_type: mimeType,
@@ -53,11 +74,7 @@ class N8nService {
       })
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    return { success: true };
+    return readResponse(response);
   }
 
   static async checkOpenAIQuota(channelId) {

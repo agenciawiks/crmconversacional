@@ -47,7 +47,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const channelList = $input.first().json;\nconst channel = Array.isArray(channelList) ? channelList[0] : channelList;\n\nconst trigger = $('Send Message Trigger').first().json;\nconst body = trigger.body || trigger;\n\nif (!channel) {\n  throw new Error(\"Channel not found in Supabase\");\n}\n\nreturn [{\n  json: {\n    channel_id: body.channel_id,\n    contact_id: body.contact_id,\n    provider: channel.provider,\n    content: body.content,\n    phone: body.phone,\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
+        "jsCode": "const channelList = $input.first().json;\nconst channel = Array.isArray(channelList) ? channelList[0] : channelList;\n\nconst trigger = $('Send Message Trigger').first().json;\nconst body = trigger.body || trigger;\n\nif (!channel) {\n  throw new Error(\"Channel not found in Supabase\");\n}\n\nreturn [{\n  json: {\n    channel_id: body.channel_id,\n    tenant_id: channel.tenant_id || body.tenant_id,\n    contact_id: body.contact_id,\n    provider: channel.provider,\n    content: body.content,\n    phone: body.phone,\n    recipient_jid: body.recipient_jid || null,\n    is_group: Boolean(body.is_group),\n    // Meta fields\n    phone_id: channel.phone_id,\n    access_token: channel.access_token,\n    // Evolution fields\n    evo_url: channel.url,\n    evo_instance: channel.instance,\n    evo_api_key: channel.api_key\n  }\n}];"
       },
       "id": "node-map-channel",
       "name": "Map Channel Data",
@@ -250,6 +250,10 @@
             {
               "name": "timestamp",
               "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "tenant_id",
+              "value": "={{ $('Map Channel Data').first().json.tenant_id }}"
             }
           ]
         },
@@ -266,7 +270,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { success: true, message: 'Mensagem enviada com sucesso' } }];"
+        "jsCode": "const saved = $('Log Outgoing Message').first().json;\nreturn [{ json: {\n  success: true,\n  message: 'Mensagem enviada com sucesso',\n  id: saved.id || null,\n  whatsapp_msg_id: saved.whatsapp_msg_id || null,\n  status: saved.status || 'sent'\n} }];"
       },
       "id": "node-respond",
       "name": "Response OK",
