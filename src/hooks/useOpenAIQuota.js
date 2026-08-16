@@ -8,15 +8,18 @@ import N8nService from '../services/n8nService';
  * Retorna: { status, errorType, isChecking, lastChecked, recheck }
  * status: 'ok' | 'quota_exceeded' | 'invalid_key' | 'unknown' | 'no_key' | 'loading'
  */
-export function useOpenAIQuota(intervalMs = 600000) { // Default 10 min
+export function useOpenAIQuota(intervalMs = 600000, explicitChannelId = null) { // Default 10 min
   const [status, setStatus] = useState('loading');
   const [errorType, setErrorType] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
   const [lastChecked, setLastChecked] = useState(null);
-  const [channelId, setChannelId] = useState(null);
+  const [fallbackChannelId, setFallbackChannelId] = useState(null);
+  const channelId = explicitChannelId || fallbackChannelId;
 
   // Load the first available channel ID
   useEffect(() => {
+    if (explicitChannelId) return;
+
     async function loadChannel() {
       try {
         const channels = await SupabaseService.fetchChannels();
@@ -24,13 +27,13 @@ export function useOpenAIQuota(intervalMs = 600000) { // Default 10 min
           setStatus('no_key');
           return;
         }
-        setChannelId(channels[0].id);
-      } catch (e) {
+        setFallbackChannelId(channels[0].id);
+      } catch {
         setStatus('unknown');
       }
     }
     loadChannel();
-  }, []);
+  }, [explicitChannelId]);
 
   const checkQuota = useCallback(async (chId) => {
     if (!chId) return;
@@ -58,9 +61,9 @@ export function useOpenAIQuota(intervalMs = 600000) { // Default 10 min
 
   // Check when channelId is loaded
   useEffect(() => {
-    if (channelId) {
-      checkQuota(channelId);
-    }
+    if (!channelId) return undefined;
+    const timer = setTimeout(() => checkQuota(channelId), 0);
+    return () => clearTimeout(timer);
   }, [channelId, checkQuota]);
 
   // Re-check at interval

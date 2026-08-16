@@ -37,7 +37,7 @@ class SupabaseService {
         try {
           const parsed = JSON.parse(c.notes);
           if (Array.isArray(parsed)) return parsed;
-        } catch (e) {
+        } catch {
           // not json, fallback
         }
         return [{ id: 1, text: c.notes, date: c.updated_at }];
@@ -190,7 +190,7 @@ class SupabaseService {
   }
 
   static async updateContactNotes(contactId, notesText) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
       .update({ notes: notesText })
       .eq('id', contactId)
@@ -204,7 +204,7 @@ class SupabaseService {
   }
 
   static async updateContactTags(contactId, tags) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
       .update({ tags: tags })
       .eq('id', contactId)
@@ -218,7 +218,7 @@ class SupabaseService {
   }
 
   static async updateContactName(contactId, name) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
       .update({ name })
       .eq('id', contactId)
@@ -232,7 +232,7 @@ class SupabaseService {
   }
 
   static async updateContactStatus(contactId, status) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
       .update({ pipeline_stage: status })
       .eq('id', contactId)
@@ -281,37 +281,28 @@ class SupabaseService {
     if (!channelId) return null;
     try {
       const { data, error } = await supabase
-        .from('ai_settings')
-        .select('*')
-        .eq('channel_id', channelId)
-        .limit(1)
-        .maybeSingle();
+        .rpc('get_ai_settings_safe', { p_channel_id: channelId });
 
       if (error) {
         console.error('[SupabaseService] fetchAiSettings db error:', error);
         return null;
       }
 
-      if (data) {
-        const row = data;
-        let parsedPrompt = {};
-        try {
-          parsedPrompt = JSON.parse(row.system_prompt || '{}');
-        } catch(e) {
-          parsedPrompt = { system_prompt: row.system_prompt };
-        }
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
         return {
           id: row.id,
           tenant_id: row.tenant_id,
           channel_id: row.channel_id,
           temperature: row.temperature ?? 0.7,
           pause_trigger_phrases: row.pause_trigger_phrases ?? [],
-          agent_name: parsedPrompt.agent_name ?? 'Agente de IA',
-          model: parsedPrompt.model ?? 'gpt-4o-mini',
-          api_key: parsedPrompt.api_key ?? '',
-          system_prompt: parsedPrompt.system_prompt ?? '',
-          negative_prompt: parsedPrompt.negative_prompt ?? '',
-          welcome_message: parsedPrompt.welcome_message ?? '',
+          agent_name: row.agent_name ?? 'Agente de IA',
+          model: row.model ?? 'gpt-4o-mini',
+          api_key: '',
+          api_key_configured: row.api_key_configured === true,
+          system_prompt: row.system_prompt ?? '',
+          negative_prompt: row.negative_prompt ?? '',
+          welcome_message: row.welcome_message ?? '',
           is_enabled: row.is_enabled ?? false
         };
       }
@@ -343,45 +334,26 @@ class SupabaseService {
   }
 
   static async saveAiSettings(settings) {
-    const systemPromptJson = JSON.stringify({
-      agent_name: settings.agent_name,
-      model: settings.model,
-      api_key: settings.api_key,
-      system_prompt: settings.system_prompt,
-      negative_prompt: settings.negative_prompt,
-      welcome_message: settings.welcome_message
-    });
-
-    const body = {
-      tenant_id: settings.tenant_id || "11111111-1111-1111-1111-111111111111",
-      channel_id: settings.channel_id,
-      system_prompt: systemPromptJson,
-      temperature: Number(settings.temperature) ?? 0.7,
-      pause_trigger_phrases: settings.pause_trigger_phrases || [],
-      is_enabled: settings.is_enabled
-    };
-
     try {
-      let query;
-      if (settings.id) {
-        query = supabase
-          .from('ai_settings')
-          .update(body)
-          .eq('id', settings.id);
-      } else {
-        query = supabase
-          .from('ai_settings')
-          .insert([body]);
-      }
-
-      const { data, error } = await query.select();
+      const { data, error } = await supabase.rpc('upsert_ai_settings_secure', {
+        p_channel_id: settings.channel_id,
+        p_is_enabled: Boolean(settings.is_enabled),
+        p_agent_name: settings.agent_name,
+        p_model: settings.model,
+        p_api_key: settings.api_key?.trim() || null,
+        p_temperature: Number(settings.temperature ?? 0.7),
+        p_system_prompt: settings.system_prompt,
+        p_negative_prompt: settings.negative_prompt,
+        p_welcome_message: settings.welcome_message,
+        p_pause_trigger_phrases: settings.pause_trigger_phrases || []
+      });
 
       if (error) {
         console.error('[SupabaseService] saveAiSettings db error:', error);
         return false;
       }
 
-      return data?.[0] || true;
+      return Array.isArray(data) ? data[0] : data;
     } catch(e) {
       console.error('[SupabaseService] saveAiSettings error:', e);
     }
@@ -389,7 +361,7 @@ class SupabaseService {
   }
 
   static async updateChannelStatus(channelId, status) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('channels')
       .update({ status })
       .eq('id', channelId)
@@ -426,7 +398,7 @@ class SupabaseService {
   }
 
   static async updateContactValue(contactId, value) {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('contacts')
       .update({ value: Number(value) || 0 })
       .eq('id', contactId)

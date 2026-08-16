@@ -1,9 +1,8 @@
-import React from 'react';
 import { AlertTriangle, CheckCircle2, RefreshCw, ExternalLink, Zap, Clock, WifiOff } from 'lucide-react';
 import { useOpenAIQuota } from '../hooks/useOpenAIQuota';
 
-export default function OpenAIStatusCard() {
-  const { status, errorType, isChecking, lastChecked, recheck } = useOpenAIQuota(120000);
+export default function OpenAIStatusCard({ channelId = null }) {
+  const { status, isChecking, lastChecked, recheck } = useOpenAIQuota(120000, channelId);
 
   const statusMap = {
     loading: {

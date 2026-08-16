@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import SupabaseService from '../services/supabaseService';
 import OpenAIStatusCard from './OpenAIStatusCard';
+import { useAuth } from '../context/AuthContext';
 import { 
   Bot, 
   Sliders, 
-  Key, 
   FileText, 
   AlertOctagon, 
   PauseCircle, 
@@ -12,13 +12,13 @@ import {
   Eye, 
   EyeOff, 
   X, 
-  Plus, 
   CheckCircle,
   AlertCircle,
   MessageSquare
 } from 'lucide-react';
 
 export default function AiAgentSettings() {
+  const { effectiveTenantId } = useAuth();
   const [channels, setChannels] = useState([]);
   const [selectedChannelId, setSelectedChannelId] = useState('');
   
@@ -28,6 +28,7 @@ export default function AiAgentSettings() {
   const [agentName, setAgentName] = useState('Atendente IA');
   const [model, setModel] = useState('gpt-4o-mini');
   const [apiKey, setApiKey] = useState('');
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
   const [temperature, setTemperature] = useState(0.7);
   const [systemPrompt, setSystemPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
@@ -45,17 +46,19 @@ export default function AiAgentSettings() {
   useEffect(() => {
     async function init() {
       try {
-        const chs = await SupabaseService.fetchChannels();
+        const chs = await SupabaseService.fetchChannels(effectiveTenantId);
         setChannels(chs);
         if (chs.length > 0) {
           setSelectedChannelId(chs[0].id);
+        } else {
+          setSelectedChannelId('');
         }
       } catch (err) {
         console.error('Error loading channels:', err);
       }
     }
     init();
-  }, []);
+  }, [effectiveTenantId]);
 
   // Load settings when selected channel changes
   useEffect(() => {
@@ -73,7 +76,8 @@ export default function AiAgentSettings() {
           setIsEnabled(config.is_enabled);
           setAgentName(config.agent_name);
           setModel(config.model);
-          setApiKey(config.api_key);
+          setApiKey('');
+          setApiKeyConfigured(config.api_key_configured === true);
           setTemperature(config.temperature);
           setSystemPrompt(config.system_prompt);
           setNegativePrompt(config.negative_prompt);
@@ -82,9 +86,13 @@ export default function AiAgentSettings() {
         } else {
           // Reset if no settings found for this channel
           setId(null);
+          const selectedChannel = channels.find(ch => ch.id === selectedChannelId);
+          setTenantId(selectedChannel?.tenantId || effectiveTenantId || null);
           setIsEnabled(false);
           setAgentName('Atendente IA');
           setModel('gpt-4o-mini');
+          setApiKey('');
+          setApiKeyConfigured(false);
           setTemperature(0.7);
           setSystemPrompt('');
           setNegativePrompt('');
@@ -99,14 +107,14 @@ export default function AiAgentSettings() {
       }
     }
     loadSettings();
-  }, [selectedChannelId]);
+  }, [selectedChannelId, channels, effectiveTenantId]);
 
-  const showStatus = (type, text) => {
+  function showStatus(type, text) {
     setStatusMsg({ type, text });
     setTimeout(() => {
       setStatusMsg({ type: '', text: '' });
     }, 4000);
-  };
+  }
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -133,6 +141,7 @@ export default function AiAgentSettings() {
         if (typeof result === 'object' && result.id) {
           setId(result.id);
           setTenantId(result.tenant_id);
+          setApiKeyConfigured(result.api_key_configured === true || apiKeyConfigured || Boolean(apiKey));
         }
         if (apiKey) setApiKey('');
         showStatus('success', 'Configurações do Agente de IA salvas com sucesso!');
@@ -202,7 +211,7 @@ export default function AiAgentSettings() {
       </div>
 
       {/* OpenAI Status Card */}
-      <OpenAIStatusCard />
+      <OpenAIStatusCard channelId={selectedChannelId} />
 
       {/* Channel Selector */}
       <div className="glass-panel" style={{ marginBottom: '24px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -373,9 +382,17 @@ export default function AiAgentSettings() {
                 alignItems: 'center',
                 gap: '10px'
               }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-status-won)', boxShadow: '0 0 8px var(--color-status-won)' }} />
+                <div style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: apiKeyConfigured ? 'var(--color-status-won)' : 'var(--color-status-contacted)',
+                  boxShadow: apiKeyConfigured ? '0 0 8px var(--color-status-won)' : 'none'
+                }} />
                 <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                  Gerenciada com segurança via Servidor Proxy (n8n)
+                  {apiKeyConfigured
+                    ? 'Chave configurada com segurança (não exibida)'
+                    : 'Nenhuma chave OpenAI configurada neste canal'}
                 </span>
               </div>
 

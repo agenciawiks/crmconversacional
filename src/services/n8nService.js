@@ -2,7 +2,8 @@ const ENV = import.meta.env || {};
 const N8N_URL = ENV.VITE_N8N_WEBHOOK_URL || '';
 const OUTBOUND_PATH = ENV.VITE_N8N_OUTBOUND_PATH || '/webhook/send';
 const OUTBOUND_MEDIA_PATH = ENV.VITE_N8N_OUTBOUND_MEDIA_PATH || '/webhook/send-media';
-const CHECK_OPENAI_QUOTA_PATH = ENV.VITE_N8N_CHECK_OPENAI_QUOTA_PATH || '/webhook/check-openai-quota-prod';
+const CHECK_OPENAI_QUOTA_PATH = ENV.VITE_N8N_CHECK_OPENAI_QUOTA_PATH
+  || (ENV.DEV ? '/webhook/check-openai-quota' : '/webhook/check-openai-quota-prod');
 
 export function requirePersistedMessage(data) {
   const payload = Array.isArray(data) ? data[0] : data;
