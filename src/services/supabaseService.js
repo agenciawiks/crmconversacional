@@ -245,6 +245,75 @@ class SupabaseService {
     return true;
   }
 
+  static async updateContactsStatus(contactIds, status, tenantId) {
+    const ids = [...new Set((contactIds || []).filter(Boolean).map(String))];
+    if (ids.length === 0) return [];
+    if (!tenantId) throw new Error('Cliente não identificado para movimentação em massa.');
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({ pipeline_stage: status })
+      .in('id', ids)
+      .eq('tenant_id', tenantId)
+      .select('id');
+
+    if (error) {
+      console.error('[SupabaseService] updateContactsStatus error:', error);
+      throw error;
+    }
+
+    const updatedIds = (data || []).map((row) => String(row.id));
+    if (updatedIds.length !== ids.length) {
+      throw new Error('Nem todos os contatos selecionados puderam ser atualizados.');
+    }
+    return updatedIds;
+  }
+
+  static async updateContactsTags(contactUpdates, tenantId) {
+    if (!tenantId) throw new Error('Cliente não identificado para atualização das etiquetas.');
+
+    const results = await Promise.all((contactUpdates || []).map(async ({ id, tags }) => {
+      const { data, error } = await supabase
+        .from('contacts')
+        .update({ tags })
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .select('id');
+
+      if (error) throw error;
+      return data?.[0]?.id || null;
+    }));
+
+    if (results.some((id) => !id)) {
+      throw new Error('Nem todas as etiquetas dos contatos puderam ser atualizadas.');
+    }
+    return results;
+  }
+
+  static async deleteContacts(contactIds, tenantId) {
+    const ids = [...new Set((contactIds || []).filter(Boolean).map(String))];
+    if (ids.length === 0) return [];
+    if (!tenantId) throw new Error('Cliente não identificado para exclusão em massa.');
+
+    const { data, error } = await supabase
+      .from('contacts')
+      .delete()
+      .in('id', ids)
+      .eq('tenant_id', tenantId)
+      .select('id');
+
+    if (error) {
+      console.error('[SupabaseService] deleteContacts error:', error);
+      throw error;
+    }
+
+    const deletedIds = (data || []).map((row) => String(row.id));
+    if (deletedIds.length !== ids.length) {
+      throw new Error('Nem todas as conversas selecionadas puderam ser excluídas.');
+    }
+    return deletedIds;
+  }
+
   static async createContact(contactData, tenantId) {
     const row = {
       phone: contactData.phone.replace(/\D/g, ''),
