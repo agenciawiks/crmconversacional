@@ -3,6 +3,12 @@ import React, { createContext, useState, useContext, useEffect, useRef, useCallb
 import { supabase } from '../supabase';
 import { useRealtimeMessages } from '../hooks/useSupabase';
 import SupabaseService from '../services/supabaseService';
+import {
+  applyBulkStage,
+  getNextActiveContactId,
+  normalizeContactIds,
+  removeContactsFromList
+} from '../lib/contactBulkActions';
 import N8nService from '../services/n8nService';
 import * as followUpService from '../services/followUpService';
 
@@ -1128,6 +1134,80 @@ export const CrmProvider = ({ children, tenantId }) => {
     }
   };
 
+  const bulkChangeContactStatus = async (contactIds, newStatus) => {
+    const ids = normalizeContactIds(contactIds);
+    if (ids.length === 0) return { count: 0 };
+
+    const selectedIds = new Set(ids);
+    const selectedContacts = contacts.filter((contact) => selectedIds.has(String(contact.id)));
+    const tagUpdates = ['won', 'lost'].includes(newStatus)
+      ? selectedContacts
+          .filter((contact) => !(contact.tags || []).includes('IA Inativa'))
+          .map((contact) => ({ id: contact.id, tags: [...(contact.tags || []), 'IA Inativa'] }))
+      : [];
+
+    await SupabaseService.updateContactsStatus(ids, newStatus, tenantId);
+
+    let warning = '';
+    if (tagUpdates.length > 0) {
+      try {
+        await SupabaseService.updateContactsTags(tagUpdates, tenantId);
+      } catch (error) {
+        console.error('[CrmContext] Error pausing AI after bulk stage change:', error);
+        warning = 'Os contatos foram movidos, mas algumas pausas da IA não puderam ser aplicadas.';
+      }
+    }
+
+    setContacts((previous) => (previous || []).map((contact) => {
+      if (warning && selectedIds.has(String(contact.id))) {
+        return { ...contact, status: newStatus };
+      }
+      return applyBulkStage(contact, selectedIds, newStatus);
+    }));
+
+    const metadata = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    selectedContacts.forEach((contact) => {
+      if (!metadata[contact.id]) metadata[contact.id] = {};
+      metadata[contact.id].status = newStatus;
+      if (!warning && ['won', 'lost'].includes(newStatus)) {
+        metadata[contact.id].tags = [...new Set([...(contact.tags || []), 'IA Inativa'])];
+      }
+    });
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(metadata));
+
+    return { count: ids.length, warning };
+  };
+
+  const bulkDeleteContacts = async (contactIds) => {
+    const ids = normalizeContactIds(contactIds);
+    if (ids.length === 0) return { count: 0 };
+
+    const nextActiveId = getNextActiveContactId(
+      contacts,
+      ids,
+      activeContactIdRef.current
+    );
+    await SupabaseService.deleteContacts(ids, tenantId);
+
+    setContacts((previous) => removeContactsFromList(previous, ids));
+    setAppointments((previous) => (previous || []).filter((appointment) =>
+      !ids.includes(String(appointment.contact_id || appointment.contactId || ''))
+    ));
+    setActiveContactId(nextActiveId);
+
+    if (nextActiveId) {
+      localStorage.setItem('crm_active_contact_id', nextActiveId);
+    } else {
+      localStorage.removeItem('crm_active_contact_id');
+    }
+
+    const metadata = JSON.parse(localStorage.getItem('crm_contacts_metadata') || '{}');
+    ids.forEach((id) => delete metadata[id]);
+    localStorage.setItem('crm_contacts_metadata', JSON.stringify(metadata));
+
+    return { count: ids.length };
+  };
+
   const addNoteToContact = async (contactId, text) => {
     if (!text.trim()) return;
 
@@ -1728,7 +1808,8 @@ export const CrmProvider = ({ children, tenantId }) => {
     <CrmContext.Provider value={{
       tenantId,
       activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
-      flowNodes, theme, toggleTheme, changeContactStatus, addNoteToContact, updateContactTags, updateContactName,
+      flowNodes, theme, toggleTheme, changeContactStatus, bulkChangeContactStatus, bulkDeleteContacts,
+      addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
       updateNodeData, addFlowNode, deleteFlowNode, sendMedia, channels, addChannel, refreshChannels, toggleChannelStatus, deleteChannel,
       followupRules, setFollowupRules, globalTags, addGlobalTag, updateGlobalTag, deleteGlobalTag,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, Check, CheckCheck, XCircle, Bot, User, Users, Tag, Brain, Paperclip, Mic } from 'lucide-react';
+import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, Check, CheckCheck, XCircle, Bot, User, Users, Tag, Brain, Paperclip, Mic, Trash2, ListChecks, MoveRight, X } from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import VoiceRecorder from './VoiceRecorder';
 import TagBadge from './TagBadge';
@@ -27,6 +27,7 @@ const sanitizeUrl = (url) => {
 };
 
 import SupabaseService from '../services/supabaseService';
+import { PIPELINE_STAGES } from '../lib/contactBulkActions';
 
 export default function ChatWindow() {
   const {
@@ -35,6 +36,8 @@ export default function ChatWindow() {
     setActiveContactId,
     sendMessage,
     changeContactStatus,
+    bulkChangeContactStatus,
+    bulkDeleteContacts,
     addNoteToContact,
     updateContactTags,
     updateContactValue,
@@ -42,7 +45,6 @@ export default function ChatWindow() {
     addGlobalTag,
     updateGlobalTag,
     deleteGlobalTag,
-    appointments,
     sendMedia
   } = useCrm();
 
@@ -61,6 +63,11 @@ export default function ChatWindow() {
   const [editingTag, setEditingTag] = useState(null);
   const [confirmDeleteTag, setConfirmDeleteTag] = useState(null);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedContactIds, setSelectedContactIds] = useState([]);
+  const [bulkStage, setBulkStage] = useState('');
+  const [bulkActionPending, setBulkActionPending] = useState(false);
+  const [bulkFeedback, setBulkFeedback] = useState(null);
   
   const scrollRef = useRef(null);
 
@@ -70,6 +77,12 @@ export default function ChatWindow() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [activeContact?.messages?.length, activeContact?.id]);
+
+  useEffect(() => {
+    if (!bulkFeedback) return undefined;
+    const timeoutId = window.setTimeout(() => setBulkFeedback(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [bulkFeedback]);
 
   if (contacts.length === 0) {
     return (
@@ -97,6 +110,101 @@ export default function ChatWindow() {
                           (c.tags || []).some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesChannel && matchesStatus && matchesSearch;
   });
+
+  const availableIds = new Set(contacts.map((contact) => String(contact.id)));
+  const selectedIds = new Set(
+    selectedContactIds.map(String).filter((id) => availableIds.has(id))
+  );
+  const selectedContacts = contacts.filter((contact) => selectedIds.has(String(contact.id)));
+  const selectedLeadIds = selectedContacts
+    .filter((contact) => !contact.is_group)
+    .map((contact) => contact.id);
+  const selectedGroupCount = selectedContacts.length - selectedLeadIds.length;
+  const allVisibleSelected = filteredContacts.length > 0
+    && filteredContacts.every((contact) => selectedIds.has(String(contact.id)));
+
+  const toggleContactSelection = (contactId) => {
+    const id = String(contactId);
+    setSelectedContactIds((previous) => previous.includes(id)
+      ? previous.filter((selectedId) => selectedId !== id)
+      : [...previous, id]
+    );
+  };
+
+  const toggleVisibleSelection = () => {
+    const visibleIds = filteredContacts.map((contact) => String(contact.id));
+    setSelectedContactIds((previous) => {
+      if (allVisibleSelected) {
+        const visibleSet = new Set(visibleIds);
+        return previous.filter((id) => !visibleSet.has(String(id)));
+      }
+      return [...new Set([...previous, ...visibleIds])];
+    });
+  };
+
+  const closeSelectionMode = () => {
+    if (bulkActionPending) return;
+    setSelectionMode(false);
+    setSelectedContactIds([]);
+    setBulkStage('');
+  };
+
+  const handleBulkMove = async () => {
+    if (!bulkStage || selectedLeadIds.length === 0 || bulkActionPending) return;
+    setBulkActionPending(true);
+    setBulkFeedback(null);
+    try {
+      const result = await bulkChangeContactStatus(selectedLeadIds, bulkStage);
+      const stage = PIPELINE_STAGES.find((item) => item.id === bulkStage);
+      const ignoredGroups = selectedGroupCount > 0
+        ? ` ${selectedGroupCount} grupo${selectedGroupCount > 1 ? 's foram ignorados' : ' foi ignorado'} porque grupos não entram no funil.`
+        : '';
+      setBulkFeedback({
+        type: result.warning ? 'warning' : 'success',
+        text: `${result.count} conversa${result.count > 1 ? 's movidas' : ' movida'} para ${stage?.label || 'a etapa selecionada'}.${ignoredGroups}${result.warning ? ` ${result.warning}` : ''}`
+      });
+      if (selectedGroupCount > 0) {
+        setSelectedContactIds(selectedContacts.filter((contact) => contact.is_group).map((contact) => String(contact.id)));
+      } else {
+        setSelectionMode(false);
+        setSelectedContactIds([]);
+        setBulkStage('');
+      }
+    } catch (error) {
+      console.error('[ChatWindow] Bulk move failed:', error);
+      setBulkFeedback({ type: 'error', text: error.message || 'Não foi possível mover as conversas.' });
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0 || bulkActionPending) return;
+    const idsToDelete = [...selectedIds];
+    const count = idsToDelete.length;
+    const confirmed = window.confirm(
+      `Excluir permanentemente ${count} conversa${count > 1 ? 's' : ''}? Esta ação não pode ser desfeita.`
+    );
+    if (!confirmed) return;
+
+    setBulkActionPending(true);
+    setBulkFeedback(null);
+    try {
+      const result = await bulkDeleteContacts(idsToDelete);
+      setSelectionMode(false);
+      setSelectedContactIds([]);
+      setBulkStage('');
+      setBulkFeedback({
+        type: 'success',
+        text: `${result.count} conversa${result.count > 1 ? 's excluídas' : ' excluída'} com sucesso.`
+      });
+    } catch (error) {
+      console.error('[ChatWindow] Bulk delete failed:', error);
+      setBulkFeedback({ type: 'error', text: error.message || 'Não foi possível excluir as conversas.' });
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
 
   const handleSendVoice = async (file) => {
     setIsRecordingVoice(false);
@@ -167,25 +275,6 @@ export default function ChatWindow() {
     const activeTags = activeContact.tags || [];
     if (!activeTags.includes(tagName)) {
       updateContactTags(activeContact.id, [...activeTags, tagName]);
-    }
-  };
-
-  const handleCreateNewTag = async () => {
-    const cleaned = tagSearch.trim().substring(0, 24);
-    if (!cleaned) return;
-    
-    // Check validation (remove special chars < > ")
-    const regex = /[<>"]/g;
-    if (regex.test(cleaned)) {
-      alert("Caracteres especiais inválidos (<, >, \") não são permitidos.");
-      return;
-    }
-
-    const success = await addGlobalTag(cleaned, selectedNewColor);
-    if (success) {
-      // Automatically assign to current contact
-      handleAddTagDirect(cleaned);
-      setTagSearch('');
     }
   };
 
@@ -264,7 +353,18 @@ export default function ChatWindow() {
       {/* COLUMN 1: CHATS DIRECTORY */}
       <div className="chat-list-panel">
         <div className="chat-list-header">
-          <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Conversas</h2>
+          <div className="chat-list-title-row">
+            <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Conversas</h2>
+            {selectionMode ? (
+              <button className="chat-selection-toggle active" onClick={closeSelectionMode} disabled={bulkActionPending}>
+                <X size={14} /> Cancelar
+              </button>
+            ) : (
+              <button className="chat-selection-toggle" onClick={() => setSelectionMode(true)}>
+                <ListChecks size={14} /> Selecionar
+              </button>
+            )}
+          </div>
           
           <div className="search-wrapper">
             <input
@@ -352,21 +452,52 @@ export default function ChatWindow() {
               Ganho {statusFilter === 'won' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
           </div>
+
+          {selectionMode && (
+            <div className="chat-selection-summary">
+              <label className="chat-select-visible">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleVisibleSelection}
+                  disabled={filteredContacts.length === 0 || bulkActionPending}
+                />
+                <span>{allVisibleSelected ? 'Desmarcar visíveis' : 'Selecionar visíveis'}</span>
+              </label>
+              <strong>{selectedIds.size} selecionada{selectedIds.size === 1 ? '' : 's'}</strong>
+            </div>
+          )}
         </div>
 
         <div className="chat-scroll-area">
           {filteredContacts.map(contact => {
             const isSelected = activeContact.id === contact.id;
+            const isBulkSelected = selectedIds.has(String(contact.id));
             const lastMsg = contact.messages[contact.messages.length - 1];
             return (
               <div
                 key={contact.id}
                 onClick={() => {
+                  if (selectionMode) {
+                    toggleContactSelection(contact.id);
+                    return;
+                  }
                   setActiveContactId(contact.id);
                   contact.unread = false; // Mark read on click
                 }}
-                className={`chat-item-row ${isSelected ? 'active' : ''} ${contact.unread ? 'unread' : ''}`}
+                className={`chat-item-row ${!selectionMode && isSelected ? 'active' : ''} ${isBulkSelected ? 'bulk-selected' : ''} ${contact.unread ? 'unread' : ''}`}
               >
+                {selectionMode && (
+                  <input
+                    className="chat-row-checkbox"
+                    type="checkbox"
+                    checked={isBulkSelected}
+                    onChange={() => toggleContactSelection(contact.id)}
+                    onClick={(event) => event.stopPropagation()}
+                    aria-label={`Selecionar conversa de ${contact.name || 'Sem nome'}`}
+                    disabled={bulkActionPending}
+                  />
+                )}
                 <div className="chat-avatar-wrapper">
                   <div className="avatar" style={{ background: contact.avatar_url ? 'transparent' : contact.avatarColor }}>
                     {contact.avatar_url ? (
@@ -450,7 +581,51 @@ export default function ChatWindow() {
             </div>
           )}
         </div>
+
+        {selectionMode && (
+          <div className="chat-bulk-actions">
+            <select
+              className="chat-bulk-stage-select"
+              value={bulkStage}
+              onChange={(event) => setBulkStage(event.target.value)}
+              disabled={bulkActionPending}
+              aria-label="Etapa do funil para as conversas selecionadas"
+            >
+              <option value="">Escolha a etapa do funil</option>
+              {PIPELINE_STAGES.map((stage) => (
+                <option key={stage.id} value={stage.id}>{stage.label}</option>
+              ))}
+            </select>
+            {selectedGroupCount > 0 && (
+              <span className="chat-bulk-hint">Grupos podem ser excluídos, mas não são movidos para o funil.</span>
+            )}
+            <div className="chat-bulk-buttons">
+              <button
+                className="chat-bulk-button move"
+                onClick={handleBulkMove}
+                disabled={!bulkStage || selectedLeadIds.length === 0 || bulkActionPending}
+              >
+                {bulkActionPending ? <Loader2 size={14} className="spin" /> : <MoveRight size={14} />}
+                Mover {selectedLeadIds.length || ''}
+              </button>
+              <button
+                className="chat-bulk-button delete"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0 || bulkActionPending}
+              >
+                {bulkActionPending ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />}
+                Excluir {selectedIds.size || ''}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {bulkFeedback && (
+        <div className={`chat-bulk-feedback ${bulkFeedback.type}`} role="status">
+          {bulkFeedback.text}
+        </div>
+      )}
 
       {/* COLUMN 2: ACTIVE DIALOG PANEL */}
       <div className="chat-active-panel">
