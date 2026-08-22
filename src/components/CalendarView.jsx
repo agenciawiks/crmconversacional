@@ -238,14 +238,17 @@ export default function CalendarView() {
     const root = rootRef.current;
     if (!root || !initialDataLoaded) return undefined;
     const context = gsap.context(() => {
-      const dayCells = gsap.utils.toArray('.agenda-day-cell, .agenda-week-day').slice(0, 42);
-      const events = gsap.utils.toArray('.agenda-event').slice(0, 18);
+      const pageHeader = root.querySelector('.agenda-page-header');
+      const metricCards = [...root.querySelectorAll('.agenda-metric-card')];
+      const toolbar = root.querySelector('.agenda-toolbar');
+      const calendarPanels = [...root.querySelectorAll('.agenda-calendar-shell, .agenda-upcoming-card')];
+      const dayCells = [...root.querySelectorAll('.agenda-day-cell, .agenda-week-day')].slice(0, 42);
+      const events = [...root.querySelectorAll('.agenda-event')].slice(0, 18);
       const entranceTargets = [
-        root.querySelector('.agenda-page-header'),
-        ...gsap.utils.toArray('.agenda-metric-card'),
-        root.querySelector('.agenda-toolbar'),
-        root.querySelector('.agenda-calendar-shell'),
-        root.querySelector('.agenda-upcoming-card'),
+        pageHeader,
+        ...metricCards,
+        toolbar,
+        ...calendarPanels,
         ...dayCells,
         ...events,
       ].filter(Boolean);
@@ -256,16 +259,17 @@ export default function CalendarView() {
         defaults: { ease: 'power3.out' },
         onComplete: () => gsap.set(entranceTargets, { clearProps: 'transform,opacity,visibility,willChange' }),
       });
-      timeline
-        .fromTo('.agenda-page-header', { autoAlpha: 0, y: 32 }, { autoAlpha: 1, y: 0, duration: 0.55 }, 0)
-        .fromTo('.agenda-metric-card', { autoAlpha: 0, y: 26, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.075 }, 0.15)
-        .fromTo('.agenda-toolbar', { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.46 }, 0.34)
-        .fromTo('.agenda-calendar-shell, .agenda-upcoming-card', { autoAlpha: 0, y: 26, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.52, stagger: 0.08 }, 0.48)
-        .fromTo(dayCells, { autoAlpha: 0, y: 12, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.3, stagger: 0.018 }, 0.68)
-        .fromTo(events, { autoAlpha: 0, x: -10 }, { autoAlpha: 1, x: 0, duration: 0.28, stagger: 0.025 }, 0.84);
+      if (pageHeader) timeline.fromTo('.agenda-page-header', { autoAlpha: 0, y: 32 }, { autoAlpha: 1, y: 0, duration: 0.55 }, 0);
+      if (metricCards.length) timeline.fromTo(metricCards, { autoAlpha: 0, y: 26, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.075 }, 0.15);
+      if (toolbar) timeline.fromTo(toolbar, { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.46 }, 0.34);
+      if (calendarPanels.length) timeline.fromTo(calendarPanels, { autoAlpha: 0, y: 26, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.52, stagger: 0.08 }, 0.48);
+      if (dayCells.length) timeline.fromTo(dayCells, { autoAlpha: 0, y: 12, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.3, stagger: 0.018 }, 0.68);
+      if (events.length) timeline.fromTo(events, { autoAlpha: 0, x: -10 }, { autoAlpha: 1, x: 0, duration: 0.28, stagger: 0.025 }, 0.84);
 
-      gsap.to('.agenda-ambient-orbit', { rotation: 360, duration: 28, repeat: -1, ease: 'none', transformOrigin: 'center' });
-      gsap.to('.agenda-metric-icon', { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.8, repeat: -1, yoyo: true, stagger: 0.16, ease: 'sine.inOut' });
+      const ambientOrbit = root.querySelector('.agenda-ambient-orbit');
+      const metricIcons = [...root.querySelectorAll('.agenda-metric-icon')];
+      if (ambientOrbit) gsap.to(ambientOrbit, { rotation: 360, duration: 28, repeat: -1, ease: 'none', transformOrigin: 'center' });
+      if (metricIcons.length) gsap.to(metricIcons, { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.8, repeat: -1, yoyo: true, stagger: 0.16, ease: 'sine.inOut' });
     }, root);
     return () => context.revert();
   }, [initialDataLoaded]);

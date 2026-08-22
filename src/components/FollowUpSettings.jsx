@@ -238,31 +238,40 @@ export default function FollowUpSettings() {
     const root = rootRef.current;
     if (!root || isLoading) return undefined;
     const context = gsap.context(() => {
+      const pageHeader = root.querySelector('.followup-page-header');
+      const metricCards = [...root.querySelectorAll('.followup-metric-card')];
+      const globalStatus = root.querySelector('.followup-global-status');
+      const tabs = root.querySelector('.followup-tabs');
+      const tabPanel = root.querySelector('.followup-tab-panel');
+      const contentRows = [...root.querySelectorAll('.followup-rule-card, .followup-history-row')];
       const targets = [
-        root.querySelector('.followup-page-header'),
-        ...gsap.utils.toArray('.followup-metric-card'),
-        root.querySelector('.followup-global-status'),
-        root.querySelector('.followup-tabs'),
-        root.querySelector('.followup-tab-panel'),
+        pageHeader,
+        ...metricCards,
+        globalStatus,
+        tabs,
+        tabPanel,
+        ...contentRows,
       ].filter(Boolean);
       gsap.set(targets, { willChange: 'transform,opacity' });
-      gsap.timeline({
+      const timeline = gsap.timeline({
         delay: 0.06,
         defaults: { ease: 'power3.out' },
         onComplete: () => {
           firstEntranceFinished.current = true;
           gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' });
         },
-      })
-        .fromTo('.followup-page-header', { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, duration: 0.55 }, 0)
-        .fromTo('.followup-metric-card', { autoAlpha: 0, y: 24, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, stagger: 0.075 }, 0.14)
-        .fromTo('.followup-global-status', { autoAlpha: 0, x: 24, scale: 0.97 }, { autoAlpha: 1, x: 0, scale: 1, duration: 0.48 }, 0.28)
-        .fromTo('.followup-tabs', { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.42 }, 0.38)
-        .fromTo('.followup-tab-panel', { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.5 }, 0.5)
-        .fromTo('.followup-rule-card, .followup-history-row', { autoAlpha: 0, y: 16, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35, stagger: 0.045 }, 0.63);
+      });
+      if (pageHeader) timeline.fromTo(pageHeader, { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, duration: 0.55 }, 0);
+      if (metricCards.length) timeline.fromTo(metricCards, { autoAlpha: 0, y: 24, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, stagger: 0.075 }, 0.14);
+      if (globalStatus) timeline.fromTo(globalStatus, { autoAlpha: 0, x: 24, scale: 0.97 }, { autoAlpha: 1, x: 0, scale: 1, duration: 0.48 }, 0.28);
+      if (tabs) timeline.fromTo(tabs, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.42 }, 0.38);
+      if (tabPanel) timeline.fromTo(tabPanel, { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.5 }, 0.5);
+      if (contentRows.length) timeline.fromTo(contentRows, { autoAlpha: 0, y: 16, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35, stagger: 0.045 }, 0.63);
 
-      gsap.to('.followup-ambient-orbit', { rotation: 360, duration: 32, repeat: -1, ease: 'none', transformOrigin: 'center' });
-      gsap.to('.followup-metric-icon', { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.9, repeat: -1, yoyo: true, stagger: 0.14, ease: 'sine.inOut' });
+      const ambientOrbit = root.querySelector('.followup-ambient-orbit');
+      const metricIcons = [...root.querySelectorAll('.followup-metric-icon')];
+      if (ambientOrbit) gsap.to(ambientOrbit, { rotation: 360, duration: 32, repeat: -1, ease: 'none', transformOrigin: 'center' });
+      if (metricIcons.length) gsap.to(metricIcons, { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.9, repeat: -1, yoyo: true, stagger: 0.14, ease: 'sine.inOut' });
     }, root);
     return () => context.revert();
   }, [isLoading]);
@@ -272,7 +281,8 @@ export default function FollowUpSettings() {
     if (!panel || isLoading || !firstEntranceFinished.current) return undefined;
     const context = gsap.context(() => {
       gsap.fromTo(panel, { autoAlpha: 0, y: 16, scale: 0.995 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.4, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
-      gsap.fromTo(panel.querySelectorAll('.followup-rule-card, .followup-history-row, .followup-settings-card'), { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.32, stagger: 0.045, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+      const panelItems = panel.querySelectorAll('.followup-rule-card, .followup-history-row, .followup-settings-card');
+      if (panelItems.length) gsap.fromTo(panelItems, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.32, stagger: 0.045, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
     }, panel);
     return () => context.revert();
   }, [activeTab, isLoading]);
