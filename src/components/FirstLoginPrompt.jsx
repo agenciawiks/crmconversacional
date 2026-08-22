@@ -1,41 +1,46 @@
-import React, { useState } from 'react';
+import { useRef, useState } from 'react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, KeyRound, Lock, ShieldCheck } from 'lucide-react';
 import { supabase } from '../supabase';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, Lock, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import '../styles/variables.css';
+import { useAuthExperienceMotion } from '../hooks/useAuthExperienceMotion';
+import AuthBackground from './AuthBackground';
+import AuthBrandPanel from './AuthBrandPanel';
 
 export default function FirstLoginPrompt() {
-  const { completeFirstLogin, user } = useAuth();
-  
+  const rootRef = useRef(null);
+  const { completeFirstLogin } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  
-  // view can be 'options', 'change_password'
   const [view, setView] = useState('options');
-  
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  useAuthExperienceMotion(rootRef);
 
   const handleKeepPassword = async () => {
     setLoading(true);
     setErrorMsg('');
+
     try {
-      await completeFirstLogin(user.id);
-    } catch (err) {
-      console.error(err);
-      setErrorMsg('Erro ao atualizar status. Tente novamente.');
+      await completeFirstLogin();
+    } catch (error) {
+      console.error(error);
+      setErrorMsg('Não foi possível confirmar o acesso. Tente novamente.');
       setLoading(false);
     }
   };
 
-  const handleChangePassword = async () => {
+  const handleChangePassword = async (event) => {
+    event?.preventDefault();
+
     if (newPassword.length < 6) {
       setErrorMsg('A nova senha deve ter no mínimo 6 caracteres.');
       return;
     }
+
     if (newPassword !== confirmPassword) {
-      setErrorMsg('As senhas não coincidem.');
+      setErrorMsg('As senhas não coincidem. Digite a mesma senha nos 2 campos.');
       return;
     }
 
@@ -43,245 +48,150 @@ export default function FirstLoginPrompt() {
     setErrorMsg('');
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
 
-      if (error) {
-        throw error;
-      }
-
-      await completeFirstLogin(user.id);
+      await completeFirstLogin();
       setSuccess(true);
-      
-      // Let the success state show briefly before unmounting
+
       setTimeout(() => {
         window.location.reload();
       }, 1500);
-      
     } catch (error) {
       console.error(error);
-      setErrorMsg('Erro ao atualizar a senha. Tente usar uma senha diferente.');
+      setErrorMsg('Não foi possível atualizar a senha. Tente uma senha diferente.');
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'var(--bg-app)',
-      position: 'relative',
-      overflow: 'hidden',
-      fontFamily: 'var(--font-sans)',
-      transition: 'background-color var(--transition-normal)'
-    }}>
-      {/* Background Grid Pattern */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        backgroundImage: 'linear-gradient(to right, var(--bg-grid-color) 1px, transparent 1px), linear-gradient(to bottom, var(--bg-grid-color) 1px, transparent 1px)',
-        backgroundSize: '40px 40px',
-        opacity: 0.8,
-        zIndex: 0
-      }}></div>
+    <main ref={rootRef} className="auth-experience">
+      <AuthBackground />
 
-      {/* Brand Glowing Orbs */}
-      <div style={{
-        position: 'absolute',
-        width: '600px',
-        height: '600px',
-        background: 'var(--bg-glow-1)',
-        filter: 'blur(120px)',
-        borderRadius: '50%',
-        top: '-15%',
-        left: '-15%',
-        zIndex: 0
-      }}></div>
+      <div className="auth-stage auth-stage--first-access">
+        <AuthBrandPanel mode="first-access" />
 
-      <div 
-        className="glass-panel" 
-        style={{
-          position: 'relative',
-          zIndex: 10,
-          width: '90%',
-          maxWidth: '440px',
-          padding: '48px 40px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '32px',
-          boxSizing: 'border-box'
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', textAlign: 'center' }}>
-          <div style={{
-            width: '64px',
-            height: '64px',
-            borderRadius: '50%',
-            background: 'rgba(18, 205, 135, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#12CD87',
-            marginBottom: '8px'
-          }}>
-            {success ? <CheckCircle2 size={32} /> : <ShieldCheck size={32} />}
+        <section className="auth-panel auth-panel--first-access" aria-labelledby="first-access-title">
+          <div className={`auth-first-access-icon auth-action-reveal ${success ? 'is-success' : ''}`} aria-hidden="true">
+            {success ? <CheckCircle2 size={27} /> : <KeyRound size={27} />}
           </div>
-          
-          <h2 style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '24px',
-            fontWeight: '700',
-            color: 'var(--text-primary)',
-            margin: 0,
-            letterSpacing: '-0.5px'
-          }}>
-            {success ? 'Senha Atualizada!' : 'Bem-vindo ao CRM Wiks'}
-          </h2>
-          
-          <p style={{
-            fontSize: '14px',
-            color: 'var(--text-secondary)',
-            margin: 0,
-            fontWeight: '400',
-            lineHeight: '1.5'
-          }}>
-            {success 
-              ? 'Tudo certo. Redirecionando para o sistema...' 
-              : 'Este é o seu primeiro acesso. Por questões de segurança, você pode definir uma nova senha pessoal ou continuar com a senha gerada pelo administrador.'}
-          </p>
-        </div>
 
-        {errorMsg && (
-          <div style={{
-            padding: '12px 16px',
-            background: 'rgba(239, 68, 68, 0.1)',
-            border: '1px solid rgba(239, 68, 68, 0.2)',
-            borderRadius: '8px',
-            color: '#ef4444',
-            fontSize: '13px',
-            fontWeight: '500',
-            textAlign: 'center'
-          }}>
-            {errorMsg}
-          </div>
-        )}
+          <header className="auth-panel-heading auth-action-reveal">
+            <span className="auth-section-kicker"><ShieldCheck size={14} aria-hidden="true" /> Primeiro acesso</span>
+            <h2 id="first-access-title">{success ? 'Acesso confirmado' : 'Proteja sua conta'}</h2>
+            <p>
+              {success
+                ? 'Tudo certo. Estamos preparando o ambiente da sua empresa…'
+                : 'Você pode criar uma senha pessoal agora ou continuar com a senha gerada pelo administrador.'}
+            </p>
+          </header>
 
-        {!success && view === 'options' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <button
-              onClick={() => setView('change_password')}
-              className="glass-btn"
-              style={{ padding: '14px', width: '100%' }}
-            >
-              Criar Nova Senha
-              <ArrowRight size={18} />
-            </button>
-            <button
-              onClick={handleKeepPassword}
-              disabled={loading}
-              style={{
-                padding: '14px',
-                width: '100%',
-                background: 'transparent',
-                border: '1px solid var(--border-glass)',
-                color: 'var(--text-secondary)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = 'var(--bg-secondary)';
-                e.currentTarget.style.color = 'var(--text-primary)';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'var(--text-secondary)';
-              }}
-            >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : 'Manter senha atual'}
-            </button>
-          </div>
-        )}
-
-        {!success && view === 'change_password' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Nova Senha
-              </label>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Lock size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="glass-input"
-                  style={{ paddingLeft: '40px' }}
-                  disabled={loading}
-                />
+          <div className="auth-message-slot" aria-live="polite">
+            {errorMsg && (
+              <div className="auth-error-alert" role="alert">
+                <AlertCircle size={16} aria-hidden="true" />
+                <span>{errorMsg}</span>
               </div>
-            </div>
+            )}
+          </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Confirmar Nova Senha
-              </label>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Lock size={16} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                <input
-                  type="password"
-                  placeholder="Repita a nova senha"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="glass-input"
-                  style={{ paddingLeft: '40px' }}
-                  disabled={loading}
-                />
-              </div>
+          {success && (
+            <div className="auth-success-state auth-action-reveal" role="status">
+              <span className="auth-success-loader" aria-hidden="true" />
+              <span>Carregando sua sessão segura…</span>
             </div>
+          )}
 
-            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          {!success && view === 'options' && (
+            <div className="auth-option-stack">
               <button
-                onClick={() => setView('options')}
-                disabled={loading}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  background: 'transparent',
-                  border: '1px solid var(--border-glass)',
-                  color: 'var(--text-secondary)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
+                type="button"
+                onClick={() => {
+                  setErrorMsg('');
+                  setView('change_password');
                 }}
-              >
-                Voltar
-              </button>
-              <button
-                onClick={handleChangePassword}
+                className="auth-submit-button auth-interactive auth-action-reveal"
                 disabled={loading}
-                className="glass-btn"
-                style={{ flex: 1, padding: '12px' }}
               >
-                {loading ? <Loader2 size={18} className="animate-spin" /> : 'Salvar Senha'}
+                <span>Criar nova senha</span>
+                <ArrowRight size={18} aria-hidden="true" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleKeepPassword}
+                disabled={loading}
+                className="auth-secondary-button auth-interactive auth-action-reveal"
+              >
+                {loading ? <><span className="auth-button-loader" aria-hidden="true" /> Confirmando…</> : 'Manter senha atual'}
               </button>
             </div>
-          </div>
-        )}
+          )}
+
+          {!success && view === 'change_password' && (
+            <form className="auth-form auth-password-form" onSubmit={handleChangePassword}>
+              <div className="auth-field">
+                <label htmlFor="new-password">Nova senha</label>
+                <div className="auth-input-shell">
+                  <Lock size={18} aria-hidden="true" />
+                  <input
+                    id="new-password"
+                    name="new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Mínimo de 6 caracteres…"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    minLength={6}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div className="auth-field">
+                <label htmlFor="confirm-password">Confirmar nova senha</label>
+                <div className="auth-input-shell">
+                  <Lock size={18} aria-hidden="true" />
+                  <input
+                    id="confirm-password"
+                    name="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Repita a nova senha…"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    minLength={6}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div className="auth-form-actions auth-action-reveal">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg('');
+                    setView('options');
+                  }}
+                  disabled={loading}
+                  className="auth-secondary-button auth-interactive"
+                >
+                  <ArrowLeft size={17} aria-hidden="true" /> Voltar
+                </button>
+                <button type="submit" disabled={loading} className="auth-submit-button auth-interactive">
+                  {loading ? <><span className="auth-button-loader" aria-hidden="true" /> Salvando…</> : <>Salvar senha <ArrowRight size={17} aria-hidden="true" /></>}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {!success && (
+            <p className="auth-security-note auth-action-reveal">
+              <ShieldCheck size={15} aria-hidden="true" /> Esta etapa mantém o acesso vinculado ao cliente correto.
+            </p>
+          )}
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

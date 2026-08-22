@@ -1,621 +1,545 @@
-import React, { useState, useEffect } from 'react';
-import { useCrm } from '../context/CrmContext';
-import { 
-  Clock, 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  Settings, 
-  Layers, 
-  Send, 
-  AlertCircle, 
-  Check, 
-  X, 
-  Calendar,
-  MessageSquare,
-  HelpCircle
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { gsap } from 'gsap';
+import {
+  Activity,
+  AlertCircle,
+  Bot,
+  CalendarClock,
+  Check,
+  CircleSlash2,
+  Clock3,
+  Edit3,
+  History,
+  Layers3,
+  MessageSquareText,
+  Pause,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  Settings2,
+  Sparkles,
+  Trash2,
+  X,
+  Zap,
 } from 'lucide-react';
+import { useCrm } from '../context/CrmContext';
 import FollowUpRuleModal from './FollowUpRuleModal';
 import * as followUpService from '../services/followUpService';
 
+const STATUS_META = {
+  pending: { label: 'Pendente', className: 'is-pending' },
+  sent: { label: 'Enviado', className: 'is-sent' },
+  cancelled: { label: 'Cancelado', className: 'is-cancelled' },
+  failed: { label: 'Falhou', className: 'is-failed' },
+};
+
+const TRIGGER_LABELS = {
+  last_message_in: 'Última mensagem recebida',
+  stage_entered: 'Entrada em uma etapa do funil',
+  contact_created: 'Novo contato criado',
+};
+
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+const formatDateTime = (isoString) => {
+  if (!isoString) return 'Data não informada';
+  const date = new Date(isoString);
+  return Number.isNaN(date.getTime()) ? 'Data inválida' : dateTimeFormatter.format(date);
+};
+
+const formatDelay = (delayHours) => {
+  const parsedDelay = Number(delayHours) || 0;
+  const hours = Math.floor(parsedDelay);
+  const minutes = Math.round((parsedDelay - hours) * 60);
+  return [hours > 0 ? `${hours}h` : '', minutes > 0 ? `${minutes}min` : ''].filter(Boolean).join(' e ') || '0min';
+};
+
+const getCancelReason = (reason) => ({
+  replied_before_send: 'O contato respondeu antes do disparo',
+  manual_cancel: 'Cancelado por um operador',
+  rule_disabled: 'A regra foi desativada',
+}[reason] || reason || 'Motivo não informado');
+
 export default function FollowUpSettings() {
-  const { 
-    channels, 
-    contacts
-  } = useCrm();
-
-  // Tab State
-  const [activeTab, setActiveTab] = useState('rules'); // 'rules' | 'queue' | 'settings'
-
-  // Rules and Queue State
+  const rootRef = useRef(null);
+  const statusTimerRef = useRef(null);
+  const firstEntranceFinished = useRef(false);
+  const { channels = [] } = useCrm();
+  const [activeTab, setActiveTab] = useState('rules');
   const [rules, setRules] = useState([]);
   const [queue, setQueue] = useState([]);
   const [globalEnabled, setGlobalEnabled] = useState(true);
   const [companyName, setCompanyName] = useState('Minha Empresa');
-
-  // UI States
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSavingSetting, setIsSavingSetting] = useState(false);
+  const [isUpdatingGlobal, setIsUpdatingGlobal] = useState(false);
+  const [busyRuleIds, setBusyRuleIds] = useState(() => new Set());
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
+  const [queueSearch, setQueueSearch] = useState('');
+  const [queueStatus, setQueueStatus] = useState('all');
+  const [confirmation, setConfirmation] = useState(null);
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const showStatus = useCallback((type, text) => {
+    window.clearTimeout(statusTimerRef.current);
+    setStatusMsg({ type, text });
+    statusTimerRef.current = window.setTimeout(() => setStatusMsg({ type: '', text: '' }), 4200);
+  }, []);
+
+  const loadData = useCallback(async ({ silent = false } = {}) => {
+    if (silent) setIsRefreshing(true);
+    else setIsLoading(true);
     try {
       const [fetchedRules, fetchedQueue, fetchedSettings] = await Promise.all([
         followUpService.fetchRules(),
         followUpService.fetchQueue(),
-        followUpService.fetchSettings()
+        followUpService.fetchSettings(),
       ]);
-
       setRules(fetchedRules);
       setQueue(fetchedQueue);
-
-      const globalEnabledSetting = fetchedSettings.find(s => s.key === 'followup_global_enabled');
-      const companyNameSetting = fetchedSettings.find(s => s.key === 'company_name');
-
-      if (globalEnabledSetting) {
-        setGlobalEnabled(globalEnabledSetting.value === 'true');
-      }
-      if (companyNameSetting) {
-        setCompanyName(companyNameSetting.value || 'Minha Empresa');
-      }
-    } catch (err) {
-      console.error('[FollowUpSettings] Error loading data:', err);
-      showStatus('error', 'Erro ao carregar dados do módulo.');
+      const globalSetting = fetchedSettings.find((setting) => setting.key === 'followup_global_enabled');
+      const companySetting = fetchedSettings.find((setting) => setting.key === 'company_name');
+      if (globalSetting) setGlobalEnabled(globalSetting.value === 'true');
+      if (companySetting) setCompanyName(companySetting.value || 'Minha Empresa');
+    } catch (error) {
+      console.error('[FollowUpSettings] Error loading data:', error);
+      showStatus('error', 'Não foi possível carregar o Follow-Up. Atualize a página e tente novamente.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, [showStatus]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const initialLoadTimer = window.setTimeout(() => loadData(), 0);
+    return () => {
+      window.clearTimeout(initialLoadTimer);
+      window.clearTimeout(statusTimerRef.current);
+    };
+  }, [loadData]);
 
-  const showStatus = (type, text) => {
-    setStatusMsg({ type, text });
-    setTimeout(() => {
-      setStatusMsg({ type: '', text: '' });
-    }, 4000);
-  };
+  const counts = useMemo(() => queue.reduce((summary, item) => {
+    if (Object.hasOwn(summary, item.status)) summary[item.status] += 1;
+    return summary;
+  }, { pending: 0, sent: 0, cancelled: 0, failed: 0 }), [queue]);
+
+  const activeRules = rules.filter((rule) => rule.is_active).length;
+  const filteredQueue = useMemo(() => {
+    const normalizedSearch = queueSearch.trim().toLocaleLowerCase('pt-BR');
+    return queue.filter((item) => {
+      const matchesStatus = queueStatus === 'all' || item.status === queueStatus;
+      const searchable = [
+        item.contacts?.name,
+        item.contacts?.phone,
+        item.channels?.name,
+        rules.find((rule) => rule.id === item.rule_id)?.name,
+      ].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
+      return matchesStatus && (!normalizedSearch || searchable.includes(normalizedSearch));
+    });
+  }, [queue, queueSearch, queueStatus, rules]);
 
   const handleToggleGlobal = async () => {
-    const newValue = !globalEnabled;
-    setGlobalEnabled(newValue);
+    const nextValue = !globalEnabled;
+    setIsUpdatingGlobal(true);
+    setGlobalEnabled(nextValue);
     try {
-      await followUpService.updateSetting('followup_global_enabled', String(newValue));
-      showStatus('success', `Módulo de Follow-Up ${newValue ? 'ativado' : 'pausado'} globalmente!`);
-    } catch (err) {
-      console.error(err);
-      setGlobalEnabled(!newValue);
-      showStatus('error', 'Falha ao atualizar status global.');
+      const updated = await followUpService.updateSetting('followup_global_enabled', String(nextValue));
+      if (!updated) throw new Error('Setting update was not persisted');
+      showStatus('success', `Follow-Up ${nextValue ? 'ativado' : 'pausado'} para este ambiente.`);
+    } catch (error) {
+      console.error('[FollowUpSettings] Global status update failed:', error);
+      setGlobalEnabled(!nextValue);
+      showStatus('error', 'Não foi possível alterar o status. Verifique a conexão e tente novamente.');
+    } finally {
+      setIsUpdatingGlobal(false);
     }
   };
 
-  const handleToggleRuleActive = async (ruleId, currentActive) => {
+  const handleToggleRuleActive = async (rule) => {
+    setBusyRuleIds((current) => new Set(current).add(rule.id));
     try {
-      const updated = await followUpService.updateRule(ruleId, { is_active: !currentActive });
-      if (updated) {
-        setRules(prev => prev.map(r => r.id === ruleId ? { ...r, is_active: !currentActive } : r));
-        showStatus('success', `Regra ${!currentActive ? 'ativada' : 'pausada'} com sucesso.`);
-      }
-    } catch (err) {
-      console.error(err);
-      showStatus('error', 'Erro ao alterar status da regra.');
+      const updated = await followUpService.updateRule(rule.id, { is_active: !rule.is_active });
+      if (!updated) throw new Error('Rule update was not persisted');
+      setRules((current) => current.map((item) => item.id === rule.id ? { ...item, is_active: !rule.is_active } : item));
+      showStatus('success', `Regra ${!rule.is_active ? 'ativada' : 'pausada'} com sucesso.`);
+    } catch (error) {
+      console.error('[FollowUpSettings] Rule status update failed:', error);
+      showStatus('error', 'Não foi possível alterar esta regra. Tente novamente.');
+    } finally {
+      setBusyRuleIds((current) => {
+        const next = new Set(current);
+        next.delete(rule.id);
+        return next;
+      });
     }
   };
 
-  const handleDeleteRule = async (ruleId) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta regra de follow-up? Isso também removerá os agendamentos pendentes dela.')) {
-      return;
-    }
-
+  const executeConfirmation = async () => {
+    const action = confirmation;
+    if (!action) return;
+    setConfirmation((current) => ({ ...current, busy: true }));
     try {
-      const success = await followUpService.deleteRule(ruleId);
-      if (success) {
-        setRules(prev => prev.filter(r => r.id !== ruleId));
-        // Remove from queue in local state as well
-        setQueue(prev => prev.filter(q => q.rule_id !== ruleId));
-        showStatus('success', 'Regra de follow-up excluída com sucesso.');
+      if (action.type === 'delete-rule') {
+        const success = await followUpService.deleteRule(action.id);
+        if (!success) throw new Error('Rule deletion was not persisted');
+        setRules((current) => current.filter((rule) => rule.id !== action.id));
+        setQueue((current) => current.filter((item) => item.rule_id !== action.id));
+        showStatus('success', 'Regra e disparos pendentes removidos.');
       } else {
-        showStatus('error', 'Falha ao excluir a regra.');
+        const updated = await followUpService.cancelQueueItem(action.id, 'manual_cancel');
+        if (!updated) throw new Error('Queue cancellation was not persisted');
+        setQueue((current) => current.map((item) => item.id === action.id
+          ? { ...item, status: 'cancelled', cancel_reason: 'manual_cancel' }
+          : item));
+        showStatus('success', 'Disparo cancelado com sucesso.');
       }
-    } catch (err) {
-      console.error(err);
-      showStatus('error', 'Erro ao deletar regra.');
+      setConfirmation(null);
+    } catch (error) {
+      console.error('[FollowUpSettings] Destructive action failed:', error);
+      setConfirmation((current) => current ? { ...current, busy: false } : null);
+      showStatus('error', 'A alteração não foi concluída. Verifique a conexão e tente novamente.');
     }
   };
 
-  const handleCancelQueueItem = async (itemId) => {
-    if (!window.confirm('Deseja realmente cancelar este agendamento na fila?')) {
-      return;
-    }
-
-    try {
-      const updated = await followUpService.cancelQueueItem(itemId, 'manual_cancel');
-      if (updated) {
-        setQueue(prev => prev.map(q => q.id === itemId ? { ...q, status: 'cancelled', cancel_reason: 'manual_cancel' } : q));
-        showStatus('success', 'Agendamento cancelado com sucesso.');
-      }
-    } catch (err) {
-      console.error(err);
-      showStatus('error', 'Erro ao cancelar o agendamento.');
-    }
-  };
-
-  const handleSaveSettings = async (e) => {
-    e.preventDefault();
+  const handleSaveSettings = async (event) => {
+    event.preventDefault();
     setIsSavingSetting(true);
     try {
-      await followUpService.updateSetting('company_name', companyName.trim());
-      showStatus('success', 'Configurações de variáveis salvas com sucesso!');
-    } catch (err) {
-      console.error(err);
-      showStatus('error', 'Falha ao salvar as configurações.');
+      const updated = await followUpService.updateSetting('company_name', companyName.trim());
+      if (!updated) throw new Error('Company setting was not persisted');
+      showStatus('success', 'Variáveis do sistema atualizadas.');
+    } catch (error) {
+      console.error('[FollowUpSettings] Settings update failed:', error);
+      showStatus('error', 'Não foi possível salvar as variáveis. Tente novamente.');
     } finally {
       setIsSavingSetting(false);
     }
   };
 
-  const formatDelay = (delayHours) => {
-    const hours = Math.floor(delayHours);
-    const minutes = Math.round((delayHours - hours) * 60);
-    
-    let parts = [];
-    if (hours > 0) {
-      parts.push(`${hours}h`);
-    }
-    if (minutes > 0) {
-      parts.push(`${minutes}min`);
-    }
-    return parts.join(' e ') || '0min';
-  };
+  useEffect(() => {
+    if (!confirmation) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !confirmation.busy) setConfirmation(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirmation]);
 
-  const getTriggerLabel = (event) => {
-    switch (event) {
-      case 'last_message_in':
-        return 'Última mensagem recebida';
-      case 'stage_entered':
-        return 'Entrou no estágio do Kanban';
-      case 'contact_created':
-        return 'Novo contato criado';
-      default:
-        return event;
-    }
-  };
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || isLoading) return undefined;
+    const context = gsap.context(() => {
+      const targets = [
+        root.querySelector('.followup-page-header'),
+        ...gsap.utils.toArray('.followup-metric-card'),
+        root.querySelector('.followup-global-status'),
+        root.querySelector('.followup-tabs'),
+        root.querySelector('.followup-tab-panel'),
+      ].filter(Boolean);
+      gsap.set(targets, { willChange: 'transform,opacity' });
+      gsap.timeline({
+        delay: 0.06,
+        defaults: { ease: 'power3.out' },
+        onComplete: () => {
+          firstEntranceFinished.current = true;
+          gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' });
+        },
+      })
+        .fromTo('.followup-page-header', { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, duration: 0.55 }, 0)
+        .fromTo('.followup-metric-card', { autoAlpha: 0, y: 24, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, stagger: 0.075 }, 0.14)
+        .fromTo('.followup-global-status', { autoAlpha: 0, x: 24, scale: 0.97 }, { autoAlpha: 1, x: 0, scale: 1, duration: 0.48 }, 0.28)
+        .fromTo('.followup-tabs', { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: 0.42 }, 0.38)
+        .fromTo('.followup-tab-panel', { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.5 }, 0.5)
+        .fromTo('.followup-rule-card, .followup-history-row', { autoAlpha: 0, y: 16, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35, stagger: 0.045 }, 0.63);
 
-  const formatDateTime = (isoString) => {
-    if (!isoString) return '-';
-    const date = new Date(isoString);
-    return date.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      gsap.to('.followup-ambient-orbit', { rotation: 360, duration: 32, repeat: -1, ease: 'none', transformOrigin: 'center' });
+      gsap.to('.followup-metric-icon', { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.9, repeat: -1, yoyo: true, stagger: 0.14, ease: 'sine.inOut' });
+    }, root);
+    return () => context.revert();
+  }, [isLoading]);
+
+  useLayoutEffect(() => {
+    const panel = rootRef.current?.querySelector('.followup-tab-panel');
+    if (!panel || isLoading || !firstEntranceFinished.current) return undefined;
+    const context = gsap.context(() => {
+      gsap.fromTo(panel, { autoAlpha: 0, y: 16, scale: 0.995 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.4, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+      gsap.fromTo(panel.querySelectorAll('.followup-rule-card, .followup-history-row, .followup-settings-card'), { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.32, stagger: 0.045, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+    }, panel);
+    return () => context.revert();
+  }, [activeTab, isLoading]);
+
+  useLayoutEffect(() => {
+    if (!statusMsg.text) return undefined;
+    const toast = rootRef.current?.querySelector('.followup-toast');
+    if (!toast) return undefined;
+    const tween = gsap.fromTo(toast, { autoAlpha: 0, x: 32, scale: 0.94 }, { autoAlpha: 1, x: 0, scale: 1, duration: 0.38, ease: 'back.out(1.6)' });
+    return () => tween.kill();
+  }, [statusMsg]);
+
+  useLayoutEffect(() => {
+    if (!confirmation?.type) return undefined;
+    const backdrop = rootRef.current?.querySelector('.followup-confirm-backdrop');
+    const dialog = backdrop?.querySelector('.followup-confirm-dialog');
+    if (!backdrop || !dialog) return undefined;
+    const context = gsap.context(() => {
+      gsap.fromTo(backdrop, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(dialog, { autoAlpha: 0, y: 20, scale: 0.95 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.36, ease: 'back.out(1.55)' });
+    }, backdrop);
+    return () => context.revert();
+  }, [confirmation?.type]);
+
+  useLayoutEffect(() => {
+    const statusCard = rootRef.current?.querySelector('.followup-global-status');
+    if (!statusCard || isLoading || !firstEntranceFinished.current) return undefined;
+    const tween = gsap.fromTo(statusCard, { scale: 0.985, y: 3 }, { scale: 1, y: 0, duration: 0.36, ease: 'back.out(1.7)', clearProps: 'transform' });
+    return () => tween.kill();
+  }, [globalEnabled, isLoading]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const glow = root?.querySelector('.followup-cursor-glow');
+    if (!root || !glow) return undefined;
+    gsap.set(glow, { xPercent: -50, yPercent: -50 });
+    const moveX = gsap.quickTo(glow, 'x', { duration: 0.55, ease: 'power3.out' });
+    const moveY = gsap.quickTo(glow, 'y', { duration: 0.55, ease: 'power3.out' });
+    const move = (event) => { moveX(event.clientX); moveY(event.clientY); };
+    root.addEventListener('pointermove', move, { passive: true });
+    return () => root.removeEventListener('pointermove', move);
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || isLoading) return undefined;
+    const buttons = [...root.querySelectorAll('.followup-animated-action')];
+    const cleanups = buttons.map((button) => {
+      const enter = () => gsap.to(button, { y: -3, scale: 1.035, duration: 0.22, ease: 'back.out(2)', overwrite: 'auto' });
+      const leave = () => gsap.to(button, { y: 0, scale: 1, duration: 0.26, ease: 'power3.out', overwrite: 'auto' });
+      const down = () => gsap.to(button, { y: 0, scale: 0.95, duration: 0.11, ease: 'power2.out', overwrite: 'auto' });
+      button.addEventListener('pointerenter', enter);
+      button.addEventListener('pointerleave', leave);
+      button.addEventListener('pointerdown', down);
+      return () => {
+        button.removeEventListener('pointerenter', enter);
+        button.removeEventListener('pointerleave', leave);
+        button.removeEventListener('pointerdown', down);
+      };
     });
-  };
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf(buttons);
+    };
+  }, [activeTab, filteredQueue.length, isLoading, rules.length]);
 
-  if (isLoading) {
-    return (
-      <div className="content-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          <div className="pulsing-dot" style={{ width: '12px', height: '12px' }}></div>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Carregando módulo de Follow-Up...</span>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const root = rootRef.current;
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!root || isLoading || !supportsHover) return undefined;
+    const cards = [...root.querySelectorAll('.followup-metric-card')];
+    const cleanups = cards.map((card) => {
+      let bounds;
+      const rotateX = gsap.quickTo(card, 'rotationX', { duration: 0.32, ease: 'power3.out' });
+      const rotateY = gsap.quickTo(card, 'rotationY', { duration: 0.32, ease: 'power3.out' });
+      const lift = gsap.quickTo(card, 'y', { duration: 0.28, ease: 'power3.out' });
+      const enter = () => { bounds = card.getBoundingClientRect(); gsap.set(card, { transformPerspective: 850 }); lift(-5); };
+      const move = (event) => {
+        if (!bounds) return;
+        rotateX((((event.clientY - bounds.top) / bounds.height) - 0.5) * -7);
+        rotateY((((event.clientX - bounds.left) / bounds.width) - 0.5) * 8);
+      };
+      const leave = () => { bounds = undefined; rotateX(0); rotateY(0); lift(0); };
+      card.addEventListener('pointerenter', enter);
+      card.addEventListener('pointermove', move);
+      card.addEventListener('pointerleave', leave);
+      return () => {
+        card.removeEventListener('pointerenter', enter);
+        card.removeEventListener('pointermove', move);
+        card.removeEventListener('pointerleave', leave);
+      };
+    });
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf(cards);
+      gsap.set(cards, { clearProps: 'transform,transformPerspective' });
+    };
+  }, [isLoading]);
+
+  useLayoutEffect(() => {
+    if (isLoading) return undefined;
+    const counters = [...(rootRef.current?.querySelectorAll('[data-followup-kpi]') || [])];
+    const tweens = counters.map((element) => {
+      const target = Number(element.dataset.followupKpi) || 0;
+      const counter = { value: 0 };
+      const render = () => { element.textContent = Math.round(counter.value).toLocaleString('pt-BR'); };
+      render();
+      return gsap.to(counter, { value: target, duration: 1, delay: 0.48, ease: 'power3.out', onUpdate: render, onComplete: render });
+    });
+    return () => tweens.forEach((tween) => tween.kill());
+  }, [activeRules, counts.cancelled, counts.failed, counts.pending, counts.sent, isLoading]);
+
+  const tabs = [
+    { id: 'rules', label: 'Regras', icon: Layers3, count: rules.length },
+    { id: 'queue', label: 'Histórico & Fila', icon: History, count: queue.length },
+    { id: 'settings', label: 'Variáveis', icon: Settings2 },
+  ];
 
   return (
-    <div className="content-wrapper animated-fade-in" style={{ height: '100%', overflowY: 'auto', padding: '24px 32px' }}>
-      
-      {/* Status Bar Notification */}
-      {statusMsg.text && (
-        <div className="builder-alert-bar animated-fade-in" style={{
-          position: 'fixed',
-          top: '24px',
-          right: '24px',
-          zIndex: 1000,
-          background: 'var(--bg-surface-solid)',
-          border: `1px solid ${statusMsg.type === 'success' ? 'var(--color-status-won)' : 'var(--color-status-lost)'}`,
-          padding: '12px 20px',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-lg)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          {statusMsg.type === 'success' ? (
-            <Check size={18} style={{ color: 'var(--color-status-won)' }} />
-          ) : (
-            <X size={18} style={{ color: 'var(--color-status-lost)' }} />
-          )}
-          <span style={{ fontWeight: '500', fontSize: '13px' }}>{statusMsg.text}</span>
+    <div ref={rootRef} className={`content-wrapper followup-page ${isLoading ? 'is-loading' : 'is-ready'}`} aria-busy={isLoading}>
+      <div className="followup-cursor-glow" aria-hidden="true" />
+      <div className="followup-ambient-orbit followup-ambient-orbit--one" aria-hidden="true" />
+      <div className="followup-ambient-orbit followup-ambient-orbit--two" aria-hidden="true" />
+
+      {isLoading && (
+        <div className="followup-loading-overlay" role="status" aria-live="polite">
+          <span><Clock3 size={20} aria-hidden="true" /></span>
+          <strong>Organizando automações…</strong>
+          <small>Carregando regras, disparos e configurações.</small>
         </div>
       )}
 
-      {/* Header section */}
-      <div className="page-header" style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div className="page-title">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              background: 'var(--accent-primary)',
-              color: '#fff',
-              padding: '6px',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              boxShadow: '0 4px 12px var(--accent-glow)'
-            }}>
-              <Clock size={22} />
-            </div>
-            <h1>Follow-Up Automático</h1>
-          </div>
-          <p>Configure fluxos de reengajamento automáticos para seus clientes baseados em gatilhos temporais e funil de vendas.</p>
+      {statusMsg.text && (
+        <div className={`followup-toast is-${statusMsg.type}`} role="status" aria-live="polite">
+          <span>{statusMsg.type === 'success' ? <Check size={17} aria-hidden="true" /> : <AlertCircle size={17} aria-hidden="true" />}</span>
+          <p>{statusMsg.text}</p>
+          <button type="button" onClick={() => setStatusMsg({ type: '', text: '' })} aria-label="Fechar aviso"><X size={15} aria-hidden="true" /></button>
         </div>
+      )}
 
-        {/* Global Pause Switch */}
-        <div className="glass-panel" style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-primary)', display: 'block' }}>
-              Status Global do Módulo
-            </span>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-              {globalEnabled ? 'Ativo e processando' : 'Pausado geral'}
-            </span>
-          </div>
-          <label className="followup-switch">
-            <input 
-              type="checkbox" 
-              checked={globalEnabled}
-              onChange={handleToggleGlobal}
-            />
-            <span className="followup-switch-slider"></span>
-          </label>
-        </div>
-      </div>
-
-      {/* Tabs Menu */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '10px' }}>
-        <button
-          className={`glass-btn ${activeTab === 'rules' ? 'active' : ''}`}
-          onClick={() => setActiveTab('rules')}
-          style={{
-            padding: '10px 18px',
-            fontSize: '13px',
-            fontWeight: '600',
-            background: activeTab === 'rules' ? 'var(--accent-primary)' : 'none',
-            color: activeTab === 'rules' ? '#fff' : 'var(--text-secondary)',
-            border: activeTab === 'rules' ? 'none' : '1px solid transparent',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <Layers size={16} />
-          Regras de Envio
-        </button>
-
-        <button
-          className={`glass-btn ${activeTab === 'queue' ? 'active' : ''}`}
-          onClick={() => setActiveTab('queue')}
-          style={{
-            padding: '10px 18px',
-            fontSize: '13px',
-            fontWeight: '600',
-            background: activeTab === 'queue' ? 'var(--accent-primary)' : 'none',
-            color: activeTab === 'queue' ? '#fff' : 'var(--text-secondary)',
-            border: activeTab === 'queue' ? 'none' : '1px solid transparent',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <Calendar size={16} />
-          Fila de Disparo
-        </button>
-
-        <button
-          className={`glass-btn ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
-          style={{
-            padding: '10px 18px',
-            fontSize: '13px',
-            fontWeight: '600',
-            background: activeTab === 'settings' ? 'var(--accent-primary)' : 'none',
-            color: activeTab === 'settings' ? '#fff' : 'var(--text-secondary)',
-            border: activeTab === 'settings' ? 'none' : '1px solid transparent',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <Settings size={16} />
-          Variáveis de Texto
-        </button>
-      </div>
-
-      {/* Rules Tab View */}
-      {activeTab === 'rules' && (
+      <header className="followup-page-header">
         <div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              className="glass-btn"
-              onClick={() => { setEditingRule(null); setShowModal(true); }}
-              style={{
-                padding: '10px 20px',
-                fontSize: '13px',
-                fontWeight: '600',
-                background: 'var(--accent-primary)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px var(--accent-glow)'
-              }}
-            >
-              <Plus size={16} />
-              Criar Nova Regra
-            </button>
-          </div>
+          <span className="followup-overline"><Sparkles size={13} aria-hidden="true" /> Automação de Relacionamento</span>
+          <h1>Follow-Up Inteligente</h1>
+          <p>Crie jornadas de reengajamento e acompanhe cada disparo em tempo real.</p>
+        </div>
+        <button type="button" className="followup-primary-action followup-animated-action" onClick={() => { setEditingRule(null); setShowModal(true); }}>
+          <Plus size={17} aria-hidden="true" /> Nova Regra
+        </button>
+      </header>
 
+      <section className="followup-overview" aria-label="Resumo do Follow-Up">
+        <div className="followup-metrics">
+          <article className="followup-metric-card is-mint"><span><small>Regras Ativas</small><strong data-followup-kpi={activeRules}>{activeRules}</strong><p>de {rules.length.toLocaleString('pt-BR')} regras configuradas</p></span><i className="followup-metric-icon"><Zap size={18} aria-hidden="true" /></i></article>
+          <article className="followup-metric-card is-blue"><span><small>Na Fila</small><strong data-followup-kpi={counts.pending}>{counts.pending}</strong><p>disparos aguardando envio</p></span><i className="followup-metric-icon"><CalendarClock size={18} aria-hidden="true" /></i></article>
+          <article className="followup-metric-card is-cyan"><span><small>Enviados</small><strong data-followup-kpi={counts.sent}>{counts.sent}</strong><p>mensagens processadas</p></span><i className="followup-metric-icon"><Send size={18} aria-hidden="true" /></i></article>
+          <article className="followup-metric-card is-lime"><span><small>Interrompidos</small><strong data-followup-kpi={counts.cancelled + counts.failed}>{counts.cancelled + counts.failed}</strong><p>cancelados ou com falha</p></span><i className="followup-metric-icon"><CircleSlash2 size={18} aria-hidden="true" /></i></article>
+        </div>
+
+        <article className={`followup-global-status ${globalEnabled ? 'is-active' : 'is-paused'}`}>
+          <span className="followup-global-icon">{globalEnabled ? <Activity size={20} aria-hidden="true" /> : <Pause size={20} aria-hidden="true" />}</span>
+          <div><small>Status Global</small><strong>{globalEnabled ? 'Automações Ativas' : 'Automações Pausadas'}</strong><p>{globalEnabled ? 'Monitorando gatilhos e processando a fila.' : 'Novos disparos estão temporariamente suspensos.'}</p></div>
+          <label className="followup-switch">
+            <input type="checkbox" checked={globalEnabled} onChange={handleToggleGlobal} disabled={isUpdatingGlobal} aria-label={globalEnabled ? 'Pausar todas as automações' : 'Ativar todas as automações'} />
+            <span className="followup-switch-slider" aria-hidden="true" />
+          </label>
+        </article>
+      </section>
+
+      <nav className="followup-tabs" role="tablist" aria-label="Áreas do Follow-Up">
+        <div>{tabs.map(({ id, label, icon: Icon, count }) => (
+          <button key={id} type="button" role="tab" aria-selected={activeTab === id} aria-controls={`followup-panel-${id}`} className={`followup-tab followup-animated-action ${activeTab === id ? 'is-active' : ''}`} onClick={() => setActiveTab(id)}>
+            <Icon size={15} aria-hidden="true" /> {label}{typeof count === 'number' && <span>{count.toLocaleString('pt-BR')}</span>}
+          </button>
+        ))}</div>
+        <button type="button" className="followup-refresh followup-animated-action" onClick={() => loadData({ silent: true })} disabled={isRefreshing}>
+          <RefreshCw size={15} aria-hidden="true" /> {isRefreshing ? 'Atualizando…' : 'Atualizar Dados'}
+        </button>
+      </nav>
+
+      {activeTab === 'rules' && (
+        <section id="followup-panel-rules" className="followup-tab-panel" role="tabpanel">
+          <header className="followup-section-header"><div><span>Jornadas Configuradas</span><h2>Regras de Envio</h2><p>Defina quando, para quem e como cada mensagem será enviada.</p></div><button type="button" className="followup-secondary-action followup-animated-action" onClick={() => { setEditingRule(null); setShowModal(true); }}><Plus size={15} aria-hidden="true" /> Criar Regra</button></header>
           {rules.length === 0 ? (
-            <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', marginTop: '24px' }}>
-              <HelpCircle size={32} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-              <h3 style={{ fontSize: '15px', color: 'var(--text-primary)', margin: '0 0 6px 0' }}>Nenhuma regra configurada</h3>
-              <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', margin: 0 }}>Crie sua primeira regra de follow-up automático para engajar seus leads.</p>
-            </div>
+            <div className="followup-empty-state"><span><Bot size={26} aria-hidden="true" /></span><h3>Nenhuma regra configurada</h3><p>Crie a primeira jornada automática para reengajar seus contatos.</p><button type="button" className="followup-primary-action followup-animated-action" onClick={() => setShowModal(true)}><Plus size={15} aria-hidden="true" /> Criar Primeira Regra</button></div>
           ) : (
-            <div className="followup-grid">
-              {rules.map(rule => (
-                <div key={rule.id} className={`followup-card ${rule.is_active ? '' : 'inactive'}`}>
-                  <div>
-                    {/* Card Header */}
-                    <div className="followup-card-header">
-                      <h3 className="followup-card-title">{rule.name}</h3>
-                      <span className={`followup-badge ${rule.is_active ? 'active' : 'inactive'}`}>
-                        {rule.is_active ? 'Ativo' : 'Pausado'}
-                      </span>
-                    </div>
-
-                    {/* Trigger and delay info */}
-                    <div className="followup-info-row">
-                      <span className="followup-badge event">
-                        {getTriggerLabel(rule.trigger_event)}
-                      </span>
-                    </div>
-
-                    <div className="followup-info-row" style={{ fontSize: '12px', marginTop: '12px' }}>
-                      <span className="followup-info-label">Espera:</span>
-                      <span style={{ fontWeight: '600' }}>{formatDelay(rule.delay_hours)}</span>
-                    </div>
-
-                    {rule.max_attempts > 1 && (
-                      <div className="followup-info-row" style={{ fontSize: '12px' }}>
-                        <span className="followup-info-label">Tentativas:</span>
-                        <span>Até {rule.max_attempts} vezes</span>
-                      </div>
-                    )}
-
-                    {/* Message Preview */}
-                    <div className="followup-message-preview">
-                      {rule.message}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="followup-card-actions">
-                    {/* Active/Inactive Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <label className="followup-switch">
-                        <input 
-                          type="checkbox" 
-                          checked={rule.is_active}
-                          onChange={() => handleToggleRuleActive(rule.id, rule.is_active)}
-                        />
-                        <span className="followup-switch-slider"></span>
-                      </label>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {rule.is_active ? 'Ativado' : 'Pausado'}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        className="glass-btn"
-                        onClick={() => { setEditingRule(rule); setShowModal(true); }}
-                        style={{ padding: '6px 12px', background: 'none', border: '1px solid var(--border-glass)', borderRadius: '6px', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <Edit2 size={13} />
-                        Editar
-                      </button>
-                      <button
-                        className="glass-btn"
-                        onClick={() => handleDeleteRule(rule.id)}
-                        style={{ padding: '6px 12px', background: 'none', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '6px', color: 'var(--color-status-lost)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            <div className="followup-rules-grid">
+              {rules.map((rule) => (
+                <article key={rule.id} className={`followup-rule-card ${rule.is_active ? 'is-active' : 'is-paused'}`}>
+                  <header><span className="followup-rule-sequence"><Zap size={14} aria-hidden="true" /></span><div><small>{TRIGGER_LABELS[rule.trigger_event] || rule.trigger_event}</small><h3>{rule.name}</h3></div><span className={`followup-state-pill ${rule.is_active ? 'is-active' : 'is-paused'}`}><i />{rule.is_active ? 'Ativa' : 'Pausada'}</span></header>
+                  <div className="followup-rule-timing"><span><Clock3 size={14} aria-hidden="true" /><small>Espera</small><strong>{formatDelay(rule.delay_hours)}</strong></span><span><Send size={14} aria-hidden="true" /><small>Tentativas</small><strong>{rule.max_attempts || 1}</strong></span><span><Layers3 size={14} aria-hidden="true" /><small>Filtros</small><strong>{(rule.channel_ids?.length || 0) + (rule.pipeline_stages?.length || 0)}</strong></span></div>
+                  <blockquote><MessageSquareText size={14} aria-hidden="true" /><p>{rule.message || 'Mensagem não configurada.'}</p></blockquote>
+                  <footer>
+                    <label className="followup-rule-toggle"><input type="checkbox" checked={Boolean(rule.is_active)} onChange={() => handleToggleRuleActive(rule)} disabled={busyRuleIds.has(rule.id)} /><span aria-hidden="true" /><small>{busyRuleIds.has(rule.id) ? 'Atualizando…' : rule.is_active ? 'Ativada' : 'Pausada'}</small></label>
+                    <div><button type="button" className="followup-icon-action followup-animated-action" onClick={() => { setEditingRule(rule); setShowModal(true); }} aria-label={`Editar regra ${rule.name}`}><Edit3 size={15} aria-hidden="true" /></button><button type="button" className="followup-icon-action is-danger followup-animated-action" onClick={() => setConfirmation({ type: 'delete-rule', id: rule.id, name: rule.name, busy: false })} aria-label={`Excluir regra ${rule.name}`}><Trash2 size={15} aria-hidden="true" /></button></div>
+                  </footer>
+                </article>
               ))}
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Queue Tab View */}
       {activeTab === 'queue' && (
-        <div className="followup-table-container">
-          <table className="followup-table">
-            <thead>
-              <tr>
-                <th>Regra</th>
-                <th>Lead / Contato</th>
-                <th>Canal</th>
-                <th>Agendado Para</th>
-                <th>Tentativa</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {queue.length === 0 ? (
-                <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
-                    Nenhum disparo agendado ou enviado na fila.
-                  </td>
-                </tr>
-              ) : (
-                queue.map(item => {
-                  const matchingRule = rules.find(r => r.id === item.rule_id);
+        <section id="followup-panel-queue" className="followup-tab-panel" role="tabpanel">
+          <header className="followup-section-header"><div><span>Rastreamento Operacional</span><h2>Histórico & Fila</h2><p>Acompanhe disparos pendentes, enviados, cancelados e com falha.</p></div></header>
+          <div className="followup-history-filters">
+            <label className="followup-search" htmlFor="followup-queue-search"><Search size={16} aria-hidden="true" /><input id="followup-queue-search" name="followup_queue_search" type="search" value={queueSearch} onChange={(event) => setQueueSearch(event.target.value)} placeholder="Buscar contato, regra ou canal…" autoComplete="off" /></label>
+            <div role="group" aria-label="Filtrar histórico por status">{[
+              ['all', 'Todos', queue.length],
+              ['pending', 'Pendentes', counts.pending],
+              ['sent', 'Enviados', counts.sent],
+              ['cancelled', 'Cancelados', counts.cancelled],
+              ['failed', 'Falhas', counts.failed],
+            ].map(([id, label, count]) => <button key={id} type="button" className={`followup-filter-chip followup-animated-action ${queueStatus === id ? 'is-active' : ''}`} aria-pressed={queueStatus === id} onClick={() => setQueueStatus(id)}>{label}<span>{count.toLocaleString('pt-BR')}</span></button>)}</div>
+          </div>
+          <div className="followup-history-table-wrap">
+            <table className="followup-history-table">
+              <thead><tr><th>Regra & Contato</th><th>Canal</th><th>Agendamento</th><th>Tentativa</th><th>Estado</th><th><span className="sr-only">Ações</span></th></tr></thead>
+              <tbody>
+                {filteredQueue.map((item) => {
+                  const rule = rules.find((currentRule) => currentRule.id === item.rule_id);
+                  const status = STATUS_META[item.status] || { label: item.status || 'Desconhecido', className: 'is-unknown' };
                   return (
-                    <tr key={item.id}>
-                      <td style={{ fontWeight: '600' }}>
-                        {matchingRule ? matchingRule.name : 'Regra Excluída'}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontWeight: '500' }}>{item.contacts?.name || 'Desconhecido'}</span>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{item.contacts?.phone || '-'}</span>
-                        </div>
-                      </td>
-                      <td style={{ textTransform: 'capitalize' }}>
-                        {item.channels?.name || 'Canal Padrão'}
-                      </td>
-                      <td>
-                        {formatDateTime(item.scheduled_at)}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        {item.attempt_number}
-                      </td>
-                      <td>
-                        <span className={`status-indicator ${item.status}`}>
-                          {item.status === 'pending' && 'Pendente'}
-                          {item.status === 'sent' && 'Enviado'}
-                          {item.status === 'cancelled' && 'Cancelado'}
-                          {item.status === 'failed' && 'Falhou'}
-                        </span>
-                        {item.status === 'cancelled' && item.cancel_reason && (
-                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            Motivo: {
-                              item.cancel_reason === 'replied_before_send' ? 'Respondeu antes' : 
-                              item.cancel_reason === 'manual_cancel' ? 'Cancelado pelo operador' : 
-                              item.cancel_reason === 'rule_disabled' ? 'Regra desativada' : item.cancel_reason
-                            }
-                          </div>
-                        )}
-                      </td>
-                      <td style={{ textAlign: 'right' }}>
-                        {item.status === 'pending' && (
-                          <button
-                            onClick={() => handleCancelQueueItem(item.id)}
-                            style={{
-                              background: 'none',
-                              border: '1px solid rgba(239, 68, 68, 0.2)',
-                              color: 'var(--color-status-lost)',
-                              padding: '5px 10px',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}
-                          >
-                            Cancelar
-                          </button>
-                        )}
-                        {item.status === 'sent' && item.sent_at && (
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            Enviado em {formatDateTime(item.sent_at)}
-                          </span>
-                        )}
-                        {item.status === 'cancelled' && '-'}
-                      </td>
+                    <tr key={item.id} className="followup-history-row">
+                      <td data-label="Regra & Contato"><div className="followup-history-person"><span>{(item.contacts?.name || 'C').substring(0, 2).toUpperCase()}</span><div><strong>{item.contacts?.name || 'Contato não identificado'}</strong><small>{rule?.name || 'Regra excluída'} · {item.contacts?.phone || 'Sem telefone'}</small></div></div></td>
+                      <td data-label="Canal"><span className="followup-channel-pill">{item.channels?.name || 'Canal padrão'}</span></td>
+                      <td data-label="Agendamento"><strong className="followup-date-value">{formatDateTime(item.scheduled_at)}</strong>{item.sent_at && <small className="followup-sent-at">Enviado em {formatDateTime(item.sent_at)}</small>}</td>
+                      <td data-label="Tentativa"><span className="followup-attempt">{Number(item.attempt_number) || 1}</span></td>
+                      <td data-label="Estado"><span className={`followup-state-pill ${status.className}`}><i />{status.label}</span>{item.status === 'cancelled' && <small className="followup-cancel-reason">{getCancelReason(item.cancel_reason)}</small>}</td>
+                      <td>{item.status === 'pending' && <button type="button" className="followup-cancel-action followup-animated-action" onClick={() => setConfirmation({ type: 'cancel-queue', id: item.id, name: item.contacts?.name || 'este contato', busy: false })}>Cancelar Disparo</button>}</td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+            {filteredQueue.length === 0 && <div className="followup-table-empty"><History size={23} aria-hidden="true" /><strong>Nenhum registro encontrado</strong><p>Ajuste a busca ou os filtros para visualizar outros disparos.</p></div>}
+          </div>
+        </section>
       )}
 
-      {/* Settings Tab View */}
       {activeTab === 'settings' && (
-        <div style={{ maxWidth: '600px', marginTop: '12px' }}>
-          <form onSubmit={handleSaveSettings} className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>Variáveis do Sistema</h2>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Defina os valores das variáveis que serão inseridas nos templates das mensagens.</p>
-            </div>
-
-            <div className="followup-form-group">
-              <label className="followup-form-label">Nome da Empresa ({"{{company_name}}"})</label>
-              <input 
-                type="text" 
-                className="glass-input"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Ex: Wiks Barbearia"
-                required
-              />
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                Esta variável será substituída dinamicamente no envio das mensagens.
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-              <button
-                type="submit"
-                disabled={isSavingSetting}
-                className="glass-btn"
-                style={{
-                  padding: '10px 24px',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  background: 'var(--accent-primary)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 12px var(--accent-glow)'
-                }}
-              >
-                <Check size={16} />
-                {isSavingSetting ? 'Salvando...' : 'Salvar Alterações'}
-              </button>
-            </div>
-          </form>
-        </div>
+        <section id="followup-panel-settings" className="followup-tab-panel" role="tabpanel">
+          <header className="followup-section-header"><div><span>Personalização</span><h2>Variáveis do Sistema</h2><p>Configure os dados usados automaticamente nos textos das mensagens.</p></div></header>
+          <div className="followup-settings-layout">
+            <form onSubmit={handleSaveSettings} className="followup-settings-card">
+              <header><span><Settings2 size={18} aria-hidden="true" /></span><div><h3>Identidade da Empresa</h3><p>O valor será aplicado à variável <code>{'{{company_name}}'}</code>.</p></div></header>
+              <div className="followup-form-field"><label htmlFor="followup-company-name">Nome da Empresa</label><input id="followup-company-name" name="followup_company_name" type="text" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Ex.: Clínica Wiks…" autoComplete="organization" required /></div>
+              <div className="followup-variable-preview"><small>Prévia da Substituição</small><p>Olá, <strong>{'{{contact_name}}'}</strong>! Aqui é da <strong>{companyName.trim() || 'sua empresa'}</strong>. Podemos continuar?</p></div>
+              <footer><button type="submit" className="followup-primary-action followup-animated-action" disabled={isSavingSetting}><Check size={15} aria-hidden="true" />{isSavingSetting ? 'Salvando…' : 'Salvar Variáveis'}</button></footer>
+            </form>
+            <aside className="followup-variables-guide followup-settings-card"><span className="followup-guide-icon"><MessageSquareText size={19} aria-hidden="true" /></span><small>Variáveis Disponíveis</small><h3>Mensagens mais humanas, sem trabalho manual.</h3><p>Use os atalhos no editor de regras. O CRM substitui cada variável no momento do envio.</p><ul><li><code>{'{{contact_name}}'}</code><span>Nome do contato</span></li><li><code>{'{{agent_name}}'}</code><span>Nome do operador</span></li><li><code>{'{{company_name}}'}</code><span>Nome da empresa</span></li></ul></aside>
+          </div>
+        </section>
       )}
 
-      {/* Rule Creator/Editor Modal */}
-      {showModal && (
-        <FollowUpRuleModal 
-          rule={editingRule}
-          channels={channels}
-          onClose={() => setShowModal(false)}
-          onSaveSuccess={() => {
-            setShowModal(false);
-            loadData();
-            showStatus('success', 'Regra de follow-up salva com sucesso!');
-          }}
-        />
+      {showModal && <FollowUpRuleModal rule={editingRule} channels={channels} onClose={() => setShowModal(false)} onSaveSuccess={async () => { setShowModal(false); await loadData({ silent: true }); showStatus('success', 'Regra salva e pronta para uso.'); }} />}
+
+      {confirmation && (
+        <div className="followup-confirm-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !confirmation.busy && setConfirmation(null)}>
+          <section className="followup-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="followup-confirm-title" aria-describedby="followup-confirm-description">
+            <span className="followup-confirm-icon"><Trash2 size={20} aria-hidden="true" /></span>
+            <h2 id="followup-confirm-title">{confirmation.type === 'delete-rule' ? 'Excluir esta regra?' : 'Cancelar este disparo?'}</h2>
+            <p id="followup-confirm-description">{confirmation.type === 'delete-rule' ? `A regra “${confirmation.name}” e seus disparos pendentes serão removidos.` : `O disparo agendado para ${confirmation.name} não será enviado.`}</p>
+            <div><button type="button" className="followup-secondary-action" onClick={() => setConfirmation(null)} disabled={confirmation.busy}>Manter</button><button type="button" className="followup-danger-action" onClick={executeConfirmation} disabled={confirmation.busy}>{confirmation.busy ? 'Processando…' : confirmation.type === 'delete-rule' ? 'Excluir Regra' : 'Cancelar Disparo'}</button></div>
+          </section>
+        </div>
       )}
     </div>
   );

@@ -1,16 +1,131 @@
-import React from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { gsap } from 'gsap';
 import { useCrm } from '../context/CrmContext';
-import { PieChart, Pie, Cell } from 'recharts';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartContext } from './ui/chart';
-import { TrendingUp } from 'lucide-react';
+import {
+  ArrowRight,
+  BarChart3,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  CircleDollarSign,
+  FilterX,
+  GripVertical,
+  KanbanSquare,
+  Layers3,
+  MessageSquare,
+  MoveRight,
+  Search,
+  Sparkles,
+  Tag,
+  TrendingUp,
+  Users,
+  X,
+} from 'lucide-react';
 import TagBadge from './TagBadge';
+import PipelineAnalytics from './PipelineAnalytics';
+
+const PIPELINE_COLUMNS = [
+  { id: 'new', title: 'Novos Leads', class: 'new', accent: '#32d9aa', short: 'NL' },
+  { id: 'no_answer', title: 'Sem Resposta', class: 'no-answer', accent: '#ff9d4d', short: 'SR' },
+  { id: 'contacted', title: 'Em Contato', class: 'contacted', accent: '#36bff3', short: 'EC' },
+  { id: 'proposal', title: 'Tem Interesse', class: 'proposal', accent: '#c7f36b', short: 'TI' },
+  { id: 'won', title: 'Vendas Ganhas', class: 'won', accent: '#37d98f', short: 'VG' },
+  { id: 'lost', title: 'Perdidos', class: 'lost', accent: '#ff6b78', short: 'PD' },
+];
+
+const PERIOD_OPTIONS = [
+  { value: 'all', label: 'Todo o período' },
+  { value: 'today', label: 'Hoje' },
+  { value: 'yesterday', label: 'Ontem' },
+  { value: '7days', label: 'Últimos 7 dias' },
+  { value: 'custom', label: 'Personalizado' },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: 'all', label: 'Todos os canais' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'telegram', label: 'Instagram' },
+  { value: 'webchat', label: 'TikTok' },
+];
+
+const STAGE_OPTIONS = [
+  { value: 'all', label: 'Todas as etapas' },
+  ...PIPELINE_COLUMNS.map((column) => ({ value: column.id, label: column.title })),
+];
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  maximumFractionDigits: 0,
+});
+
+function PipelineSelect({ id, label, icon: Icon, value, options, isOpen, onToggle, onChange, compact = false }) {
+  const menuRef = useRef(null);
+  const selectedOption = options.find((option) => option.value === value) || options[0];
+
+  useLayoutEffect(() => {
+    if (!isOpen || !menuRef.current) return undefined;
+    const tween = gsap.fromTo(
+      menuRef.current,
+      { autoAlpha: 0, y: -8, scale: 0.96 },
+      { autoAlpha: 1, y: 0, scale: 1, duration: 0.3, ease: 'back.out(1.7)', transformOrigin: 'top center' },
+    );
+    return () => tween.kill();
+  }, [isOpen]);
+
+  return (
+    <div className={`pipeline-filter-select ${compact ? 'is-compact' : ''} ${isOpen ? 'is-open' : ''}`}>
+      <button
+        type="button"
+        className="pipeline-filter-trigger pipeline-animated-action"
+        onClick={onToggle}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={`${id}-options`}
+      >
+        {Icon && <span className="pipeline-filter-trigger-icon"><Icon size={15} aria-hidden="true" /></span>}
+        <span className="pipeline-filter-trigger-copy"><small>{label}</small><strong>{selectedOption.label}</strong></span>
+        <ChevronDown className="pipeline-filter-chevron" size={15} aria-hidden="true" />
+      </button>
+      {isOpen && (
+        <div ref={menuRef} id={`${id}-options`} className="pipeline-filter-drawer" role="listbox" aria-label={label}>
+          <div className="pipeline-filter-drawer-heading"><span>{label}</span><small>{options.length} opções</small></div>
+          <div className="pipeline-filter-options">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={option.value === value ? 'is-selected' : ''}
+                onClick={() => {
+                  onChange(option.value);
+                  onToggle(false);
+                }}
+              >
+                <span>{option.label}</span>
+                {option.value === value && <Check size={14} aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function KanbanBoard() {
+  const rootRef = useRef(null);
+  const filtersRef = useRef(null);
+  const previousViewRef = useRef('board');
   const { 
     contacts, 
+    initialDataLoaded,
     changeContactStatus, 
+    bulkChangeContactStatus,
     setActiveContactId, 
     setActiveScreen, 
     globalTags,
@@ -20,25 +135,69 @@ export default function KanbanBoard() {
     setCustomDateRange,
     getFilteredContacts
   } = useCrm();
-  const filteredContacts = getFilteredContacts();
-  const [activeDropCol, setActiveDropCol] = React.useState(null);
-  const [viewMode, setViewMode] = React.useState('board'); // 'board' or 'charts'
-  const [hoveredSegmentIdx, setHoveredSegmentIdx] = React.useState(null);
-  const [hoveredFunnelStage, setHoveredFunnelStage] = React.useState(null);
+  const dateFilteredContacts = getFilteredContacts();
+  const [activeDropCol, setActiveDropCol] = useState(null);
+  const [draggingContactId, setDraggingContactId] = useState(null);
+  const [viewMode, setViewMode] = useState('board');
+  const [hoveredSegmentIdx, setHoveredSegmentIdx] = useState(null);
+  const [hoveredFunnelStage, setHoveredFunnelStage] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [stageFilter, setStageFilter] = useState('all');
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [openFilter, setOpenFilter] = useState(null);
+  const [moveMenuContactId, setMoveMenuContactId] = useState(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedContactIds, setSelectedContactIds] = useState([]);
+  const [bulkStage, setBulkStage] = useState('contacted');
+  const [bulkActionPending, setBulkActionPending] = useState(false);
+  const [bulkNotice, setBulkNotice] = useState('');
 
-  const columns = [
-    { id: 'new', title: 'Novos Leads', class: 'new' },
-    { id: 'no_answer', title: 'Sem Resposta', class: 'no-answer' },
-    { id: 'contacted', title: 'Em Contato', class: 'contacted' },
-    { id: 'proposal', title: 'Tem Interesse', class: 'proposal' },
-    { id: 'won', title: 'Vendas Ganhas', class: 'won' },
-    { id: 'lost', title: 'Perdidos', class: 'lost' }
-  ];
+  const tagOptions = useMemo(() => {
+    const names = new Set((globalTags || []).map((tag) => tag.name).filter(Boolean));
+    (contacts || []).forEach((contact) => (contact.tags || []).forEach((tag) => names.add(tag)));
+    return [
+      { value: 'all', label: 'Todas as etiquetas' },
+      ...[...names].sort((first, second) => first.localeCompare(second, 'pt-BR')).map((name) => ({ value: name, label: name })),
+    ];
+  }, [contacts, globalTags]);
+
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase('pt-BR');
+  const filteredContacts = dateFilteredContacts.filter((contact) => {
+    const matchesSearch = !normalizedSearch || [contact.name, contact.phone, contact.email, ...(contact.tags || [])]
+      .some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(normalizedSearch));
+    const matchesStage = stageFilter === 'all' || contact.status === stageFilter;
+    const matchesChannel = channelFilter === 'all' || contact.channel === channelFilter;
+    const matchesTag = tagFilter === 'all' || (contact.tags || []).includes(tagFilter);
+    return matchesSearch && matchesStage && matchesChannel && matchesTag;
+  });
+
+  const visibleColumns = stageFilter === 'all'
+    ? PIPELINE_COLUMNS
+    : PIPELINE_COLUMNS.filter((column) => column.id === stageFilter);
+  const selectedIds = useMemo(() => new Set(selectedContactIds.map(String)), [selectedContactIds]);
+  const activeFilterCount = [stageFilter, channelFilter, tagFilter].filter((value) => value !== 'all').length
+    + (dateFilter !== 'all' ? 1 : 0)
+    + (normalizedSearch ? 1 : 0);
+  const totalPipelineValue = filteredContacts
+    .filter((contact) => !['lost', 'won'].includes(contact.status))
+    .reduce((sum, contact) => sum + (Number(contact.value) || 0), 0);
+  const wonRevenue = filteredContacts
+    .filter((contact) => contact.status === 'won')
+    .reduce((sum, contact) => sum + (Number(contact.value) || 0), 0);
+  const wonCount = filteredContacts.filter((contact) => contact.status === 'won').length;
+  const conversionRate = filteredContacts.length > 0 ? Math.round((wonCount / filteredContacts.length) * 100) : 0;
 
   // Drag Handlers
   const handleDragStart = (e, contactId) => {
     e.dataTransfer.setData('text/plain', contactId.toString());
     e.dataTransfer.effectAllowed = 'move';
+    setDraggingContactId(String(contactId));
+  };
+
+  const handleDragEnd = () => {
+    setDraggingContactId(null);
+    setActiveDropCol(null);
   };
 
   const handleDragOver = (e, statusId) => {
@@ -59,13 +218,210 @@ export default function KanbanBoard() {
     if (contactIdStr) {
       const contactId = isNaN(contactIdStr) ? contactIdStr : Number(contactIdStr);
       changeContactStatus(contactId, statusId);
+      setBulkNotice(`Contato movido para ${PIPELINE_COLUMNS.find((column) => column.id === statusId)?.title || 'a nova etapa'}.`);
     }
+    setDraggingContactId(null);
   };
 
   const handleOpenChat = (contactId) => {
     setActiveContactId(contactId);
     setActiveScreen('chat');
   };
+
+  const handleMoveContact = async (contactId, statusId) => {
+    setMoveMenuContactId(null);
+    await changeContactStatus(contactId, statusId);
+    setBulkNotice(`Contato movido para ${PIPELINE_COLUMNS.find((column) => column.id === statusId)?.title || 'a nova etapa'}.`);
+  };
+
+  const toggleContactSelection = (contactId) => {
+    const normalizedId = String(contactId);
+    setSelectedContactIds((current) => current.includes(normalizedId)
+      ? current.filter((id) => id !== normalizedId)
+      : [...current, normalizedId]);
+  };
+
+  const toggleAllVisibleContacts = () => {
+    const visibleIds = filteredContacts.map((contact) => String(contact.id));
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    setSelectedContactIds(allSelected ? [] : visibleIds);
+  };
+
+  const closeSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedContactIds([]);
+    setBulkNotice('');
+  };
+
+  const handleBulkMove = async () => {
+    if (selectedContactIds.length === 0 || bulkActionPending) return;
+    setBulkActionPending(true);
+    setBulkNotice('');
+    try {
+      const result = await bulkChangeContactStatus(selectedContactIds, bulkStage);
+      const stageLabel = PIPELINE_COLUMNS.find((column) => column.id === bulkStage)?.title || 'nova etapa';
+      setBulkNotice(`${result.count} ${result.count === 1 ? 'contato movido' : 'contatos movidos'} para ${stageLabel}.${result.warning ? ` ${result.warning}` : ''}`);
+      setSelectedContactIds([]);
+    } catch (error) {
+      console.error('[Kanban] Não foi possível mover os contatos selecionados:', error);
+      setBulkNotice('Não foi possível mover os contatos. Tente novamente.');
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStageFilter('all');
+    setChannelFilter('all');
+    setTagFilter('all');
+    setDateFilter('all');
+    setOpenFilter(null);
+  };
+
+  useEffect(() => {
+    if (!openFilter && !moveMenuContactId) return undefined;
+    const handlePointerDown = (event) => {
+      if (filtersRef.current?.contains(event.target)) return;
+      if (event.target.closest('.pipeline-card-move-wrap')) return;
+      setOpenFilter(null);
+      setMoveMenuContactId(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setOpenFilter(null);
+        setMoveMenuContactId(null);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [moveMenuContactId, openFilter]);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+    const context = gsap.context(() => {
+      const header = root.querySelector('.pipeline-page-header');
+      const metrics = gsap.utils.toArray('.pipeline-metric-card');
+      const controls = root.querySelector('.pipeline-controls');
+      const columns = gsap.utils.toArray('.kanban-column');
+      const cards = gsap.utils.toArray('.kanban-card').slice(0, 20);
+      const entranceTargets = [header, ...metrics, controls, ...columns, ...cards].filter(Boolean);
+
+      gsap.killTweensOf(entranceTargets);
+      gsap.set(entranceTargets, { willChange: 'transform,opacity' });
+      const timeline = gsap.timeline({
+        delay: 0.06,
+        defaults: { ease: 'power3.out' },
+        onComplete: () => gsap.set(entranceTargets, { clearProps: 'transform,opacity,visibility,willChange' }),
+      });
+      timeline
+        .fromTo(header, { autoAlpha: 0, y: 34 }, { autoAlpha: 1, y: 0, duration: 0.56 }, 0)
+        .fromTo(metrics, { autoAlpha: 0, y: 28, scale: 0.93 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.54, stagger: 0.085 }, 0.16)
+        .fromTo(controls, { autoAlpha: 0, y: 24, scale: 0.975 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5 }, 0.38)
+        .fromTo(columns, { autoAlpha: 0, x: 30, scale: 0.97 }, { autoAlpha: 1, x: 0, scale: 1, duration: 0.55, stagger: 0.065 }, 0.52)
+        .fromTo(cards, { autoAlpha: 0, y: 18, scale: 0.96 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.36, stagger: 0.025 }, 0.7);
+
+      gsap.to('.pipeline-ambient-ring', { rotation: 360, duration: 26, repeat: -1, ease: 'none', transformOrigin: 'center' });
+      gsap.to('.pipeline-metric-icon', { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.8, repeat: -1, yoyo: true, stagger: 0.18, ease: 'sine.inOut' });
+    }, root);
+    return () => context.revert();
+  }, [initialDataLoaded]);
+
+  useLayoutEffect(() => {
+    if (!initialDataLoaded || previousViewRef.current === viewMode) return undefined;
+    previousViewRef.current = viewMode;
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const target = viewMode === 'board' ? root.querySelector('.kanban-board-container') : root.querySelector('.pipeline-analytics-grid');
+    if (!target) return undefined;
+    const tween = gsap.fromTo(target, { autoAlpha: 0, y: 18, scale: 0.992 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.46, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+    return () => tween.kill();
+  }, [initialDataLoaded, viewMode]);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+    const counters = [...root.querySelectorAll('[data-pipeline-kpi]')];
+    const tweens = counters.map((element) => {
+      const target = Number(element.dataset.pipelineKpi) || 0;
+      const format = element.dataset.kpiFormat || 'number';
+      const counter = { value: 0 };
+      const render = () => {
+        const value = Math.round(counter.value);
+        element.textContent = format === 'currency' ? currencyFormatter.format(value) : format === 'percent' ? `${value}%` : value.toLocaleString('pt-BR');
+      };
+      render();
+      return gsap.to(counter, { value: target, duration: 1.08, delay: 0.78, ease: 'power3.out', onUpdate: render, onComplete: render });
+    });
+    return () => tweens.forEach((tween) => tween.kill());
+  }, [conversionRate, filteredContacts.length, initialDataLoaded, totalPipelineValue, wonRevenue]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const glow = root?.querySelector('.pipeline-cursor-glow');
+    if (!root || !glow) return undefined;
+    gsap.set(glow, { xPercent: -50, yPercent: -50 });
+    const moveX = gsap.quickTo(glow, 'x', { duration: 0.55, ease: 'power3.out' });
+    const moveY = gsap.quickTo(glow, 'y', { duration: 0.55, ease: 'power3.out' });
+    const handlePointerMove = (event) => { moveX(event.clientX); moveY(event.clientY); };
+    root.addEventListener('pointermove', handlePointerMove, { passive: true });
+    return () => root.removeEventListener('pointermove', handlePointerMove);
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+    const cleanups = [];
+    const buttons = [...root.querySelectorAll('.pipeline-animated-action, .kanban-card-action-btn')];
+    buttons.forEach((button) => {
+      const enter = () => gsap.to(button, { y: -3, scale: 1.04, duration: 0.24, ease: 'back.out(2)', overwrite: 'auto' });
+      const leave = () => gsap.to(button, { y: 0, scale: 1, duration: 0.28, ease: 'power3.out', overwrite: 'auto' });
+      const down = () => gsap.to(button, { y: 0, scale: 0.94, duration: 0.12, ease: 'power2.out', overwrite: 'auto' });
+      button.addEventListener('pointerenter', enter);
+      button.addEventListener('pointerleave', leave);
+      button.addEventListener('pointerdown', down);
+      cleanups.push(() => {
+        button.removeEventListener('pointerenter', enter);
+        button.removeEventListener('pointerleave', leave);
+        button.removeEventListener('pointerdown', down);
+      });
+    });
+    const metricCards = window.matchMedia('(pointer: fine)').matches
+      ? [...root.querySelectorAll('.pipeline-metric-card')]
+      : [];
+    metricCards.forEach((card) => {
+      let bounds = null;
+      const rotateX = gsap.quickTo(card, 'rotationX', { duration: 0.35, ease: 'power3.out' });
+      const rotateY = gsap.quickTo(card, 'rotationY', { duration: 0.35, ease: 'power3.out' });
+      const moveY = gsap.quickTo(card, 'y', { duration: 0.32, ease: 'power3.out' });
+      const enter = () => { bounds = card.getBoundingClientRect(); moveY(-6); };
+      const move = (event) => {
+        if (!bounds) return;
+        const horizontal = (event.clientX - bounds.left) / bounds.width - 0.5;
+        const vertical = (event.clientY - bounds.top) / bounds.height - 0.5;
+        rotateY(horizontal * 7);
+        rotateX(vertical * -6);
+      };
+      const leave = () => { bounds = null; rotateX(0); rotateY(0); moveY(0); };
+      card.addEventListener('pointerenter', enter);
+      card.addEventListener('pointermove', move);
+      card.addEventListener('pointerleave', leave);
+      cleanups.push(() => {
+        card.removeEventListener('pointerenter', enter);
+        card.removeEventListener('pointermove', move);
+        card.removeEventListener('pointerleave', leave);
+      });
+    });
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf([...buttons, ...metricCards]);
+    };
+  }, [filteredContacts.length, initialDataLoaded, selectionMode, viewMode]);
 
   // Render the modern Funnel Chart using 3D glass cylinders
   const RenderFunnelChart = () => {
@@ -145,7 +501,7 @@ export default function KanbanBoard() {
                       stroke={st.color} 
                       strokeWidth={isHovered ? 2.5 : 1.5}
                       style={{ 
-                        transition: 'all 0.3s ease',
+                        transition: 'opacity 0.3s ease, filter 0.3s ease, stroke-width 0.3s ease',
                         filter: isHovered ? 'url(#glow-funnel)' : 'none',
                         opacity: hoveredFunnelStage === null || isHovered ? 1 : 0.65
                       }}
@@ -162,7 +518,7 @@ export default function KanbanBoard() {
                       stroke={st.color} 
                       strokeWidth="1"
                       style={{
-                        transition: 'all 0.3s ease',
+                        transition: 'opacity 0.3s ease',
                         opacity: hoveredFunnelStage === null || isHovered ? 1 : 0.65
                       }}
                     />
@@ -219,7 +575,7 @@ export default function KanbanBoard() {
                     color: isStHovered ? 'var(--text-primary)' : 'var(--text-secondary)',
                     fontWeight: isStHovered ? '700' : '500',
                     transform: isStHovered ? 'translateY(-2px)' : 'translateY(0)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transition: 'color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     cursor: 'pointer'
                   }}
                   onMouseEnter={() => setHoveredFunnelStage(i)}
@@ -231,7 +587,7 @@ export default function KanbanBoard() {
                     borderRadius: '3px', 
                     backgroundColor: st.color, 
                     boxShadow: isStHovered ? `0 0 10px ${st.color}` : 'none',
-                    transition: 'all 0.2s ease'
+                    transition: 'box-shadow 0.2s ease'
                   }} />
                   <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>{st.title}</span>
                   <span style={{ color: isStHovered ? st.color : 'var(--text-primary)', fontWeight: '700' }}>
@@ -459,7 +815,7 @@ export default function KanbanBoard() {
                           fill="rgba(0, 0, 0, 0.55)"
                           filter="url(#donut-shadow-blur)"
                           style={{
-                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            transition: 'opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             opacity: active ? 0.35 : 0.65,
                             pointerEvents: 'none'
                           }}
@@ -487,7 +843,7 @@ export default function KanbanBoard() {
                               fill={seg.color}
                               filter="url(#donut-depth-darken)"
                               style={{
-                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                transition: 'opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                 opacity: hoveredSegmentIdx === null || active ? 0.8 : 0.45,
                                 pointerEvents: 'none'
                               }}
@@ -514,7 +870,7 @@ export default function KanbanBoard() {
                           stroke={seg.solidColor}
                           strokeWidth="0.5"
                           style={{
-                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            transition: 'opacity 0.3s ease, filter 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             cursor: 'pointer',
                             filter: active ? 'url(#glow-svg-donut)' : 'none',
                             opacity: hoveredSegmentIdx === null || active ? 1 : 0.45
@@ -543,7 +899,7 @@ export default function KanbanBoard() {
                           strokeWidth="2"
                           strokeLinecap="round"
                           style={{
-                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            transition: 'opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             pointerEvents: 'none',
                             opacity: hoveredSegmentIdx === null || active ? 1 : 0.35
                           }}
@@ -589,7 +945,7 @@ export default function KanbanBoard() {
                     color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
                     fontWeight: active ? '700' : '500',
                     transform: active ? 'translateY(-2px)' : 'translateY(0)',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transition: 'color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                     cursor: 'pointer'
                   }}
                   onMouseEnter={() => setHoveredSegmentIdx(seg.idx)}
@@ -601,7 +957,7 @@ export default function KanbanBoard() {
                     borderRadius: '3px', 
                     backgroundColor: seg.solidColor, 
                     boxShadow: active ? `0 0 10px ${seg.solidColor}` : 'none',
-                    transition: 'all 0.2s ease'
+                    transition: 'box-shadow 0.2s ease'
                   }} />
                   <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', flex: 1 }}>{seg.name}</span>
                   <span style={{ color: active ? seg.solidColor : 'var(--text-primary)', fontWeight: '700' }}>
@@ -781,7 +1137,7 @@ export default function KanbanBoard() {
                 strokeLinecap="round"
                 style={{
                   filter: 'url(#glow-bot)',
-                  transition: 'all 1s ease'
+                  transition: 'stroke-dashoffset 1s ease, filter 1s ease'
                 }}
               />
             </svg>
@@ -821,194 +1177,215 @@ export default function KanbanBoard() {
   };
 
   return (
-    <div className="content-wrapper animated-fade-in" style={{ height: '100%', overflow: 'auto', paddingBottom: '40px' }}>
-      <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
-        <div className="page-title">
-          <h1>Funil de Vendas</h1>
-          <p>Gerencie, visualize e analise o fluxo de conversão dos seus leads comercialmente.</p>
+    <div ref={rootRef} className={`content-wrapper pipeline-page ${initialDataLoaded ? 'is-ready' : 'is-loading'}`} aria-busy={!initialDataLoaded}>
+      <div className="pipeline-cursor-glow" aria-hidden="true" />
+      <div className="pipeline-ambient-ring pipeline-ambient-ring--one" aria-hidden="true" />
+      <div className="pipeline-ambient-ring pipeline-ambient-ring--two" aria-hidden="true" />
+      {!initialDataLoaded && (
+        <div className="pipeline-loading-overlay" role="status" aria-live="polite">
+          <span className="pipeline-loading-mark"><Sparkles size={19} aria-hidden="true" /></span>
+          <strong>Preparando seu funil…</strong>
+          <small>Organizando etapas, KPIs e oportunidades.</small>
+          <span className="pipeline-loading-bars" aria-hidden="true"><i /><i /><i /></span>
         </div>
-        
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          {/* Date Range Period Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="crm-status-dropdown"
-              style={{ padding: '6px 32px 6px 12px', fontSize: '12px', height: '34px' }}
-            >
-              <option value="all">Todo o Período</option>
-              <option value="today">Hoje</option>
-              <option value="yesterday">Ontem</option>
-              <option value="7days">Últimos 7 dias</option>
-              <option value="custom">Personalizado</option>
-            </select>
-          </div>
+      )}
 
-          {dateFilter === 'custom' && (
-            <div className="animated-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input
-                type="date"
-                className="glass-input"
-                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
-                value={customDateRange.start}
-                onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
-                placeholder="De"
-              />
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>até</span>
-              <input
-                type="date"
-                className="glass-input"
-                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
-                value={customDateRange.end}
-                onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
-                placeholder="Até"
-              />
-            </div>
+      <header className="pipeline-page-header">
+        <div>
+          <span className="pipeline-overline"><Sparkles size={13} aria-hidden="true" /> Pipeline inteligente</span>
+          <h1>Funil Comercial</h1>
+          <p>Acompanhe oportunidades, mova negociações e mantenha o time no ritmo certo.</p>
+        </div>
+        <div className="pipeline-view-switch" aria-label="Visualização do funil">
+          <button type="button" className={`pipeline-animated-action ${viewMode === 'board' ? 'is-active' : ''}`} onClick={() => setViewMode('board')} aria-pressed={viewMode === 'board'}>
+            <KanbanSquare size={16} aria-hidden="true" /> Quadro
+          </button>
+          <button type="button" className={`pipeline-animated-action ${viewMode === 'charts' ? 'is-active' : ''}`} onClick={() => setViewMode('charts')} aria-pressed={viewMode === 'charts'}>
+            <BarChart3 size={16} aria-hidden="true" /> Análises
+          </button>
+        </div>
+      </header>
+
+      <section className="pipeline-metrics" aria-label="Resumo do funil">
+        <article className="pipeline-metric-card pipeline-metric-card--blue">
+          <span><small>Leads no período</small><strong data-pipeline-kpi={filteredContacts.length}>{filteredContacts.length.toLocaleString('pt-BR')}</strong></span>
+          <span className="pipeline-metric-icon"><Users size={20} aria-hidden="true" /></span>
+          <p>{activeFilterCount ? 'Resultado dos filtros atuais' : 'Base completa do período'}</p>
+        </article>
+        <article className="pipeline-metric-card pipeline-metric-card--mint">
+          <span><small>Em negociação</small><strong data-pipeline-kpi={totalPipelineValue} data-kpi-format="currency">{currencyFormatter.format(totalPipelineValue)}</strong></span>
+          <span className="pipeline-metric-icon"><CircleDollarSign size={20} aria-hidden="true" /></span>
+          <p>Valor nas etapas comerciais ativas</p>
+        </article>
+        <article className="pipeline-metric-card pipeline-metric-card--lime">
+          <span><small>Receita ganha</small><strong data-pipeline-kpi={wonRevenue} data-kpi-format="currency">{currencyFormatter.format(wonRevenue)}</strong></span>
+          <span className="pipeline-metric-icon"><CheckCircle2 size={20} aria-hidden="true" /></span>
+          <p>{wonCount} {wonCount === 1 ? 'venda concluída' : 'vendas concluídas'}</p>
+        </article>
+        <article className="pipeline-metric-card pipeline-metric-card--cyan">
+          <span><small>Conversão</small><strong data-pipeline-kpi={conversionRate} data-kpi-format="percent">{conversionRate}%</strong></span>
+          <span className="pipeline-metric-icon"><TrendingUp size={20} aria-hidden="true" /></span>
+          <p>Vendas ganhas sobre os leads filtrados</p>
+        </article>
+      </section>
+
+      <section ref={filtersRef} className="pipeline-controls" aria-label="Filtros e ações do funil">
+        <label className="pipeline-search">
+          <Search size={18} aria-hidden="true" />
+          <span className="sr-only">Buscar no funil</span>
+          <input
+            type="search"
+            name="pipeline-search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Busque por nome, telefone ou etiqueta…"
+            autoComplete="off"
+          />
+          {searchQuery && <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpar busca"><X size={15} aria-hidden="true" /></button>}
+        </label>
+        <div className="pipeline-filter-row">
+          <PipelineSelect id="pipeline-period" label="Período" icon={CalendarDays} value={dateFilter} options={PERIOD_OPTIONS} isOpen={openFilter === 'period'} onToggle={(force) => setOpenFilter(force === false ? null : openFilter === 'period' ? null : 'period')} onChange={setDateFilter} />
+          <PipelineSelect id="pipeline-stage" label="Etapa" icon={Layers3} value={stageFilter} options={STAGE_OPTIONS} isOpen={openFilter === 'stage'} onToggle={(force) => setOpenFilter(force === false ? null : openFilter === 'stage' ? null : 'stage')} onChange={setStageFilter} />
+          <PipelineSelect id="pipeline-channel" label="Canal" icon={MessageSquare} value={channelFilter} options={CHANNEL_OPTIONS} isOpen={openFilter === 'channel'} onToggle={(force) => setOpenFilter(force === false ? null : openFilter === 'channel' ? null : 'channel')} onChange={setChannelFilter} />
+          <PipelineSelect id="pipeline-tag" label="Etiqueta" icon={Tag} value={tagFilter} options={tagOptions} isOpen={openFilter === 'tag'} onToggle={(force) => setOpenFilter(force === false ? null : openFilter === 'tag' ? null : 'tag')} onChange={setTagFilter} />
+        </div>
+        <div className="pipeline-control-actions">
+          {activeFilterCount > 0 && <button type="button" className="pipeline-clear-filters pipeline-animated-action" onClick={clearFilters}><FilterX size={15} aria-hidden="true" /> Limpar <span>{activeFilterCount}</span></button>}
+          {viewMode === 'board' && (
+            <button type="button" className={`pipeline-select-mode pipeline-animated-action ${selectionMode ? 'is-active' : ''}`} onClick={() => selectionMode ? closeSelectionMode() : setSelectionMode(true)} aria-pressed={selectionMode}>
+              <Check size={15} aria-hidden="true" /> {selectionMode ? 'Sair da seleção' : 'Selecionar em massa'}
+            </button>
           )}
-
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Total em negociação: <span style={{ fontWeight: '700', color: 'var(--text-primary)' }}>
-              R$ {filteredContacts.filter(c => c.status !== 'lost').reduce((acc, c) => acc + c.value, 0).toLocaleString('pt-BR')}
-            </span>
-          </div>
-
-          {/* Toggle pill switcher */}
-          <div className="glass-panel" style={{ display: 'flex', padding: '4px', gap: '4px', background: 'var(--bg-surface-solid)' }}>
-            <button 
-              onClick={() => setViewMode('board')} 
-              className={`glass-btn ${viewMode === 'board' ? '' : 'secondary'}`}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px', boxShadow: 'none' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="9" y1="9" x2="15" y2="9" />
-                <line x1="9" y1="13" x2="15" y2="13" />
-                <line x1="9" y1="17" x2="13" y2="17" />
-              </svg>
-              Quadro
-            </button>
-            <button 
-              onClick={() => setViewMode('charts')} 
-              className={`glass-btn ${viewMode === 'charts' ? '' : 'secondary'}`}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', fontSize: '12px', boxShadow: 'none' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10" />
-                <line x1="12" y1="20" x2="12" y2="4" />
-                <line x1="6" y1="20" x2="6" y2="14" />
-              </svg>
-              Gráficos
-            </button>
-          </div>
         </div>
-      </div>
+        {dateFilter === 'custom' && (
+          <div className="pipeline-date-range">
+            <label>Data inicial<input type="date" name="pipeline-start-date" value={customDateRange.start} onChange={(event) => setCustomDateRange({ ...customDateRange, start: event.target.value })} /></label>
+            <span aria-hidden="true">até</span>
+            <label>Data final<input type="date" name="pipeline-end-date" value={customDateRange.end} onChange={(event) => setCustomDateRange({ ...customDateRange, end: event.target.value })} /></label>
+          </div>
+        )}
+      </section>
+
+      {selectionMode && viewMode === 'board' && (
+        <section className="pipeline-bulk-toolbar" aria-label="Atualização em massa">
+          <div className="pipeline-bulk-summary">
+            <button type="button" className="pipeline-bulk-check pipeline-animated-action" onClick={toggleAllVisibleContacts} aria-label={selectedContactIds.length === filteredContacts.length && filteredContacts.length > 0 ? 'Desmarcar todos os contatos visíveis' : 'Selecionar todos os contatos visíveis'}>
+              <Check size={15} aria-hidden="true" />
+            </button>
+            <span><strong>{selectedContactIds.length}</strong> {selectedContactIds.length === 1 ? 'contato selecionado' : 'contatos selecionados'}</span>
+            <small>{filteredContacts.length} visíveis</small>
+          </div>
+          <div className="pipeline-bulk-actions">
+            <PipelineSelect id="pipeline-bulk-stage" label="Mover selecionados para" icon={MoveRight} value={bulkStage} options={STAGE_OPTIONS.slice(1)} isOpen={openFilter === 'bulk'} onToggle={(force) => setOpenFilter(force === false ? null : openFilter === 'bulk' ? null : 'bulk')} onChange={setBulkStage} compact />
+            <button type="button" className="pipeline-bulk-move pipeline-animated-action" onClick={handleBulkMove} disabled={selectedContactIds.length === 0 || bulkActionPending}>
+              {bulkActionPending ? 'Movendo…' : 'Mover contatos'} <ArrowRight size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+      )}
+
+      <div className="pipeline-live-region" aria-live="polite">{bulkNotice}</div>
 
       {viewMode === 'board' ? (
-        /* KANBAN SCROLLER BOARD VIEW */
-        <div className="kanban-board-container">
-          {columns.map(col => {
-            const colContacts = filteredContacts.filter(c => c.status === col.id);
-            const colSum = colContacts.reduce((acc, c) => acc + c.value, 0);
-            const isHovered = activeDropCol === col.id;
-
+        <section className={`kanban-board-container ${visibleColumns.length === 1 ? 'is-single-column' : ''}`} aria-label="Quadro do funil comercial">
+          {visibleColumns.map((col) => {
+            const colContacts = filteredContacts.filter((contact) => contact.status === col.id);
+            const colSum = colContacts.reduce((sum, contact) => sum + (Number(contact.value) || 0), 0);
+            const isDropTarget = activeDropCol === col.id;
             return (
-              <div
+              <article
                 key={col.id}
-                className={`kanban-column ${col.class} ${isHovered ? 'drag-over' : ''}`}
-                onDragOver={(e) => handleDragOver(e, col.id)}
+                className={`kanban-column ${col.class} ${isDropTarget ? 'drag-over' : ''}`}
+                style={{ '--stage-accent': col.accent }}
+                onDragOver={(event) => handleDragOver(event, col.id)}
                 onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, col.id)}
+                onDrop={(event) => handleDrop(event, col.id)}
               >
-                {/* Header metrics */}
-                <div className="kanban-column-header">
-                  <div className="kanban-column-title">
-                    <span>{col.title}</span>
-                    <span className="kanban-count-pill">{colContacts.length}</span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>
-                    R$ {colSum.toLocaleString('pt-BR')}
-                  </div>
-                </div>
-
-                {/* Stack items */}
+                <header className="kanban-column-header">
+                  <span className="kanban-column-mark" aria-hidden="true">{col.short}</span>
+                  <span className="kanban-column-heading"><strong>{col.title}</strong><small>{currencyFormatter.format(colSum)}</small></span>
+                  <span className="kanban-count-pill">{colContacts.length}</span>
+                </header>
+                <div className="kanban-column-progress" aria-hidden="true"><i style={{ width: `${filteredContacts.length ? Math.max(8, (colContacts.length / filteredContacts.length) * 100) : 0}%` }} /></div>
                 <div className="kanban-cards-stack">
-                  {colContacts.map(contact => (
-                    <div
-                      key={contact.id}
-                      className="kanban-card"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, contact.id)}
-                    >
-                      <div className="kanban-card-header">
-                        <span className="kanban-card-name">{contact.name}</span>
-                        <span 
-                          className={`kanban-card-channel-icon ${contact.channel}`} 
-                          title={
-                            contact.channel === 'whatsapp' ? 'Canal: Whatsapp' : 
-                            contact.channel === 'telegram' ? 'Canal: Instagram' : 
-                            contact.channel === 'webchat' ? 'Canal: Tiktok' : `Canal: ${contact.channel}`
-                          }
-                        >
-                          {contact.channel === 'whatsapp' && 'W'}
-                          {contact.channel === 'telegram' && 'I'}
-                          {contact.channel === 'webchat' && 'T'}
-                        </span>
-                      </div>
-
-                      <div className="kanban-card-tags" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                        {contact.tags && contact.tags.slice(0, 3).map(tag => {
-                          const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
-                          const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
-                          return (
-                            <TagBadge key={tag} name={tag} color={color} />
-                          );
-                        })}
-                      </div>
-
-                      <div className="kanban-card-footer">
-                        <span className="kanban-card-value">
-                          {contact.value > 0 ? `R$ ${contact.value.toLocaleString('pt-BR')}` : 'R$ ---'}
-                        </span>
-                        <button
-                          onClick={() => handleOpenChat(contact.id)}
-                          className="kanban-card-action-btn"
-                          style={{ display: 'flex', alignItems: 'center', gap: '2px' }}
-                        >
-                          Chat
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                            <polyline points="12 5 19 12 12 19" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
+                  {colContacts.map((contact) => {
+                    const contactId = String(contact.id);
+                    const isSelected = selectedIds.has(contactId);
+                    const channelLabel = contact.channel === 'whatsapp' ? 'WhatsApp' : contact.channel === 'telegram' ? 'Instagram' : contact.channel === 'webchat' ? 'TikTok' : contact.channel || 'Canal';
+                    return (
+                      <article
+                        key={contact.id}
+                        className={`kanban-card ${isSelected ? 'is-selected' : ''} ${draggingContactId === contactId ? 'is-dragging' : ''}`}
+                        draggable={!selectionMode}
+                        onDragStart={(event) => handleDragStart(event, contact.id)}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <div className="kanban-card-topline">
+                          {selectionMode ? (
+                            <button type="button" className="kanban-card-selector" onClick={() => toggleContactSelection(contact.id)} aria-label={`${isSelected ? 'Desmarcar' : 'Selecionar'} ${contact.name || 'contato'}`} aria-pressed={isSelected}>
+                              {isSelected && <Check size={13} aria-hidden="true" />}
+                            </button>
+                          ) : <GripVertical className="kanban-card-grip" size={16} aria-hidden="true" />}
+                          <span className={`kanban-card-channel-icon ${contact.channel}`} title={`Canal: ${channelLabel}`} aria-label={`Canal: ${channelLabel}`}>
+                            {contact.channel === 'whatsapp' ? 'W' : contact.channel === 'telegram' ? 'I' : contact.channel === 'webchat' ? 'T' : '•'}
+                          </span>
+                        </div>
+                        <div className="kanban-card-header">
+                          <span className="kanban-card-avatar" style={{ '--avatar-color': contact.avatarColor || col.accent }} aria-hidden="true">{(contact.name || 'SN').substring(0, 2).toUpperCase()}</span>
+                          <span className="kanban-card-identity"><strong className="kanban-card-name">{contact.name || 'Contato sem nome'}</strong><small>{contact.phone || 'Telefone não informado'}</small></span>
+                        </div>
+                        <div className="kanban-card-tags">
+                          {(contact.tags || []).slice(0, 3).map((tag) => {
+                            const tagColor = globalTags?.find((item) => item.name.toLocaleLowerCase('pt-BR') === tag.toLocaleLowerCase('pt-BR'))?.color || '#9ca3af';
+                            return <TagBadge key={tag} name={tag} color={tagColor} />;
+                          })}
+                          {(contact.tags || []).length > 3 && <span className="kanban-more-tags">+{contact.tags.length - 3}</span>}
+                          {!(contact.tags || []).length && <span className="kanban-no-tags">Sem etiquetas</span>}
+                        </div>
+                        <div className="kanban-card-footer">
+                          <span className="kanban-card-value"><small>Valor</small><strong>{currencyFormatter.format(Number(contact.value) || 0)}</strong></span>
+                          <div className="kanban-card-actions">
+                            <div className="pipeline-card-move-wrap">
+                              <button type="button" className="kanban-card-action-btn kanban-card-move-btn" onClick={() => setMoveMenuContactId(moveMenuContactId === contactId ? null : contactId)} aria-haspopup="menu" aria-expanded={moveMenuContactId === contactId} aria-label={`Mover ${contact.name || 'contato'} para outra etapa`}>
+                                <MoveRight size={14} aria-hidden="true" /> Mover
+                              </button>
+                              {moveMenuContactId === contactId && (
+                                <div className="kanban-card-move-menu" role="menu" aria-label="Mover para etapa">
+                                  {PIPELINE_COLUMNS.filter((stage) => stage.id !== contact.status).map((stage) => (
+                                    <button key={stage.id} type="button" role="menuitem" onClick={() => handleMoveContact(contact.id, stage.id)}><i style={{ background: stage.accent }} aria-hidden="true" />{stage.title}</button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <button type="button" onClick={() => handleOpenChat(contact.id)} className="kanban-card-action-btn kanban-chat-btn">
+                              Chat <ArrowRight size={13} aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                   {colContacts.length === 0 && (
                     <div className="kanban-empty-column-placeholder">
-                      Nenhum cliente nesta fase. <br /> Arraste um cartão aqui.
+                      <span><MoveRight size={19} aria-hidden="true" /></span>
+                      <strong>Nenhuma oportunidade</strong>
+                      <small>Arraste um cartão para esta etapa ou altere seus filtros.</small>
                     </div>
                   )}
                 </div>
-              </div>
+              </article>
             );
           })}
-        </div>
+        </section>
+      ) : import.meta.env.VITE_PIPELINE_LEGACY_ANALYTICS === 'true' ? (
+        <section className="pipeline-analytics-grid" aria-label="Análises legadas do funil">
+          {RenderFunnelChart()}
+          {RenderDonutChart()}
+          {RenderChannelPerformance()}
+          {RenderBotPerformance()}
+        </section>
       ) : (
-        /* MODERN ANALYTICS CHARTS VIEW */
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', animation: 'fadeIn var(--transition-normal) forwards' }}>
-          <RenderFunnelChart />
-          <RenderDonutChart />
-          <RenderChannelPerformance />
-          <RenderBotPerformance />
-        </div>
+        <PipelineAnalytics contacts={filteredContacts} initialDataLoaded={initialDataLoaded} />
       )}
     </div>
   );

@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { gsap } from 'gsap';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, FileText, Calendar, PenLine, Send, Loader2, Check, CheckCheck, XCircle, Bot, User, Users, Tag, Brain, Paperclip, Mic, Trash2, ListChecks, MoveRight, X } from 'lucide-react';
+import {
+  ArrowLeft, Bot, Brain, Calendar, Check, CheckCheck, ChevronDown, FileText,
+  ListChecks, Loader2, MessageSquare, Mic, MoveRight, PanelRightOpen, Paperclip,
+  PenLine, Search, Send, Sparkles, Tag, Trash2, User, Users, Wifi, X, XCircle,
+} from 'lucide-react';
 import AudioPlayer from './AudioPlayer';
 import VoiceRecorder from './VoiceRecorder';
 import TagBadge from './TagBadge';
@@ -28,10 +33,12 @@ const sanitizeUrl = (url) => {
 
 import SupabaseService from '../services/supabaseService';
 import { PIPELINE_STAGES } from '../lib/contactBulkActions';
+import { normalizeProfilePhotoUrl, queueProfilePhotoSync } from '../services/profilePhotoService';
 
 export default function ChatWindow() {
   const {
     contacts,
+    tenantId,
     activeContact,
     setActiveContactId,
     sendMessage,
@@ -45,10 +52,18 @@ export default function ChatWindow() {
     addGlobalTag,
     updateGlobalTag,
     deleteGlobalTag,
-    sendMedia
+    sendMedia,
+    messageHistoryState,
+    loadOlderMessages,
+    retryMessageHistory
   } = useCrm();
+  const activeContactId = activeContact?.id;
+  const hasChatData = contacts.length > 0 && Boolean(activeContactId);
 
   const fileInputRef = useRef(null);
+  const rootRef = useRef(null);
+  const profileRef = useRef(null);
+  const firstEntranceFinished = useRef(false);
   const [channelFilter, setChannelFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -68,12 +83,38 @@ export default function ChatWindow() {
   const [bulkStage, setBulkStage] = useState('');
   const [bulkActionPending, setBulkActionPending] = useState(false);
   const [bulkFeedback, setBulkFeedback] = useState(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState('list');
+  const [failedAvatarUrls, setFailedAvatarUrls] = useState({});
   
   const scrollRef = useRef(null);
+  const preserveHistoryScrollRef = useRef(false);
+  const requestedBrokenAvatarsRef = useRef(new Set());
+
+  const getRenderableAvatarUrl = useCallback((contact) => {
+    const normalizedUrl = normalizeProfilePhotoUrl(contact?.avatar_url);
+    if (!normalizedUrl) return null;
+    return failedAvatarUrls[String(contact.id)] === normalizedUrl ? null : normalizedUrl;
+  }, [failedAvatarUrls]);
+
+  const handleProfilePhotoError = useCallback((contact, failedUrl) => {
+    if (!contact?.id || !failedUrl) return;
+
+    const contactId = String(contact.id);
+    setFailedAvatarUrls((current) => ({ ...current, [contactId]: failedUrl }));
+
+    const requestKey = `${contactId}:${failedUrl}`;
+    if (requestedBrokenAvatarsRef.current.has(requestKey)) return;
+    requestedBrokenAvatarsRef.current.add(requestKey);
+
+    queueProfilePhotoSync({ contactId: contact.id, tenantId, force: true }).catch((error) => {
+      console.warn(`[Chat] Foto indisponível para ${contact.id}:`, error.message);
+    });
+  }, [tenantId]);
 
   // Scroll to bottom on active message update
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && !preserveHistoryScrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [activeContact?.messages?.length, activeContact?.id]);
@@ -84,20 +125,168 @@ export default function ChatWindow() {
     return () => window.clearTimeout(timeoutId);
   }, [bulkFeedback]);
 
+  useEffect(() => {
+    if (!isProfileOpen) return undefined;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setIsProfileOpen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isProfileOpen]);
+
+  useEffect(() => {
+    if (!confirmDeleteTag) return undefined;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setConfirmDeleteTag(null);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [confirmDeleteTag]);
+
+  useLayoutEffect(() => {
+    if (!hasChatData || !rootRef.current) return undefined;
+    const root = rootRef.current;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    firstEntranceFinished.current = false;
+    const context = gsap.context(() => {
+      const intro = root.querySelector('.chat-intro-overlay');
+      const listItems = [...root.querySelectorAll('.chat-item-row')].slice(0, 14);
+      const messageItems = [...root.querySelectorAll('.message-bubble-wrapper')].slice(-24);
+      const emptyConversation = root.querySelector('.chat-conversation-empty');
+      const messageEntranceTargets = [...messageItems, emptyConversation].filter(Boolean);
+      const targets = [
+        root.querySelector('.chat-command-header'),
+        root.querySelector('.chat-list-panel'), root.querySelector('.chat-active-panel'),
+        root.querySelector('.chat-profile-sidebar'), ...listItems,
+      ].filter(Boolean);
+      gsap.set(targets, { willChange: 'transform,opacity' });
+      if (intro) gsap.set(intro, { display: 'grid', yPercent: 0, autoAlpha: 1, willChange: 'transform,opacity' });
+      gsap.timeline({
+        defaults: { ease: 'power3.out' },
+        onComplete: () => {
+          firstEntranceFinished.current = true;
+          gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' });
+          if (intro) gsap.set(intro, { display: 'none', clearProps: 'transform,opacity,visibility,willChange' });
+        },
+      })
+        .fromTo('.chat-intro-mark', { scale: .5, rotation: -16, autoAlpha: 0 }, { scale: 1, rotation: 0, autoAlpha: 1, duration: reduceMotion ? .2 : .66, ease: 'back.out(2)' }, 0)
+        .fromTo('.chat-intro-copy > *', { y: 22, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: reduceMotion ? .18 : .56, stagger: reduceMotion ? .04 : .1 }, reduceMotion ? .04 : .16)
+        .fromTo('.chat-intro-progress i', { scaleX: 0 }, { scaleX: 1, duration: reduceMotion ? .2 : .82, ease: 'power2.inOut' }, reduceMotion ? .12 : .48)
+        .to('.chat-intro-overlay', { yPercent: -104, autoAlpha: 0, duration: reduceMotion ? .25 : .88, ease: 'power4.inOut' }, reduceMotion ? .3 : 1.25)
+        .fromTo('.chat-command-header', { y: -34, autoAlpha: 0, scale: .98 }, { y: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .24 : .68 }, reduceMotion ? .32 : 1.58)
+        .fromTo('.chat-list-panel', { x: -44, autoAlpha: 0, scale: .985 }, { x: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .25 : .72 }, reduceMotion ? .36 : 1.72)
+        .fromTo('.chat-active-panel', { y: 38, autoAlpha: 0, scale: .97 }, { y: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .28 : .76 }, reduceMotion ? .4 : 1.78)
+        .fromTo('.chat-profile-sidebar', { x: 44, autoAlpha: 0, scale: .985 }, { x: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .25 : .72 }, reduceMotion ? .42 : 1.84)
+        .fromTo('.chat-list-header > *', { y: -17, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: reduceMotion ? .22 : .5, stagger: reduceMotion ? .025 : .08 }, reduceMotion ? .4 : 2.02)
+        .fromTo(listItems, { x: -22, autoAlpha: 0, scale: .965 }, { x: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .2 : .42, stagger: reduceMotion ? .012 : .045 }, reduceMotion ? .44 : 2.08)
+        .fromTo('.active-chat-header > *', { y: -16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: reduceMotion ? .2 : .48, stagger: reduceMotion ? .03 : .08 }, reduceMotion ? .46 : 2.12)
+        .fromTo(messageEntranceTargets, { y: 20, autoAlpha: 0, scale: .98 }, { y: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .18 : .42, stagger: reduceMotion ? .01 : .03 }, reduceMotion ? .5 : 2.25)
+        .fromTo('.chat-input-footer', { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: reduceMotion ? .22 : .58 }, reduceMotion ? .52 : 2.34)
+        .fromTo('.chat-profile-sidebar .profile-section', { x: 18, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: reduceMotion ? .18 : .42, stagger: reduceMotion ? .018 : .065 }, reduceMotion ? .48 : 2.12);
+    }, root);
+    return () => context.revert();
+  }, [hasChatData]);
+
+  useLayoutEffect(() => {
+    if (!activeContactId || !rootRef.current || !firstEntranceFinished.current) return undefined;
+    const context = gsap.context(() => {
+      const recentMessageBubbles = [...rootRef.current.querySelectorAll('.message-bubble-wrapper')].slice(-24);
+      gsap.timeline({ defaults: { overwrite: 'auto' } })
+        .fromTo('.active-contact-title', { x: -10, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .34, ease: 'power3.out' }, 0)
+        .fromTo(recentMessageBubbles, { y: 12, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .28, stagger: .018, ease: 'power2.out' }, .06)
+        .fromTo('.profile-header-card, .profile-section', { x: 12, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .3, stagger: .035, ease: 'power3.out' }, .04);
+    }, rootRef);
+    return () => context.revert();
+  }, [activeContactId]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return undefined;
+    const cursorGlow = root.querySelector('.chat-cursor-glow');
+    const xTo = cursorGlow ? gsap.quickTo(cursorGlow, 'x', { duration: .65, ease: 'power3.out' }) : null;
+    const yTo = cursorGlow ? gsap.quickTo(cursorGlow, 'y', { duration: .65, ease: 'power3.out' }) : null;
+    const findTarget = (event) => event.target.closest('.chat-gsap-action, .chat-item-row');
+    const onPointerOver = (event) => {
+      const target = findTarget(event);
+      if (!target || !root.contains(target) || target.contains(event.relatedTarget)) return;
+      gsap.to(target, { y: -2, scale: 1.012, duration: .24, ease: 'power2.out', overwrite: 'auto' });
+    };
+    const onPointerOut = (event) => {
+      const target = findTarget(event);
+      if (!target || !root.contains(target) || target.contains(event.relatedTarget)) return;
+      gsap.to(target, { y: 0, scale: 1, duration: .34, ease: 'power3.out', overwrite: 'auto', clearProps: 'transform' });
+    };
+    const onPointerDown = (event) => {
+      const target = findTarget(event);
+      if (target && root.contains(target)) gsap.to(target, { scale: .975, duration: .1, ease: 'power2.out', overwrite: 'auto' });
+    };
+    const onPointerUp = (event) => {
+      const target = findTarget(event);
+      if (target && root.contains(target)) gsap.to(target, { scale: 1.012, duration: .22, ease: 'back.out(2)', overwrite: 'auto' });
+    };
+    const onPointerMove = (event) => {
+      xTo?.(event.clientX - 150);
+      yTo?.(event.clientY - 150);
+    };
+    root.addEventListener('pointerover', onPointerOver);
+    root.addEventListener('pointerout', onPointerOut);
+    root.addEventListener('pointerdown', onPointerDown);
+    root.addEventListener('pointerup', onPointerUp);
+    root.addEventListener('pointermove', onPointerMove);
+    return () => {
+      root.removeEventListener('pointerover', onPointerOver);
+      root.removeEventListener('pointerout', onPointerOut);
+      root.removeEventListener('pointerdown', onPointerDown);
+      root.removeEventListener('pointerup', onPointerUp);
+      root.removeEventListener('pointermove', onPointerMove);
+    };
+  }, [contacts.length]);
+
+  useLayoutEffect(() => {
+    if (!isStatusDropdownOpen || !rootRef.current) return undefined;
+    const context = gsap.context(() => {
+      gsap.fromTo('.modern-status-menu', { y: -9, autoAlpha: 0, scale: .97 }, { y: 0, autoAlpha: 1, scale: 1, duration: .3, ease: 'back.out(1.7)' });
+      gsap.fromTo('.modern-status-menu > button', { x: -7, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .22, stagger: .035, delay: .04, ease: 'power2.out' });
+    }, rootRef);
+    return () => context.revert();
+  }, [isStatusDropdownOpen]);
+
+  useLayoutEffect(() => {
+    if (!isTagPanelOpen || !rootRef.current) return undefined;
+    const context = gsap.context(() => {
+      gsap.fromTo('.chat-tag-panel', { y: -10, autoAlpha: 0, scale: .98 }, { y: 0, autoAlpha: 1, scale: 1, duration: .34, ease: 'power3.out' });
+    }, rootRef);
+    return () => context.revert();
+  }, [isTagPanelOpen]);
+
+  useLayoutEffect(() => {
+    if (!isProfileOpen || !profileRef.current) return undefined;
+    const context = gsap.context(() => {
+      gsap.fromTo('.profile-header-card, .profile-section', { x: 16, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .32, stagger: .045, delay: .08, ease: 'power3.out' });
+    }, profileRef);
+    return () => context.revert();
+  }, [isProfileOpen]);
+
   if (contacts.length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', flex: 1, color: 'var(--text-secondary)', padding: '40px' }}>
-        <h2 style={{ fontSize: '24px', marginBottom: '16px' }}>Caixa de Entrada Vazia</h2>
-        <p>Aguardando a primeira mensagem chegar...</p>
-        <p style={{ fontSize: '14px', marginTop: '8px', opacity: 0.7 }}>Envie uma mensagem de teste para o número configurado no Chatwoot/Meta para ver a mágica acontecer!</p>
+      <div className="chat-empty-state" role="status">
+        <span><MessageSquare size={24} aria-hidden="true" /></span>
+        <small>Atendimento ao vivo</small>
+        <h1>Caixa de Entrada Vazia</h1>
+        <p>Aguardando a primeira mensagem chegar…</p>
+        <em>Envie uma mensagem de teste para o canal configurado e acompanhe a conversa aqui.</em>
       </div>
     );
   }
 
   if (!activeContact) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', flex: 1, color: 'var(--text-secondary)' }}>
-        Carregando conversas...
+      <div className="chat-empty-state" role="status" aria-live="polite">
+        <span><Loader2 size={24} className="spin" aria-hidden="true" /></span>
+        <h1>Preparando suas conversas</h1>
+        <p>Carregando histórico, mídias e atualizações em tempo real…</p>
       </div>
     );
   }
@@ -122,6 +311,33 @@ export default function ChatWindow() {
   const selectedGroupCount = selectedContacts.length - selectedLeadIds.length;
   const allVisibleSelected = filteredContacts.length > 0
     && filteredContacts.every((contact) => selectedIds.has(String(contact.id)));
+  const unreadCount = contacts.filter((contact) => contact.unread).length;
+  const groupCount = contacts.filter((contact) => contact.is_group).length;
+  const humanQueueCount = contacts.filter((contact) => contact.tags?.includes('IA Inativa')).length;
+  const activeAvatarUrl = getRenderableAvatarUrl(activeContact);
+  const isActiveHistoryLoading = messageHistoryState?.contactId === activeContact.id
+    && messageHistoryState.status === 'loading';
+  const isOlderHistoryLoading = messageHistoryState?.contactId === activeContact.id
+    && messageHistoryState.loadingOlder;
+  const activeHistoryError = messageHistoryState?.contactId === activeContact.id
+    ? messageHistoryState.error
+    : null;
+  const hasOlderMessages = messageHistoryState?.contactId === activeContact.id
+    && messageHistoryState.hasOlder;
+
+  const handleLoadOlderMessages = async () => {
+    const scroller = scrollRef.current;
+    const previousHeight = scroller?.scrollHeight || 0;
+    const previousTop = scroller?.scrollTop || 0;
+    preserveHistoryScrollRef.current = true;
+    await loadOlderMessages(activeContact.id);
+    window.requestAnimationFrame(() => {
+      if (scroller) {
+        scroller.scrollTop = previousTop + Math.max(0, scroller.scrollHeight - previousHeight);
+      }
+      preserveHistoryScrollRef.current = false;
+    });
+  };
 
   const toggleContactSelection = (contactId) => {
     const id = String(contactId);
@@ -339,118 +555,163 @@ export default function ChatWindow() {
 
   return (
     <ErrorBoundary>
-      <div className="chat-workspace animated-fade-in" style={{ 
-      position: 'absolute', 
-      top: '24px', 
-      bottom: '24px', 
-      left: '24px', 
-      right: '24px',
-      margin: 0,
-      height: 'auto',
-      width: 'auto'
-    }}>
+      <div ref={rootRef} className={`chat-workspace ${mobilePane === 'list' ? 'is-mobile-list' : 'is-mobile-conversation'} ${isProfileOpen ? 'is-profile-open' : ''}`}>
+      <div className="chat-intro-overlay" aria-hidden="true">
+        <div className="chat-intro-mark"><MessageSquare size={30} strokeWidth={2.2} /></div>
+        <div className="chat-intro-copy"><small>Central inteligente</small><strong>Chat Ao Vivo</strong><span>Sincronizando conversas e atendimento…</span></div>
+        <span className="chat-intro-progress"><i /></span>
+      </div>
+      <div className="chat-cursor-glow" aria-hidden="true" />
+      <div className="chat-ambient chat-ambient--one" aria-hidden="true" />
+      <div className="chat-ambient chat-ambient--two" aria-hidden="true" />
+
+      <header className="chat-command-header">
+        <div className="chat-command-copy">
+          <span><Sparkles size={12} aria-hidden="true" />Central inteligente</span>
+          <h1>Chat Ao Vivo</h1>
+          <p>Conversas, mídias e oportunidades em um único fluxo.</p>
+        </div>
+        <div className="chat-command-metrics" aria-label="Resumo do atendimento">
+          <div><span><MessageSquare size={15} aria-hidden="true" /></span><small>Conversas</small><strong>{contacts.length}</strong></div>
+          <div><span><Wifi size={15} aria-hidden="true" /></span><small>Não lidas</small><strong>{unreadCount}</strong></div>
+          <div><span><User size={15} aria-hidden="true" /></span><small>Com humano</small><strong>{humanQueueCount}</strong></div>
+          <div><span><Users size={15} aria-hidden="true" /></span><small>Grupos</small><strong>{groupCount}</strong></div>
+        </div>
+        <div className="chat-command-live" role="status"><i /><span><strong>Tempo real ativo</strong><small>Mensagens sincronizadas</small></span></div>
+      </header>
       
       {/* COLUMN 1: CHATS DIRECTORY */}
-      <div className="chat-list-panel">
+      <aside className="chat-list-panel" aria-label="Lista de conversas">
         <div className="chat-list-header">
           <div className="chat-list-title-row">
-            <h2 style={{ fontSize: '18px', fontWeight: '700' }}>Conversas</h2>
+            <div className="chat-list-heading-copy">
+              <span><Wifi size={11} aria-hidden="true" />Atendimento ao vivo</span>
+              <h2>Conversas</h2>
+              <small>{filteredContacts.length} de {contacts.length} visíveis</small>
+            </div>
             {selectionMode ? (
-              <button className="chat-selection-toggle active" onClick={closeSelectionMode} disabled={bulkActionPending}>
-                <X size={14} /> Cancelar
+              <button type="button" className="chat-selection-toggle chat-gsap-action active" onClick={closeSelectionMode} disabled={bulkActionPending}>
+                <X size={14} aria-hidden="true" /> Cancelar
               </button>
             ) : (
-              <button className="chat-selection-toggle" onClick={() => setSelectionMode(true)}>
-                <ListChecks size={14} /> Selecionar
+              <button type="button" className="chat-selection-toggle chat-gsap-action" onClick={() => setSelectionMode(true)}>
+                <ListChecks size={14} aria-hidden="true" /> Selecionar
               </button>
             )}
           </div>
           
           <div className="search-wrapper">
+            <Search size={15} aria-hidden="true" />
+            <label className="sr-only" htmlFor="chat-search">Buscar conversas</label>
             <input
-              type="text"
-              placeholder="Buscar por nome ou tag..."
-              className="glass-input"
+              id="chat-search"
+              name="chat_search"
+              type="search"
+              placeholder="Buscar por nome ou etiqueta…"
+              className="glass-input chat-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ paddingLeft: '12px' }}
+              autoComplete="off"
             />
           </div>
 
-          <div className="chat-channels-filter">
+          <div className="chat-channels-filter chat-channel-tabs" aria-label="Filtrar por canal">
             <button
+              type="button"
               onClick={() => setChannelFilter('all')}
-              className={`channel-tab-btn ${channelFilter === 'all' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${channelFilter === 'all' ? 'active' : ''}`}
+              aria-pressed={channelFilter === 'all'}
             >
               Todos
             </button>
             <button
+              type="button"
               onClick={() => setChannelFilter('whatsapp')}
-              className={`channel-tab-btn ${channelFilter === 'whatsapp' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${channelFilter === 'whatsapp' ? 'active' : ''}`}
+              aria-pressed={channelFilter === 'whatsapp'}
             >
-              Whatsapp
+              WhatsApp
             </button>
             <button
+              type="button"
               onClick={() => setChannelFilter('telegram')}
-              className={`channel-tab-btn ${channelFilter === 'telegram' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${channelFilter === 'telegram' ? 'active' : ''}`}
+              aria-pressed={channelFilter === 'telegram'}
             >
               Instagram
             </button>
             <button
+              type="button"
               onClick={() => setChannelFilter('webchat')}
-              className={`channel-tab-btn ${channelFilter === 'webchat' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${channelFilter === 'webchat' ? 'active' : ''}`}
+              aria-pressed={channelFilter === 'webchat'}
             >
-              Tiktok
+              TikTok
             </button>
           </div>
 
-          <div className="chat-channels-filter" style={{ marginTop: '8px', paddingBottom: '4px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div className="chat-status-filter" aria-label="Filtrar por fase do funil">
+            <span className="chat-filter-label"><Sparkles size={11} aria-hidden="true" />Fase</span>
+            <div className="chat-status-filter-scroll">
             <button
+              type="button"
               onClick={() => setStatusFilter('all')}
-              className={`channel-tab-btn ${statusFilter === 'all' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${statusFilter === 'all' ? 'active' : ''}`}
+              aria-pressed={statusFilter === 'all'}
             >
               Qualquer Fase {statusFilter === 'all' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
+              type="button"
               onClick={() => setStatusFilter('new')}
-              className={`channel-tab-btn ${statusFilter === 'new' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${statusFilter === 'new' ? 'active' : ''}`}
+              aria-pressed={statusFilter === 'new'}
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-new)', marginRight: '4px' }}></span>
               Novos Leads {statusFilter === 'new' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
+              type="button"
               onClick={() => setStatusFilter('no_answer')}
-              className={`channel-tab-btn ${statusFilter === 'no_answer' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${statusFilter === 'no_answer' ? 'active' : ''}`}
+              aria-pressed={statusFilter === 'no_answer'}
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-no-answer)', marginRight: '4px' }}></span>
               Sem Resposta {statusFilter === 'no_answer' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
+              type="button"
               onClick={() => setStatusFilter('contacted')}
-              className={`channel-tab-btn ${statusFilter === 'contacted' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${statusFilter === 'contacted' ? 'active' : ''}`}
+              aria-pressed={statusFilter === 'contacted'}
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-contacted)', marginRight: '4px' }}></span>
               Em Contato {statusFilter === 'contacted' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
+              type="button"
               onClick={() => setStatusFilter('proposal')}
-              className={`channel-tab-btn ${statusFilter === 'proposal' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${statusFilter === 'proposal' ? 'active' : ''}`}
+              aria-pressed={statusFilter === 'proposal'}
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-proposal)', marginRight: '4px' }}></span>
               Interesse {statusFilter === 'proposal' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
             <button
+              type="button"
               onClick={() => setStatusFilter('won')}
-              className={`channel-tab-btn ${statusFilter === 'won' ? 'active' : ''}`}
+              className={`channel-tab-btn chat-gsap-action ${statusFilter === 'won' ? 'active' : ''}`}
+              aria-pressed={statusFilter === 'won'}
               style={{ whiteSpace: 'nowrap' }}
             >
               <span style={{ display: 'inline-block', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--color-status-won)', marginRight: '4px' }}></span>
               Ganho {statusFilter === 'won' && <span style={{ opacity: 0.7, fontSize: '10px', marginLeft: '4px' }}>({filteredContacts.length})</span>}
             </button>
+            </div>
           </div>
 
           {selectionMode && (
@@ -474,16 +735,31 @@ export default function ChatWindow() {
             const isSelected = activeContact.id === contact.id;
             const isBulkSelected = selectedIds.has(String(contact.id));
             const lastMsg = contact.messages[contact.messages.length - 1];
+            const contactAvatarUrl = getRenderableAvatarUrl(contact);
             return (
               <div
                 key={contact.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`${selectionMode ? 'Selecionar' : 'Abrir'} conversa de ${contact.name || 'Sem nome'}`}
                 onClick={() => {
                   if (selectionMode) {
                     toggleContactSelection(contact.id);
                     return;
                   }
                   setActiveContactId(contact.id);
+                  setMobilePane('conversation');
                   contact.unread = false; // Mark read on click
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  if (selectionMode) toggleContactSelection(contact.id);
+                  else {
+                    setActiveContactId(contact.id);
+                    setMobilePane('conversation');
+                    contact.unread = false;
+                  }
                 }}
                 className={`chat-item-row ${!selectionMode && isSelected ? 'active' : ''} ${isBulkSelected ? 'bulk-selected' : ''} ${contact.unread ? 'unread' : ''}`}
               >
@@ -499,9 +775,9 @@ export default function ChatWindow() {
                   />
                 )}
                 <div className="chat-avatar-wrapper">
-                  <div className="avatar" style={{ background: contact.avatar_url ? 'transparent' : contact.avatarColor }}>
-                    {contact.avatar_url ? (
-                      <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  <div className="avatar" style={{ background: contactAvatarUrl ? 'transparent' : contact.avatarColor }}>
+                    {contactAvatarUrl ? (
+                      <img src={contactAvatarUrl} alt="" width="44" height="44" loading="lazy" onError={() => handleProfilePhotoError(contact, contactAvatarUrl)} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : contact.is_group ? (
                       <Users size={18} strokeWidth={2.2} />
                     ) : (
@@ -601,25 +877,27 @@ export default function ChatWindow() {
             )}
             <div className="chat-bulk-buttons">
               <button
-                className="chat-bulk-button move"
+                type="button"
+                className="chat-bulk-button chat-gsap-action move"
                 onClick={handleBulkMove}
                 disabled={!bulkStage || selectedLeadIds.length === 0 || bulkActionPending}
               >
-                {bulkActionPending ? <Loader2 size={14} className="spin" /> : <MoveRight size={14} />}
+                {bulkActionPending ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <MoveRight size={14} aria-hidden="true" />}
                 Mover {selectedLeadIds.length || ''}
               </button>
               <button
-                className="chat-bulk-button delete"
+                type="button"
+                className="chat-bulk-button chat-gsap-action delete"
                 onClick={handleBulkDelete}
                 disabled={selectedIds.size === 0 || bulkActionPending}
               >
-                {bulkActionPending ? <Loader2 size={14} className="spin" /> : <Trash2 size={14} />}
+                {bulkActionPending ? <Loader2 size={14} className="spin" aria-hidden="true" /> : <Trash2 size={14} aria-hidden="true" />}
                 Excluir {selectedIds.size || ''}
               </button>
             </div>
           </div>
         )}
-      </div>
+      </aside>
 
       {bulkFeedback && (
         <div className={`chat-bulk-feedback ${bulkFeedback.type}`} role="status">
@@ -628,12 +906,15 @@ export default function ChatWindow() {
       )}
 
       {/* COLUMN 2: ACTIVE DIALOG PANEL */}
-      <div className="chat-active-panel">
+      <main className="chat-active-panel" aria-label={`Conversa com ${activeContact.name || 'contato'}`}>
         <div className="active-chat-header">
+          <button type="button" className="chat-mobile-back chat-gsap-action" onClick={() => setMobilePane('list')} aria-label="Voltar para a lista de conversas">
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
           <div className="active-contact-title">
-            <div className="avatar" style={{ background: activeContact.avatar_url ? 'transparent' : activeContact.avatarColor }}>
-              {activeContact.avatar_url ? (
-                <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            <div className="avatar" style={{ background: activeAvatarUrl ? 'transparent' : activeContact.avatarColor }}>
+              {activeAvatarUrl ? (
+                <img src={activeAvatarUrl} alt="" width="44" height="44" onError={() => handleProfilePhotoError(activeContact, activeAvatarUrl)} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : activeContact.is_group ? (
                 <Users size={20} strokeWidth={2.2} />
               ) : (
@@ -643,6 +924,7 @@ export default function ChatWindow() {
             <div>
               <span className="active-contact-name">{activeContact.name}</span>
               <div className="active-contact-channel">
+                <span className="chat-live-state"><i />Tempo real</span>
                 <span className={`tag tag-${activeContact.channel}`}>
                   {activeContact.channel === 'whatsapp' ? (
                     activeContact.provider === 'meta_cloud' ? 'WhatsApp Oficial' : 'WhatsApp'
@@ -667,33 +949,70 @@ export default function ChatWindow() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="active-chat-actions">
             {!activeContact.is_group && (
               <button
+                type="button"
                 onClick={toggleAi}
-                className={`glass-btn ${isAiPaused ? 'primary' : ''}`}
-                style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center', background: isAiPaused ? 'var(--warning-color)' : 'var(--bg-surface-hover)', borderColor: isAiPaused ? 'transparent' : 'var(--border-glass)' }}
+                className={`glass-btn chat-gsap-action chat-ai-control ${isAiPaused ? 'is-human' : 'is-ai'}`}
+                aria-pressed={isAiPaused}
                 title={isAiPaused ? "Retornar atendimento para a Inteligência Artificial" : "Pausar IA e assumir a conversa"}
               >
-                {isAiPaused ? <User size={12} strokeWidth={2.5} color="#fff" /> : <Bot size={12} strokeWidth={2.5} />}
-                {isAiPaused ? <span style={{ color: '#fff' }}>Humano Ativo</span> : 'IA Ativa'}
+                {isAiPaused ? <User size={13} strokeWidth={2.5} aria-hidden="true" /> : <Bot size={13} strokeWidth={2.5} aria-hidden="true" />}
+                <span>{isAiPaused ? 'Humano Ativo' : 'IA Ativa'}</span>
               </button>
             )}
 
             <button
+              type="button"
               onClick={handleSimulateClient}
-              className="glass-btn secondary"
+              className="glass-btn chat-gsap-action secondary chat-simulate-button"
               style={{ padding: '8px 12px', fontSize: '11px', display: 'flex', gap: '6px', alignItems: 'center' }}
               title="Simula uma nova mensagem chegando do cliente"
             >
-              <MessageSquare size={12} strokeWidth={2.5} />
+              <MessageSquare size={12} strokeWidth={2.5} aria-hidden="true" />
               Simular Cliente
+            </button>
+            <button type="button" className="chat-profile-toggle chat-gsap-action" onClick={() => setIsProfileOpen(true)} aria-label="Abrir perfil da conversa">
+              <PanelRightOpen size={17} aria-hidden="true" />
+              <span>Perfil</span>
             </button>
           </div>
         </div>
 
         {/* MESSAGES VIEW */}
-        <div className="messages-scroller" ref={scrollRef}>
+        <div className="messages-scroller" ref={scrollRef} aria-busy={isActiveHistoryLoading || isOlderHistoryLoading}>
+          {isActiveHistoryLoading && (
+            <div className="chat-history-state chat-history-state--loading" role="status" aria-live="polite">
+              <Loader2 size={15} className="spin-animation" aria-hidden="true" />
+              <span>Sincronizando histórico…</span>
+            </div>
+          )}
+          {!isActiveHistoryLoading && activeHistoryError && (
+            <div className="chat-history-state chat-history-state--error" role="alert">
+              <span>{activeHistoryError}</span>
+              <button type="button" className="chat-gsap-action" onClick={retryMessageHistory}>Tentar novamente</button>
+            </div>
+          )}
+          {!isActiveHistoryLoading && !activeHistoryError && hasOlderMessages && (
+            <button
+              type="button"
+              className="chat-history-load-more chat-gsap-action"
+              onClick={handleLoadOlderMessages}
+              disabled={isOlderHistoryLoading}
+            >
+              {isOlderHistoryLoading ? <Loader2 size={14} className="spin-animation" aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+              {isOlderHistoryLoading ? 'Carregando mensagens…' : 'Carregar mensagens anteriores'}
+            </button>
+          )}
+          {(activeContact.messages || []).length === 0 && !isActiveHistoryLoading && !activeHistoryError && (
+            <div className="chat-conversation-empty">
+              <span><MessageSquare size={22} aria-hidden="true" /></span>
+              <small>Conversa selecionada</small>
+              <h2>Pronto para atender</h2>
+              <p>Ainda não há mensagens neste histórico. Envie a primeira mensagem ou aguarde o contato iniciar a conversa.</p>
+            </div>
+          )}
           {(activeContact.messages || []).map(msg => (
             <div key={msg.id} className={`message-bubble-wrapper ${msg.sender}`}>
               <div className="message-bubble">
@@ -704,35 +1023,45 @@ export default function ChatWindow() {
                 )}
                 {msg.content_type === 'image' ? (
                   msg.media_url ? (
-                    <div>
-                      <img 
+                    <div className="chat-media-shell">
+                      <img
                         src={msg.media_url} 
                         alt="Imagem enviada" 
-                        style={{ maxWidth: '280px', borderRadius: '8px', display: 'block', marginBottom: '8px', cursor: 'pointer' }}
+                        width="280"
+                        height="210"
+                        loading="lazy"
+                        className="chat-media-image"
                         onClick={() => window.open(msg.media_url, '_blank')}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') window.open(msg.media_url, '_blank');
+                        }}
                         onError={(e) => {
                           e.target.style.display = 'none';
                           e.target.nextElementSibling.style.display = 'flex';
                         }}
                       />
                       <div className="media-error-fallback" style={{ display: 'none', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                        <XCircle size={16} /> Mídia indisponível
+                      <XCircle size={16} aria-hidden="true" /> Mídia indisponível
                       </div>
                       {msg.text && msg.text !== '[Imagem]' && <div>{typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}</div>}
                     </div>
                   ) : (
                     <div style={{ marginBottom: '8px' }}>
                       <div className="media-error-fallback" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                        <XCircle size={16} /> Mídia indisponível
+                        <XCircle size={16} aria-hidden="true" /> Mídia indisponível
                       </div>
                       {msg.text && msg.text !== '[Imagem]' && <div>{typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}</div>}
                     </div>
                   )
                 ) : msg.content_type === 'sticker' && msg.media_url ? (
                   <div>
-                    <img 
+                    <img
                       src={msg.media_url} 
                       alt="Figurinha enviada" 
+                      width="120"
+                      height="120"
                       style={{ width: '120px', height: '120px', objectFit: 'contain', background: 'transparent', display: 'block' }}
                       onError={(e) => { e.target.style.display = 'none'; }}
                     />
@@ -742,19 +1071,19 @@ export default function ChatWindow() {
                     <AudioPlayer src={msg.media_url} />
                   ) : (
                     <div className="media-error-fallback" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)' }}>
-                      <XCircle size={16} /> Áudio não disponível
+                      <XCircle size={16} aria-hidden="true" /> Áudio não disponível
                     </div>
                   )
                 ) : msg.content_type === 'video' ? (
                   msg.media_url ? (
                     <div>
-                      <video src={msg.media_url} controls style={{ maxWidth: '280px', borderRadius: '8px', display: 'block', marginBottom: '8px' }} />
+                      <video src={msg.media_url} controls preload="metadata" width="280" height="158" className="chat-media-video" />
                       {msg.text && msg.text !== '[Vídeo]' && <div>{typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}</div>}
                     </div>
                   ) : (
                     <div style={{ marginBottom: '8px' }}>
                       <div className="media-error-fallback" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px dashed var(--border-glass)', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                        <XCircle size={16} /> Vídeo não disponível
+                        <XCircle size={16} aria-hidden="true" /> Vídeo não disponível
                       </div>
                       {msg.text && msg.text !== '[Vídeo]' && <div>{typeof msg.text === 'string' ? msg.text : JSON.stringify(msg.text)}</div>}
                     </div>
@@ -767,7 +1096,7 @@ export default function ChatWindow() {
                       rel="noopener noreferrer" 
                       style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-color)', textDecoration: 'underline' }}
                     >
-                      <FileText size={14} strokeWidth={2.5} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                      <FileText size={14} strokeWidth={2.5} aria-hidden="true" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
                       {typeof msg.text === 'string' ? msg.text : (msg.text ? JSON.stringify(msg.text) : 'Documento')}
                     </a>
                   </div>
@@ -787,23 +1116,23 @@ export default function ChatWindow() {
                 {msg.sender === 'agent' && msg.status && (
                   <span className={`msg-status msg-status-${msg.status}`}>
                     {msg.status === 'sending' && (
-                      <span className="status-sending" title="Enviando...">
-                        <Loader2 size={12} strokeWidth={2.5} className="spin-animation" />
+                      <span className="status-sending" title="Enviando…">
+                        <Loader2 size={12} strokeWidth={2.5} className="spin-animation" aria-hidden="true" />
                       </span>
                     )}
                     {msg.status === 'sent' && (
                       <span className="status-sent" title="Enviado">
-                        <Check size={14} strokeWidth={2.5} />
+                        <Check size={14} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     )}
                     {msg.status === 'delivered' && (
                       <span className="status-delivered" title="Entregue">
-                        <CheckCheck size={14} strokeWidth={2.5} />
+                        <CheckCheck size={14} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     )}
                     {msg.status === 'read' && (
                       <span className="status-read" title="Visualizado">
-                        <CheckCheck size={14} strokeWidth={2.5} />
+                        <CheckCheck size={14} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     )}
                     {msg.status === 'played' && (
@@ -811,12 +1140,12 @@ export default function ChatWindow() {
                         className="status-played"
                         title="Áudio reproduzido"
                       >
-                        <CheckCheck size={14} strokeWidth={2.5} />
+                        <CheckCheck size={14} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     )}
                     {msg.status === 'failed' && (
                       <span className="status-failed" title="Falha ao enviar. Tente novamente.">
-                        <XCircle size={12} strokeWidth={2.5} />
+                        <XCircle size={12} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     )}
                   </span>
@@ -830,47 +1159,53 @@ export default function ChatWindow() {
         <div className="chat-input-footer">
           <div className="quick-reply-wrapper">
             <button
+              type="button"
               onClick={() => handleInjectTemplate('Olá! Como posso te ajudar hoje?')}
-              className="quick-reply-pill"
+              className="quick-reply-pill chat-gsap-action"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <MessageSquare size={12} strokeWidth={2.5} />
+              <MessageSquare size={12} strokeWidth={2.5} aria-hidden="true" />
               Saudação
             </button>
             <button
+              type="button"
               onClick={() => handleInjectTemplate('Aqui está a nossa proposta comercial para o seu plano.')}
-              className="quick-reply-pill"
+              className="quick-reply-pill chat-gsap-action"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <FileText size={12} strokeWidth={2.5} />
+              <FileText size={12} strokeWidth={2.5} aria-hidden="true" />
               Proposta
             </button>
             <button
+              type="button"
               onClick={() => handleInjectTemplate('Podemos agendar uma demonstração por vídeo amanhã às 14h?')}
-              className="quick-reply-pill"
+              className="quick-reply-pill chat-gsap-action"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <Calendar size={12} strokeWidth={2.5} />
+              <Calendar size={12} strokeWidth={2.5} aria-hidden="true" />
               Agendar Call
             </button>
             <button
+              type="button"
               onClick={() => handleInjectTemplate('Perfeito! Seu contrato foi gerado. Estou enviando por e-mail.')}
-              className="quick-reply-pill"
+              className="quick-reply-pill chat-gsap-action"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <PenLine size={12} strokeWidth={2.5} />
+              <PenLine size={12} strokeWidth={2.5} aria-hidden="true" />
               Fechamento
             </button>
           </div>
 
           <div className="chat-input-bar">
             <button 
+              type="button"
               onClick={() => fileInputRef.current?.click()} 
-              className="glass-btn secondary" 
+              className="glass-btn chat-gsap-action secondary"
               style={{ padding: '12px', borderRadius: '50%' }}
               title="Anexar arquivo"
+              aria-label="Anexar arquivo"
             >
-              <Paperclip size={18} strokeWidth={2.5} />
+              <Paperclip size={18} strokeWidth={2.5} aria-hidden="true" />
             </button>
             <input 
               type="file" 
@@ -878,6 +1213,7 @@ export default function ChatWindow() {
               style={{ display: 'none' }} 
               onChange={handleFileSelect}
               accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+              aria-label="Selecionar arquivo para enviar"
             />
             {isRecordingVoice ? (
               <VoiceRecorder 
@@ -887,40 +1223,46 @@ export default function ChatWindow() {
             ) : (
               <>
                 <input
+                  id="chat-message-input"
+                  name="chat_message"
                   type="text"
-                  placeholder="Digite sua mensagem aqui..."
+                  placeholder="Digite sua mensagem aqui…"
                   className="glass-input"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyPress}
+                  autoComplete="off"
+                  aria-label="Mensagem"
                 />
                 {!inputText.trim() && (
-                  <button onClick={() => setIsRecordingVoice(true)} className="glass-btn secondary" style={{ padding: '12px', borderRadius: '50%' }} title="Gravar Áudio">
-                    <Mic size={18} strokeWidth={2.5} />
+                  <button type="button" onClick={() => setIsRecordingVoice(true)} className="glass-btn chat-gsap-action secondary" style={{ padding: '12px', borderRadius: '50%' }} title="Gravar áudio" aria-label="Gravar áudio">
+                    <Mic size={18} strokeWidth={2.5} aria-hidden="true" />
                   </button>
                 )}
-                <button onClick={handleSend} className="glass-btn" style={{ padding: '12px 20px' }}>
+                <button type="button" onClick={handleSend} className="glass-btn chat-gsap-action chat-send-button" style={{ padding: '12px 20px' }} disabled={!inputText.trim()}>
                   <span>Enviar</span>
-                  <Send size={14} strokeWidth={2.5} />
+                  <Send size={14} strokeWidth={2.5} aria-hidden="true" />
                 </button>
               </>
             )}
           </div>
         </div>
-      </div>
+      </main>
 
       {/* COLUMN 3: CONTACT SUMMARY PROFILE */}
-      <div className="chat-profile-sidebar">
+      <button type="button" className="chat-profile-backdrop" onClick={() => setIsProfileOpen(false)} aria-label="Fechar perfil da conversa" tabIndex={isProfileOpen ? 0 : -1} />
+      <aside ref={profileRef} className="chat-profile-sidebar" aria-label="Perfil da conversa">
+        <button type="button" className="chat-profile-close chat-gsap-action" onClick={() => setIsProfileOpen(false)} aria-label="Fechar perfil da conversa"><X size={17} aria-hidden="true" /></button>
         <div className="profile-header-card">
           <div className="avatar" style={{
             width: '64px',
             height: '64px',
             fontSize: '22px',
-            background: activeContact.avatar_url ? 'transparent' : activeContact.avatarColor,
+            background: activeAvatarUrl ? 'transparent' : activeContact.avatarColor,
             border: '2px solid var(--border-glass)'
           }}>
-            {activeContact.avatar_url ? (
-              <img src={activeContact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            {activeAvatarUrl ? (
+              <img src={activeAvatarUrl} alt="" width="64" height="64" onError={() => handleProfilePhotoError(activeContact, activeAvatarUrl)} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
             ) : activeContact.is_group ? (
               <Users size={28} strokeWidth={2.1} />
             ) : (
@@ -956,7 +1298,9 @@ export default function ChatWindow() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <span className="profile-section-title" style={{ margin: 0 }}>{activeContact.is_group ? 'Dados do Grupo' : 'Dados do Contato'}</span>
             {!activeContact.is_group && <button 
+              type="button"
               onClick={handleResetAiMemory}
+              className="chat-profile-danger chat-gsap-action"
               title="Resetar Memória da IA (inicia novo atendimento)"
               style={{
                 background: 'rgba(239, 68, 68, 0.1)',
@@ -972,7 +1316,7 @@ export default function ChatWindow() {
                 fontWeight: 600
               }}
             >
-              <Brain size={12} /> Resetar IA
+              <Brain size={12} aria-hidden="true" /> Resetar IA
             </button>}
           </div>
           {!activeContact.is_group && <div className="profile-field">
@@ -1025,15 +1369,20 @@ export default function ChatWindow() {
             <span className="profile-field-label">Fase no CRM</span>
             
             {/* MODERN CUSTOM DROPDOWN */}
-            <div 
+            <div
               className="modern-status-selector" 
               style={{
                 position: 'relative',
                 width: '100%'
               }}
             >
-              <div 
+              <button
+                type="button"
                 onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                className="modern-status-trigger chat-gsap-action"
+                aria-haspopup="listbox"
+                aria-expanded={isStatusDropdownOpen}
+                aria-controls="chat-status-options"
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -1057,15 +1406,16 @@ export default function ChatWindow() {
                     {activeContact.status === 'lost' && 'Perdidos'}
                   </span>
                 </div>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isStatusDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
-                  <path d="m6 9 6 6 6-6"/>
-                </svg>
-              </div>
+                <ChevronDown size={14} aria-hidden="true" style={{ transform: isStatusDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
+              </button>
 
               {/* DROPDOWN MENU */}
               {isStatusDropdownOpen && (
                 <div 
+                  id="chat-status-options"
                   className="modern-status-menu animated-fade-in"
+                  role="listbox"
+                  aria-label="Fase no CRM"
                   style={{
                     position: 'absolute',
                     top: '100%',
@@ -1091,8 +1441,11 @@ export default function ChatWindow() {
                     { id: 'won', label: 'Vendas Ganhas', class: 'won' },
                     { id: 'lost', label: 'Perdidos', class: 'lost' }
                   ].map(stage => (
-                    <div
+                    <button
+                      type="button"
                       key={stage.id}
+                      role="option"
+                      aria-selected={activeContact.status === stage.id}
                       onClick={() => {
                         changeContactStatus(activeContact.id, stage.id);
                         setIsStatusDropdownOpen(false);
@@ -1118,7 +1471,7 @@ export default function ChatWindow() {
                       {activeContact.status === stage.id && (
                         <CheckCheck size={14} style={{ marginLeft: 'auto', color: 'var(--accent-primary)' }} />
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -1127,23 +1480,29 @@ export default function ChatWindow() {
             
             {/* Invisible backdrop to close dropdown when clicking outside */}
             {isStatusDropdownOpen && (
-              <div 
+              <button
+                type="button"
+                aria-label="Fechar opções de fase"
                 onClick={() => setIsStatusDropdownOpen(false)}
-                style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 }}
+                className="chat-status-backdrop"
               />
             )}
           </div>
 
           <div className="profile-field" style={{ marginTop: '16px' }}>
-            <span className="profile-field-label">Valor do Negócio (R$)</span>
+            <label className="profile-field-label" htmlFor="chat-deal-value">Valor do Negócio (R$)</label>
             <div style={{ position: 'relative' }}>
               <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent-primary)', fontWeight: 'bold' }}>R$</span>
               <input
+                id="chat-deal-value"
+                name="deal_value"
                 type="number"
                 className="glass-input modern-currency-input"
                 value={activeContact.value || ''}
                 onChange={(e) => updateContactValue(activeContact.id, e.target.value)}
                 placeholder="0,00"
+                inputMode="decimal"
+                autoComplete="off"
                 style={{
                   paddingLeft: '38px',
                   background: 'rgba(255, 255, 255, 0.02)',
@@ -1160,12 +1519,15 @@ export default function ChatWindow() {
         </div>
 
         {/* TAGS MANAGER */}
-        <div className="profile-section" style={{ display: activeContact.is_group ? 'none' : undefined }}>
+        <div className="profile-section chat-tag-manager" style={{ display: activeContact.is_group ? 'none' : undefined }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <span className="profile-section-title" style={{ margin: 0 }}>Tags do Contato</span>
             <button
+              type="button"
               onClick={() => setIsTagPanelOpen(!isTagPanelOpen)}
-              className="glass-btn"
+              className="glass-btn chat-gsap-action"
+              aria-expanded={isTagPanelOpen}
+              aria-controls="chat-tag-panel"
               style={{
                 padding: '4px 8px',
                 fontSize: '10px',
@@ -1177,7 +1539,7 @@ export default function ChatWindow() {
                 borderColor: 'var(--border-glass)'
               }}
             >
-              <Tag size={10} />
+              <Tag size={10} aria-hidden="true" />
               {isTagPanelOpen ? 'Fechar' : 'Gerenciar'}
             </button>
           </div>
@@ -1205,6 +1567,7 @@ export default function ChatWindow() {
           {/* Expansible Tag Catalog & Control Panel */}
           {isTagPanelOpen && (
             <div 
+              id="chat-tag-panel"
               style={{
                 marginTop: '12px',
                 padding: '12px',
@@ -1215,7 +1578,7 @@ export default function ChatWindow() {
                 flexDirection: 'column',
                 gap: '10px'
               }}
-              className="animated-fade-in"
+              className="chat-tag-panel animated-fade-in"
             >
               {/* Direct tag creation panel */}
               <div 
@@ -1229,14 +1592,17 @@ export default function ChatWindow() {
                   border: '1px solid rgba(255, 255, 255, 0.05)'
                 }}
               >
-                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>Criar Nova Tag</span>
+                <label htmlFor="chat-new-tag" style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>Criar Nova Tag</label>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <input
+                    id="chat-new-tag"
+                    name="new_tag"
                     type="text"
-                    placeholder="Nome da tag..."
+                    placeholder="Nome da etiqueta…"
                     value={newTagText}
                     onChange={(e) => setNewTagText(e.target.value)}
                     className="glass-input"
+                    autoComplete="off"
                     style={{
                       fontSize: '11px',
                       padding: '6px 10px',
@@ -1244,6 +1610,7 @@ export default function ChatWindow() {
                     }}
                   />
                   <button
+                    type="button"
                     onClick={async () => {
                       const cleaned = newTagText.trim().substring(0, 24);
                       if (!cleaned) return;
@@ -1260,7 +1627,7 @@ export default function ChatWindow() {
                         alert("Esta tag já existe ou ocorreu um erro.");
                       }
                     }}
-                    className="glass-btn primary"
+                    className="glass-btn chat-gsap-action primary"
                     style={{
                       padding: '6px 10px',
                       fontSize: '10px',
@@ -1280,8 +1647,11 @@ export default function ChatWindow() {
                   <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>Cor:</span>
                   {tagColorsPalette.map(color => (
                     <button
+                      type="button"
                       key={color}
                       onClick={() => setSelectedNewColor(color)}
+                      aria-label={`Selecionar cor ${color}`}
+                      aria-pressed={selectedNewColor === color}
                       style={{
                         width: '14px',
                         height: '14px',
@@ -1291,7 +1661,7 @@ export default function ChatWindow() {
                         cursor: 'pointer',
                         padding: 0,
                         boxShadow: selectedNewColor === color ? '0 0 6px ' + color : 'none',
-                        transition: 'all 0.2s ease'
+                        transition: 'border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease'
                       }}
                     />
                   ))}
@@ -1303,13 +1673,16 @@ export default function ChatWindow() {
 
               {/* Search tag catalogue */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>Buscar & Vincular</span>
+                <label htmlFor="chat-tag-search" style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>Buscar & Vincular</label>
                 <input
-                  type="text"
-                  placeholder="Buscar no catálogo..."
+                  id="chat-tag-search"
+                  name="tag_search"
+                  type="search"
+                  placeholder="Buscar no catálogo…"
                   value={tagSearch}
                   onChange={(e) => setTagSearch(e.target.value)}
                   className="glass-input"
+                  autoComplete="off"
                   style={{
                     fontSize: '11px',
                     padding: '6px 10px',
@@ -1351,20 +1724,26 @@ export default function ChatWindow() {
                           }}
                         >
                           <input
+                            name="edit_tag_name"
                             type="text"
                             value={editingTag.newName}
                             onChange={(e) => setEditingTag({ ...editingTag, newName: e.target.value })}
                             className="glass-input"
                             style={{ fontSize: '11px', padding: '4px 8px' }}
                             maxLength={24}
+                            aria-label="Editar nome da etiqueta"
+                            autoComplete="off"
                           />
                           
                           {/* Color Palette Selector for Editing */}
                           <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                             {tagColorsPalette.map(color => (
                               <button
+                                type="button"
                                 key={color}
                                 onClick={() => setEditingTag({ ...editingTag, color })}
+                                aria-label={`Selecionar cor ${color} para a etiqueta`}
+                                aria-pressed={editingTag.color === color}
                                 style={{
                                   width: '14px',
                                   height: '14px',
@@ -1373,7 +1752,7 @@ export default function ChatWindow() {
                                   border: editingTag.color === color ? '2px solid #fff' : '1px solid rgba(255, 255, 255, 0.2)',
                                   cursor: 'pointer',
                                   padding: 0,
-                                  transition: 'all 0.1s ease'
+                                  transition: 'border-color 0.1s ease, transform 0.1s ease'
                                 }}
                               />
                             ))}
@@ -1381,8 +1760,9 @@ export default function ChatWindow() {
 
                           <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
                             <button
+                              type="button"
                               onClick={handleSaveTagEdit}
-                              className="glass-btn"
+                              className="glass-btn chat-gsap-action"
                               style={{
                                 padding: '4px 8px',
                                 fontSize: '9px',
@@ -1395,8 +1775,9 @@ export default function ChatWindow() {
                               Salvar
                             </button>
                             <button
+                              type="button"
                               onClick={() => setConfirmDeleteTag(tag)}
-                              className="glass-btn"
+                              className="glass-btn chat-gsap-action"
                               style={{
                                 padding: '4px 8px',
                                 fontSize: '9px',
@@ -1409,8 +1790,9 @@ export default function ChatWindow() {
                               Excluir
                             </button>
                             <button
+                              type="button"
                               onClick={() => setEditingTag(null)}
-                              className="glass-btn"
+                              className="glass-btn chat-gsap-action"
                               style={{
                                 padding: '4px 8px',
                                 fontSize: '9px',
@@ -1440,14 +1822,7 @@ export default function ChatWindow() {
                         onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
                         onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                       >
-                        <div 
-                          onClick={() => {
-                            if (isAttached) {
-                              handleRemoveTag(tag.name);
-                            } else {
-                              handleAddTagDirect(tag.name);
-                            }
-                          }}
+                        <label
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -1455,16 +1830,20 @@ export default function ChatWindow() {
                             flex: 1
                           }}
                         >
-                          <input 
+                          <input
                             type="checkbox"
                             checked={isAttached}
-                            readOnly
+                            onChange={() => {
+                              if (isAttached) handleRemoveTag(tag.name);
+                              else handleAddTagDirect(tag.name);
+                            }}
                             style={{ cursor: 'pointer' }}
                           />
                           <TagBadge name={tag.name} color={tag.color} />
-                        </div>
+                        </label>
 
                         <button
+                          type="button"
                           onClick={() => setEditingTag({ name: tag.name, newName: tag.name, color: tag.color })}
                           style={{
                             background: 'none',
@@ -1475,6 +1854,7 @@ export default function ChatWindow() {
                             fontSize: '10px'
                           }}
                           title="Editar etiqueta"
+                          aria-label={`Editar etiqueta ${tag.name}`}
                         >
                           ✎
                         </button>
@@ -1497,14 +1877,18 @@ export default function ChatWindow() {
           
           <div className="notes-input-wrapper" style={{ marginBottom: '12px' }}>
             <input
+              id="chat-note-input"
+              name="contact_note"
               type="text"
               className="glass-input"
-              placeholder="Escrever anotação..."
+              placeholder="Escrever anotação…"
               value={noteText}
               onChange={(e) => setNoteText(e.target.value)}
               style={{ fontSize: '12px', padding: '8px 12px' }}
+              autoComplete="off"
+              aria-label="Nova anotação do cliente"
             />
-            <button onClick={handleAddNote} className="glass-btn" style={{ padding: '8px 12px' }}>
+            <button type="button" onClick={handleAddNote} className="glass-btn chat-gsap-action" style={{ padding: '8px 12px' }} disabled={!noteText.trim()}>
               Salvar
             </button>
           </div>
@@ -1524,7 +1908,7 @@ export default function ChatWindow() {
           </div>
         </div>
 
-      </div>
+      </aside>
 
       {/* GLOBAL DELETE TAG CONFIRMATION MODAL */}
       {confirmDeleteTag && (
@@ -1542,9 +1926,14 @@ export default function ChatWindow() {
           zIndex: 9999,
           padding: '20px'
         }}
-        className="animated-fade-in"
+        className="chat-confirm-backdrop animated-fade-in"
+        role="presentation"
         >
-          <div style={{
+          <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-delete-tag-title"
+          style={{
             background: 'rgba(20, 20, 25, 0.95)',
             border: '1px solid rgba(239, 68, 68, 0.4)',
             boxShadow: '0 20px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
@@ -1557,7 +1946,7 @@ export default function ChatWindow() {
             flexDirection: 'column',
             gap: '16px'
           }}>
-            <h3 style={{ margin: 0, fontSize: '18px', color: '#EF4444', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h3 id="chat-delete-tag-title" style={{ margin: 0, fontSize: '18px', color: '#EF4444', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
               ⚠️ Excluir Etiqueta Globalmente
             </h3>
             <p style={{ fontSize: '13px', lineHeight: '1.6', color: 'rgba(255, 255, 255, 0.8)', margin: 0 }}>
@@ -1567,8 +1956,9 @@ export default function ChatWindow() {
             </p>
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button
+                type="button"
                 onClick={handleConfirmDelete}
-                className="glass-btn"
+                className="glass-btn chat-gsap-action"
                 style={{
                   flex: 1,
                   padding: '10px 16px',
@@ -1582,8 +1972,9 @@ export default function ChatWindow() {
                 Sim, Excluir de tudo
               </button>
               <button
+                type="button"
                 onClick={() => setConfirmDeleteTag(null)}
-                className="glass-btn"
+                className="glass-btn chat-gsap-action"
                 style={{
                   flex: 1,
                   padding: '10px 16px',

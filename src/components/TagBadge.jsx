@@ -19,12 +19,14 @@ const TagBadge = React.memo(({ name, color, onDelete }) => {
         fontSize: '11px',
         fontWeight: '600',
         whiteSpace: 'nowrap',
-        transition: 'all 0.2s ease'
+        transition: 'border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease, transform 0.2s ease'
       }}
     >
       {name}
       {onDelete && (
-        <span 
+        <button
+          type="button"
+          aria-label={`Remover etiqueta ${name}`}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
@@ -34,13 +36,20 @@ const TagBadge = React.memo(({ name, color, onDelete }) => {
             fontWeight: '700', 
             marginLeft: '4px', 
             color: 'inherit',
-            opacity: 0.7
+            opacity: 0.7,
+            width: '18px',
+            height: '18px',
+            padding: 0,
+            border: 0,
+            borderRadius: '4px',
+            background: 'transparent',
+            lineHeight: 1
           }}
           onMouseEnter={(e) => e.target.style.opacity = 1}
           onMouseLeave={(e) => e.target.style.opacity = 0.7}
         >
           ✕
-        </span>
+        </button>
       )}
     </span>
   );

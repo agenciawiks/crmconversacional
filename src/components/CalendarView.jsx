@@ -1,559 +1,528 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { useCrm } from '../context/CrmContext';
-import { 
-  formatInTimeZone, 
-  fromZonedTime,
-  toZonedTime
-} from 'date-fns-tz';
-import { 
-  addDays, subDays, addWeeks, subWeeks, addMonths, subMonths,
-  startOfMonth, endOfMonth, startOfWeek, endOfWeek, 
-  eachDayOfInterval, isSameMonth, isSameDay, parseISO,
-  format, startOfDay, addMinutes, differenceInMinutes, getDay
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { gsap } from 'gsap';
+import { formatInTimeZone, fromZonedTime, toZonedTime } from 'date-fns-tz';
+import {
+  addDays,
+  addMinutes,
+  addMonths,
+  addWeeks,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subDays,
+  subMonths,
+  subWeeks,
 } from 'date-fns';
 import ptBR from 'date-fns/locale/pt-BR';
-import { 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus,
-  Bot,
-  User,
-  Clock,
-  X,
+import {
   AlignLeft,
+  Bot,
+  CalendarDays,
   Check,
-  AlertTriangle,
-  Trash2
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Edit3,
+  Plus,
+  Search,
+  Sparkles,
+  Trash2,
+  UserRound,
+  UsersRound,
+  X,
 } from 'lucide-react';
-import { createAppointment, cancelAppointment } from '../services/appointmentService';
+import { useCrm } from '../context/CrmContext';
+import { cancelAppointment, createAppointment, updateAppointment } from '../services/appointmentService';
 
 const TZ = 'America/Sao_Paulo';
+const WEEK_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+const emptyForm = (date = new Date()) => ({
+  id: null,
+  contact_id: '',
+  title: '',
+  description: '',
+  start_time: '',
+  date: format(date, 'yyyy-MM-dd'),
+});
+
+const getLocalStart = (appointment) => toZonedTime(new Date(appointment.start_time), TZ);
+
+function getContactLabel(appointment, contacts) {
+  const linkedContact = contacts.find((contact) => String(contact.id) === String(appointment.contact_id));
+  return appointment.contacts?.name || linkedContact?.name || 'Contato não identificado';
+}
+
+function AgendaEvent({ appointment, contacts, compact = false, onEdit }) {
+  const contactName = getContactLabel(appointment, contacts);
+  return (
+    <button
+      type="button"
+      className={`agenda-event ${appointment.created_by === 'ai' ? 'is-ai' : 'is-human'} ${compact ? 'is-compact' : ''}`}
+      onClick={() => onEdit(appointment)}
+      aria-label={`Editar ${appointment.title}, ${formatInTimeZone(appointment.start_time, TZ, 'HH:mm')}, ${contactName}`}
+    >
+      <span className="agenda-event-time">{formatInTimeZone(appointment.start_time, TZ, 'HH:mm')}</span>
+      <span className="agenda-event-copy"><strong>{appointment.title}</strong>{!compact && <small>{contactName}</small>}</span>
+      <span className="agenda-event-source" title={appointment.created_by === 'ai' ? 'Criado pela IA' : 'Criado manualmente'}>
+        {appointment.created_by === 'ai' ? <Bot size={12} aria-hidden="true" /> : <UserRound size={12} aria-hidden="true" />}
+      </span>
+    </button>
+  );
+}
 
 export default function CalendarView() {
-  const { appointments, contacts, theme } = useCrm();
+  const rootRef = useRef(null);
+  const dialogRef = useRef(null);
+  const dayDialogRef = useRef(null);
+  const previousCalendarKey = useRef('');
+  const { appointments = [], contacts = [], initialDataLoaded } = useCrm();
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState('month'); // 'month', 'week', 'day'
-  
-  // Modal state
+  const [view, setView] = useState('month');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [selectedDayDate, setSelectedDayDate] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  const [formData, setFormData] = useState({
-    id: null,
-    contact_id: '',
-    title: '',
-    description: '',
-    start_time: '', // local HH:mm
-    date: '' // local YYYY-MM-DD
-  });
+  const [formData, setFormData] = useState(() => emptyForm());
+  const [contactQuery, setContactQuery] = useState('');
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Filter out cancelled appointments from the view
-  const activeAppointments = useMemo(() => 
-    appointments.filter(a => a.status !== 'cancelled'), 
-  [appointments]);
+  const activeAppointments = useMemo(
+    () => appointments.filter((appointment) => appointment.status !== 'cancelled'),
+    [appointments],
+  );
 
-  // Navigation handlers
+  const sortedAppointments = useMemo(
+    () => [...activeAppointments].sort((first, second) => new Date(first.start_time) - new Date(second.start_time)),
+    [activeAppointments],
+  );
+
+  const todayDate = startOfDay(new Date());
+  const todayAppointments = activeAppointments.filter((appointment) => isSameDay(getLocalStart(appointment), todayDate));
+  const currentMonthAppointments = activeAppointments.filter((appointment) => isSameMonth(getLocalStart(appointment), currentDate));
+  const aiAppointments = currentMonthAppointments.filter((appointment) => appointment.created_by === 'ai');
+  const associatedContacts = new Set(currentMonthAppointments.map((appointment) => String(appointment.contact_id)).filter(Boolean)).size;
+  const upcomingAppointments = sortedAppointments.filter((appointment) => getLocalStart(appointment) >= new Date()).slice(0, 5);
+
+  const normalizedContactQuery = contactQuery.trim().toLocaleLowerCase('pt-BR');
+  const visibleContacts = contacts.filter((contact) => !normalizedContactQuery || [contact.name, contact.phone, contact.email]
+    .some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(normalizedContactQuery))).slice(0, 10);
+  const selectedContact = contacts.find((contact) => String(contact.id) === String(formData.contact_id));
+
+  const appointmentsForDay = (day) => sortedAppointments.filter((appointment) => isSameDay(getLocalStart(appointment), day));
+
+  const calendarTitle = view === 'day'
+    ? format(currentDate, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+    : view === 'week'
+      ? `${format(startOfWeek(currentDate), 'dd MMM', { locale: ptBR })} — ${format(endOfWeek(currentDate), 'dd MMM yyyy', { locale: ptBR })}`
+      : format(currentDate, "MMMM 'de' yyyy", { locale: ptBR });
+
   const next = () => {
-    if (view === 'month') setCurrentDate(addMonths(currentDate, 1));
-    else if (view === 'week') setCurrentDate(addWeeks(currentDate, 1));
-    else setCurrentDate(addDays(currentDate, 1));
+    if (view === 'month') setCurrentDate((date) => addMonths(date, 1));
+    else if (view === 'week') setCurrentDate((date) => addWeeks(date, 1));
+    else setCurrentDate((date) => addDays(date, 1));
   };
 
-  const prev = () => {
-    if (view === 'month') setCurrentDate(subMonths(currentDate, 1));
-    else if (view === 'week') setCurrentDate(subWeeks(currentDate, 1));
-    else setCurrentDate(subDays(currentDate, 1));
+  const previous = () => {
+    if (view === 'month') setCurrentDate((date) => subMonths(date, 1));
+    else if (view === 'week') setCurrentDate((date) => subWeeks(date, 1));
+    else setCurrentDate((date) => subDays(date, 1));
   };
 
-  const today = () => setCurrentDate(new Date());
+  const openNewAppointment = (date = new Date()) => {
+    setFormData(emptyForm(date));
+    setContactQuery('');
+    setContactPickerOpen(false);
+    setConfirmDelete(false);
+    setFormError('');
+    setIsDayModalOpen(false);
+    setIsModalOpen(true);
+  };
 
-  // Render Month View
+  const openAppointmentEditor = (appointment) => {
+    const localStart = getLocalStart(appointment);
+    setFormData({
+      id: appointment.id,
+      contact_id: appointment.contact_id || '',
+      title: appointment.title || '',
+      description: appointment.description || '',
+      date: format(localStart, 'yyyy-MM-dd'),
+      start_time: format(localStart, 'HH:mm'),
+    });
+    setContactQuery('');
+    setContactPickerOpen(false);
+    setConfirmDelete(false);
+    setFormError('');
+    setIsDayModalOpen(false);
+    setIsModalOpen(true);
+  };
+
+  const openDayDetails = (day) => {
+    setSelectedDayDate(day);
+    setIsDayModalOpen(true);
+  };
+
+  const handleSaveAppointment = async (event) => {
+    event.preventDefault();
+    if (!formData.contact_id || !formData.date || !formData.start_time || !formData.title.trim()) {
+      setFormError('Preencha contato, título, data e horário para salvar.');
+      return;
+    }
+    setIsSaving(true);
+    setFormError('');
+    try {
+      const localDateTime = `${formData.date}T${formData.start_time}:00`;
+      const startUtc = fromZonedTime(localDateTime, TZ);
+      const endUtc = addMinutes(startUtc, 60);
+      const payload = {
+        contact_id: formData.contact_id,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        start_time: startUtc.toISOString(),
+        end_time: endUtc.toISOString(),
+      };
+      if (formData.id) await updateAppointment(formData.id, payload);
+      else await createAppointment({ ...payload, created_by: 'human', status: 'scheduled' });
+      setIsModalOpen(false);
+      setFormData(emptyForm());
+    } catch (error) {
+      console.error('[Agenda] Erro ao salvar agendamento:', error);
+      setFormError('Não foi possível salvar. Verifique se já existe um compromisso nesse horário e tente novamente.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelAppointment = async () => {
+    if (!formData.id || isSaving) return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setIsSaving(true);
+    setFormError('');
+    try {
+      await cancelAppointment(formData.id);
+      setIsModalOpen(false);
+      setFormData(emptyForm());
+    } catch (error) {
+      console.error('[Agenda] Erro ao cancelar agendamento:', error);
+      setFormError('Não foi possível cancelar o agendamento. Tente novamente.');
+    } finally {
+      setIsSaving(false);
+      setConfirmDelete(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isModalOpen && !isDayModalOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      setIsModalOpen(false);
+      setIsDayModalOpen(false);
+      setContactPickerOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDayModalOpen, isModalOpen]);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+    const context = gsap.context(() => {
+      const dayCells = gsap.utils.toArray('.agenda-day-cell, .agenda-week-day').slice(0, 42);
+      const events = gsap.utils.toArray('.agenda-event').slice(0, 18);
+      const entranceTargets = [
+        root.querySelector('.agenda-page-header'),
+        ...gsap.utils.toArray('.agenda-metric-card'),
+        root.querySelector('.agenda-toolbar'),
+        root.querySelector('.agenda-calendar-shell'),
+        root.querySelector('.agenda-upcoming-card'),
+        ...dayCells,
+        ...events,
+      ].filter(Boolean);
+      gsap.killTweensOf(entranceTargets);
+      gsap.set(entranceTargets, { willChange: 'transform,opacity' });
+      const timeline = gsap.timeline({
+        delay: 0.06,
+        defaults: { ease: 'power3.out' },
+        onComplete: () => gsap.set(entranceTargets, { clearProps: 'transform,opacity,visibility,willChange' }),
+      });
+      timeline
+        .fromTo('.agenda-page-header', { autoAlpha: 0, y: 32 }, { autoAlpha: 1, y: 0, duration: 0.55 }, 0)
+        .fromTo('.agenda-metric-card', { autoAlpha: 0, y: 26, scale: 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5, stagger: 0.075 }, 0.15)
+        .fromTo('.agenda-toolbar', { autoAlpha: 0, y: 22 }, { autoAlpha: 1, y: 0, duration: 0.46 }, 0.34)
+        .fromTo('.agenda-calendar-shell, .agenda-upcoming-card', { autoAlpha: 0, y: 26, scale: 0.985 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.52, stagger: 0.08 }, 0.48)
+        .fromTo(dayCells, { autoAlpha: 0, y: 12, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.3, stagger: 0.018 }, 0.68)
+        .fromTo(events, { autoAlpha: 0, x: -10 }, { autoAlpha: 1, x: 0, duration: 0.28, stagger: 0.025 }, 0.84);
+
+      gsap.to('.agenda-ambient-orbit', { rotation: 360, duration: 28, repeat: -1, ease: 'none', transformOrigin: 'center' });
+      gsap.to('.agenda-metric-icon', { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.8, repeat: -1, yoyo: true, stagger: 0.16, ease: 'sine.inOut' });
+    }, root);
+    return () => context.revert();
+  }, [initialDataLoaded]);
+
+  useLayoutEffect(() => {
+    const key = `${view}-${format(currentDate, 'yyyy-MM-dd')}`;
+    if (!initialDataLoaded || !previousCalendarKey.current) {
+      previousCalendarKey.current = key;
+      return undefined;
+    }
+    if (previousCalendarKey.current === key) return undefined;
+    previousCalendarKey.current = key;
+    const calendarView = rootRef.current?.querySelector('.agenda-calendar-view');
+    if (!calendarView) return undefined;
+    const tween = gsap.fromTo(calendarView, { autoAlpha: 0, x: view === 'day' ? 14 : 0, y: view === 'day' ? 0 : 10, scale: 0.993 }, { autoAlpha: 1, x: 0, y: 0, scale: 1, duration: 0.4, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+    return () => tween.kill();
+  }, [currentDate, initialDataLoaded, view]);
+
+  useLayoutEffect(() => {
+    const dialog = isModalOpen ? dialogRef.current : dayDialogRef.current;
+    if ((!isModalOpen && !isDayModalOpen) || !dialog) return undefined;
+    const backdrop = dialog.closest('.agenda-modal-backdrop');
+    const context = gsap.context(() => {
+      gsap.fromTo(backdrop, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.2, ease: 'power2.out' });
+      gsap.fromTo(dialog, { autoAlpha: 0, y: 24, scale: 0.96 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.38, ease: 'back.out(1.55)' });
+      gsap.fromTo(dialog.querySelectorAll('.agenda-modal-reveal'), { autoAlpha: 0, y: 9 }, { autoAlpha: 1, y: 0, duration: 0.3, stagger: 0.04, delay: 0.13, ease: 'power3.out' });
+    }, backdrop);
+    return () => context.revert();
+  }, [isDayModalOpen, isModalOpen]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const glow = root?.querySelector('.agenda-cursor-glow');
+    if (!root || !glow) return undefined;
+    gsap.set(glow, { xPercent: -50, yPercent: -50 });
+    const moveX = gsap.quickTo(glow, 'x', { duration: 0.55, ease: 'power3.out' });
+    const moveY = gsap.quickTo(glow, 'y', { duration: 0.55, ease: 'power3.out' });
+    const handlePointerMove = (event) => { moveX(event.clientX); moveY(event.clientY); };
+    root.addEventListener('pointermove', handlePointerMove, { passive: true });
+    return () => root.removeEventListener('pointermove', handlePointerMove);
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+    const buttons = [...root.querySelectorAll('.agenda-animated-action, .agenda-event')];
+    const cleanups = buttons.map((button) => {
+      const enter = () => gsap.to(button, { y: -3, scale: 1.035, duration: 0.22, ease: 'back.out(2)', overwrite: 'auto' });
+      const leave = () => gsap.to(button, { y: 0, scale: 1, duration: 0.26, ease: 'power3.out', overwrite: 'auto' });
+      const down = () => gsap.to(button, { y: 0, scale: 0.95, duration: 0.11, ease: 'power2.out', overwrite: 'auto' });
+      button.addEventListener('pointerenter', enter);
+      button.addEventListener('pointerleave', leave);
+      button.addEventListener('pointerdown', down);
+      return () => {
+        button.removeEventListener('pointerenter', enter);
+        button.removeEventListener('pointerleave', leave);
+        button.removeEventListener('pointerdown', down);
+      };
+    });
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf(buttons);
+    };
+  }, [activeAppointments.length, initialDataLoaded, view]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!root || !initialDataLoaded || !supportsHover) return undefined;
+
+    const cards = [...root.querySelectorAll('.agenda-metric-card')];
+    const cleanups = cards.map((card) => {
+      let bounds;
+      const rotateX = gsap.quickTo(card, 'rotationX', { duration: 0.32, ease: 'power3.out' });
+      const rotateY = gsap.quickTo(card, 'rotationY', { duration: 0.32, ease: 'power3.out' });
+      const lift = gsap.quickTo(card, 'y', { duration: 0.28, ease: 'power3.out' });
+
+      const enter = () => {
+        bounds = card.getBoundingClientRect();
+        gsap.set(card, { transformPerspective: 850, transformOrigin: 'center' });
+        lift(-5);
+      };
+      const move = (event) => {
+        if (!bounds) return;
+        const x = (event.clientX - bounds.left) / bounds.width - 0.5;
+        const y = (event.clientY - bounds.top) / bounds.height - 0.5;
+        rotateX(y * -7);
+        rotateY(x * 8);
+      };
+      const leave = () => {
+        bounds = undefined;
+        rotateX(0);
+        rotateY(0);
+        lift(0);
+      };
+
+      card.addEventListener('pointerenter', enter);
+      card.addEventListener('pointermove', move);
+      card.addEventListener('pointerleave', leave);
+      return () => {
+        card.removeEventListener('pointerenter', enter);
+        card.removeEventListener('pointermove', move);
+        card.removeEventListener('pointerleave', leave);
+      };
+    });
+
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf(cards);
+      gsap.set(cards, { clearProps: 'transform,transformPerspective,transformOrigin' });
+    };
+  }, [initialDataLoaded]);
+
+  useLayoutEffect(() => {
+    if (!initialDataLoaded) return undefined;
+    const counters = [...(rootRef.current?.querySelectorAll('[data-agenda-kpi]') || [])];
+    const tweens = counters.map((element) => {
+      const target = Number(element.dataset.agendaKpi) || 0;
+      const counter = { value: 0 };
+      const render = () => { element.textContent = Math.round(counter.value).toLocaleString('pt-BR'); };
+      render();
+      return gsap.to(counter, { value: target, duration: 1, delay: 0.5, ease: 'power3.out', onUpdate: render, onComplete: render });
+    });
+    return () => tweens.forEach((tween) => tween.kill());
+  }, [aiAppointments.length, associatedContacts, currentMonthAppointments.length, initialDataLoaded, todayAppointments.length]);
+
   const renderMonthView = () => {
     const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(monthStart);
-    const startDate = startOfWeek(monthStart, { weekStartsOn: 0 }); // Sunday
-    const endDate = endOfWeek(monthEnd, { weekStartsOn: 0 });
-
-    const days = eachDayOfInterval({ start: startDate, end: endDate });
-
+    const days = eachDayOfInterval({
+      start: startOfWeek(monthStart, { weekStartsOn: 0 }),
+      end: endOfWeek(endOfMonth(monthStart), { weekStartsOn: 0 }),
+    });
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '1px', background: 'var(--border-glass)', border: '1px solid var(--border-glass)', borderRadius: '12px', overflow: 'hidden' }}>
-        {/* Days of week header */}
-        {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
-          <div key={d} style={{ background: 'var(--bg-surface)', padding: '12px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            {d}
-          </div>
-        ))}
+      <div className="agenda-calendar-view agenda-month-view">
+        <div className="agenda-week-labels">{WEEK_LABELS.map((label) => <span key={label}>{label}</span>)}</div>
+        <div className="agenda-month-grid">
+          {days.map((day) => {
+            const dayAppointments = appointmentsForDay(day);
+            const currentMonth = isSameMonth(day, monthStart);
+            const today = isSameDay(day, new Date());
+            return (
+              <article key={day.toISOString()} className={`agenda-day-cell ${currentMonth ? '' : 'is-outside'} ${today ? 'is-today' : ''}`}>
+                <button type="button" className="agenda-day-hit" onClick={() => openDayDetails(day)} aria-label={`Abrir agenda de ${format(day, "dd 'de' MMMM", { locale: ptBR })}`} />
+                <header><span>{format(day, 'd')}</span>{dayAppointments.length > 0 && <small>{dayAppointments.length}</small>}</header>
+                <div className="agenda-day-events">
+                  {dayAppointments.slice(0, 3).map((appointment) => <AgendaEvent key={appointment.id} appointment={appointment} contacts={contacts} compact onEdit={openAppointmentEditor} />)}
+                  {dayAppointments.length > 3 && <button type="button" className="agenda-more-events" onClick={() => openDayDetails(day)}>+{dayAppointments.length - 3} compromissos</button>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
-        {/* Days grid */}
-        {days.map((day, i) => {
-          const isCurrentMonth = isSameMonth(day, monthStart);
-          const isToday = isSameDay(day, new Date());
-          
-          // Get appointments for this day
-          const dayAppointments = activeAppointments.filter(app => {
-            // Convert app start time to local to compare days
-            const localStart = toZonedTime(new Date(app.start_time), TZ);
-            return isSameDay(localStart, day);
-          });
-
+  const renderWeekView = () => {
+    const days = eachDayOfInterval({ start: startOfWeek(currentDate), end: endOfWeek(currentDate) });
+    return (
+      <div className="agenda-calendar-view agenda-week-grid">
+        {days.map((day) => {
+          const dayAppointments = appointmentsForDay(day);
           return (
-            <div 
-              key={i}
-              onClick={(e) => {
-                if (e.target.closest('.appointment-card')) return;
-                setSelectedDayDate(day);
-                setIsDayModalOpen(true);
-              }}
-              style={{
-                minHeight: '120px',
-                background: isCurrentMonth ? 'var(--bg-surface)' : 'var(--bg-app)',
-                padding: '8px',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-                opacity: isCurrentMonth ? 1 : 0.6
-              }}
-              className="calendar-cell"
-            >
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                marginBottom: '8px' 
-              }}>
-                <span style={{ 
-                  width: '28px', 
-                  height: '28px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center', 
-                  borderRadius: '50%',
-                  background: isToday ? 'var(--accent-primary)' : 'transparent',
-                  color: isToday ? '#fff' : 'var(--text-primary)',
-                  fontWeight: isToday ? 'bold' : 'normal',
-                  fontSize: '14px'
-                }}>
-                  {format(day, 'd')}
-                </span>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {dayAppointments.slice(0, 3).map(app => (
-                  <div 
-                    key={app.id}
-                    className="appointment-card"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const localStart = toZonedTime(new Date(app.start_time), TZ);
-                      setFormData({
-                        id: app.id,
-                        contact_id: app.contact_id,
-                        title: app.title,
-                        description: app.description || '',
-                        date: format(localStart, 'yyyy-MM-dd'),
-                        start_time: format(localStart, 'HH:mm')
-                      });
-                      setIsModalOpen(true);
-                    }}
-                    style={{
-                    fontSize: '11px',
-                    padding: '4px 6px',
-                    borderRadius: '4px',
-                    background: app.created_by === 'ai' ? 'rgba(139, 92, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                    borderLeft: `2px solid ${app.created_by === 'ai' ? '#8b5cf6' : '#10b981'}`,
-                    color: 'var(--text-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    cursor: 'pointer'
-                  }}>
-                    {app.created_by === 'ai' ? <Bot size={10} color="#8b5cf6"/> : <User size={10} color="#10b981"/>}
-                    {formatInTimeZone(app.start_time, TZ, 'HH:mm')} - {app.title}
-                  </div>
-                ))}
-                {dayAppointments.length > 3 && (
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '2px' }}>
-                    +{dayAppointments.length - 3} mais
-                  </div>
-                )}
-              </div>
-            </div>
+            <article key={day.toISOString()} className={`agenda-week-day ${isSameDay(day, new Date()) ? 'is-today' : ''}`}>
+              <button type="button" className="agenda-week-heading" onClick={() => { setCurrentDate(day); setView('day'); }}>
+                <small>{format(day, 'EEE', { locale: ptBR })}</small><strong>{format(day, 'dd')}</strong><span>{dayAppointments.length} {dayAppointments.length === 1 ? 'evento' : 'eventos'}</span>
+              </button>
+              <div>{dayAppointments.map((appointment) => <AgendaEvent key={appointment.id} appointment={appointment} contacts={contacts} onEdit={openAppointmentEditor} />)}</div>
+              {dayAppointments.length === 0 && <button type="button" className="agenda-week-empty" onClick={() => openNewAppointment(day)}><Plus size={14} aria-hidden="true" /> Agendar</button>}
+            </article>
           );
         })}
       </div>
     );
   };
 
-  const handleCreateAppointment = async (e) => {
-    e.preventDefault();
-    if (!formData.contact_id || !formData.date || !formData.start_time || !formData.title) return;
-
-    try {
-      // Assemble local datetime string
-      const localDateTimeStr = `${formData.date}T${formData.start_time}:00`; // e.g. "2026-07-01T14:00:00"
-      
-      // Convert local Sao Paulo time to UTC Date object for Supabase
-      const utcDate = fromZonedTime(localDateTimeStr, TZ);
-      
-      // Calculate end time (+1 hour for V1 standard slot)
-      const endUtcDate = addMinutes(utcDate, 60);
-
-      if (formData.id) {
-        // Edit existing
-        const { updateAppointment } = await import('../services/appointmentService');
-        await updateAppointment(formData.id, {
-          contact_id: formData.contact_id,
-          title: formData.title,
-          description: formData.description,
-          start_time: utcDate.toISOString(),
-          end_time: endUtcDate.toISOString(),
-        });
-      } else {
-        // Create new
-        await createAppointment({
-          contact_id: formData.contact_id,
-          title: formData.title,
-          description: formData.description,
-          start_time: utcDate.toISOString(),
-          end_time: endUtcDate.toISOString(),
-          created_by: 'human',
-          status: 'scheduled'
-        });
-      }
-
-      setIsModalOpen(false);
-      setFormData({ id: null, contact_id: '', title: '', description: '', start_time: '', date: '' });
-    } catch (err) {
-      alert("Erro ao salvar agendamento. Pode haver conflito de horário.");
-      console.error(err);
-    }
-  };
-
-  const handleCancelAppointment = async () => {
-    if (!formData.id) return;
-    if (!window.confirm("Deseja realmente cancelar este agendamento?")) return;
-    
-    try {
-      await cancelAppointment(formData.id);
-      setIsModalOpen(false);
-      setFormData({ id: null, contact_id: '', title: '', description: '', start_time: '', date: '' });
-    } catch (err) {
-      alert("Erro ao cancelar agendamento.");
-      console.error(err);
-    }
+  const renderDayView = () => {
+    const dayAppointments = appointmentsForDay(currentDate);
+    return (
+      <div className="agenda-calendar-view agenda-day-view">
+        <header><span><small>{format(currentDate, 'EEEE', { locale: ptBR })}</small><strong>{format(currentDate, 'dd')}</strong></span><div><h3>{format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })}</h3><p>{dayAppointments.length} {dayAppointments.length === 1 ? 'compromisso agendado' : 'compromissos agendados'}</p></div><button type="button" className="agenda-animated-action" onClick={() => openNewAppointment(currentDate)}><Plus size={15} aria-hidden="true" /> Novo horário</button></header>
+        <div className="agenda-day-timeline">
+          {dayAppointments.map((appointment) => (
+            <div key={appointment.id} className="agenda-timeline-item">
+              <time>{formatInTimeZone(appointment.start_time, TZ, 'HH:mm')}</time><i aria-hidden="true" /><AgendaEvent appointment={appointment} contacts={contacts} onEdit={openAppointmentEditor} />
+            </div>
+          ))}
+          {dayAppointments.length === 0 && <div className="agenda-empty-state"><CalendarDays size={28} aria-hidden="true" /><strong>Dia livre</strong><p>Nenhum compromisso neste dia.</p><button type="button" className="agenda-animated-action" onClick={() => openNewAppointment(currentDate)}>Criar agendamento</button></div>}
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="content-wrapper animated-fade-in" style={{ height: '100%', overflowY: 'auto', padding: '24px 32px' }}>
-      
-      {/* Page Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
-        <div style={{
-          background: 'var(--accent-primary)',
-          color: '#fff',
-          padding: '8px',
-          borderRadius: '10px',
-          display: 'flex',
-          alignItems: 'center',
-          boxShadow: '0 4px 12px var(--accent-glow)'
-        }}>
-          <CalendarIcon size={24} />
+    <div ref={rootRef} className={`content-wrapper agenda-page ${initialDataLoaded ? 'is-ready' : 'is-loading'}`} aria-busy={!initialDataLoaded}>
+      <div className="agenda-cursor-glow" aria-hidden="true" />
+      <div className="agenda-ambient-orbit agenda-ambient-orbit--one" aria-hidden="true" />
+      <div className="agenda-ambient-orbit agenda-ambient-orbit--two" aria-hidden="true" />
+      {!initialDataLoaded && <div className="agenda-loading-overlay" role="status" aria-live="polite"><span><CalendarDays size={20} aria-hidden="true" /></span><strong>Organizando sua agenda…</strong><small>Carregando compromissos e contatos.</small></div>}
+
+      <header className="agenda-page-header">
+        <div><span className="agenda-overline"><Sparkles size={13} aria-hidden="true" /> Rotina Comercial</span><h1>Agenda Inteligente</h1><p>Organize compromissos e mantenha cada contato no momento certo.</p></div>
+        <button type="button" className="agenda-primary-action agenda-animated-action" onClick={() => openNewAppointment()}><Plus size={17} aria-hidden="true" /> Novo Agendamento</button>
+      </header>
+
+      <section className="agenda-metrics" aria-label="Resumo da agenda">
+        <article className="agenda-metric-card is-blue"><span><small>Hoje</small><strong data-agenda-kpi={todayAppointments.length}>{todayAppointments.length}</strong><p>compromissos programados</p></span><i className="agenda-metric-icon"><Clock3 size={19} aria-hidden="true" /></i></article>
+        <article className="agenda-metric-card is-mint"><span><small>Neste mês</small><strong data-agenda-kpi={currentMonthAppointments.length}>{currentMonthAppointments.length}</strong><p>agendamentos ativos</p></span><i className="agenda-metric-icon"><CalendarDays size={19} aria-hidden="true" /></i></article>
+        <article className="agenda-metric-card is-lime"><span><small>Contatos associados</small><strong data-agenda-kpi={associatedContacts}>{associatedContacts}</strong><p>clientes com compromisso</p></span><i className="agenda-metric-icon"><UsersRound size={19} aria-hidden="true" /></i></article>
+        <article className="agenda-metric-card is-cyan"><span><small>Criados pela IA</small><strong data-agenda-kpi={aiAppointments.length}>{aiAppointments.length}</strong><p>neste mês</p></span><i className="agenda-metric-icon"><Bot size={19} aria-hidden="true" /></i></article>
+      </section>
+
+      <section className="agenda-toolbar" aria-label="Navegação do calendário">
+        <div className="agenda-period-navigation"><button type="button" className="agenda-today-button agenda-animated-action" onClick={() => setCurrentDate(new Date())}>Hoje</button><span className="agenda-arrow-group"><button type="button" className="agenda-animated-action" onClick={previous} aria-label="Período anterior"><ChevronLeft size={17} aria-hidden="true" /></button><button type="button" className="agenda-animated-action" onClick={next} aria-label="Próximo período"><ChevronRight size={17} aria-hidden="true" /></button></span><h2>{calendarTitle}</h2></div>
+        <div className="agenda-view-switch" aria-label="Visualização da agenda">{[{ id: 'month', label: 'Mês' }, { id: 'week', label: 'Semana' }, { id: 'day', label: 'Dia' }].map((option) => <button key={option.id} type="button" className={`agenda-animated-action ${view === option.id ? 'is-active' : ''}`} onClick={() => setView(option.id)} aria-pressed={view === option.id}>{option.label}</button>)}</div>
+      </section>
+
+      <section className="agenda-workspace">
+        <div className="agenda-calendar-shell">
+          {view === 'month' ? renderMonthView() : view === 'week' ? renderWeekView() : renderDayView()}
         </div>
-        <div>
-          <h1 style={{ fontSize: '24px', margin: 0, color: 'var(--text-primary)' }}>Agenda</h1>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '14px' }}>Gerencie seus agendamentos e horários.</p>
-        </div>
-      </div>
+        <aside className="agenda-upcoming-card">
+          <header><span><small>Próximos passos</small><strong>Em breve</strong></span><span>{upcomingAppointments.length}</span></header>
+          <div className="agenda-upcoming-list">{upcomingAppointments.map((appointment) => <AgendaEvent key={appointment.id} appointment={appointment} contacts={contacts} onEdit={openAppointmentEditor} />)}{upcomingAppointments.length === 0 && <div className="agenda-upcoming-empty"><Check size={22} aria-hidden="true" /><strong>Agenda livre</strong><small>Nenhum compromisso futuro.</small></div>}</div>
+          <button type="button" className="agenda-upcoming-add agenda-animated-action" onClick={() => openNewAppointment()}><Plus size={15} aria-hidden="true" /> Adicionar compromisso</button>
+        </aside>
+      </section>
 
-      {/* Calendar Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: '700', margin: 0, textTransform: 'capitalize', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            {format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })}
-          </h2>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button onClick={today} className="btn-animated" style={{ 
-              padding: '8px 16px', 
-              background: 'var(--bg-surface)', 
-              border: '1px solid var(--border-glass)', 
-              borderRadius: '8px',
-              color: 'var(--text-primary)',
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}>Hoje</button>
-            <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border-glass)', borderRadius: '8px', overflow: 'hidden' }}>
-              <button onClick={prev} className="cal-nav-btn"><ChevronLeft size={18} /></button>
-              <div style={{ width: '1px', background: 'var(--border-glass)' }}></div>
-              <button onClick={next} className="cal-nav-btn"><ChevronRight size={18} /></button>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <div style={{ display: 'flex', background: 'var(--bg-surface)', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '4px' }}>
-            {['month', 'week', 'day'].map(v => (
-              <button 
-                key={v}
-                onClick={() => setView(v)}
-                className="btn-animated"
-                style={{
-                  padding: '6px 12px',
-                  background: view === v ? 'var(--accent-primary)' : 'transparent',
-                  color: view === v ? '#fff' : 'var(--text-secondary)',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: '500',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {v === 'month' ? 'Mês' : v === 'week' ? 'Semana' : 'Dia'}
-              </button>
-            ))}
-          </div>
-
-          <button className="glass-btn btn-animated" onClick={() => {
-            setFormData({ id: null, contact_id: '', title: '', description: '', date: format(new Date(), 'yyyy-MM-dd'), start_time: '' });
-            setIsModalOpen(true);
-          }}>
-            <Plus size={16} /> Novo Agendamento
-          </button>
-        </div>
-      </div>
-
-      {/* Calendar Area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {view === 'month' ? renderMonthView() : (
-          <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <CalendarIcon size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
-            <h3>Visão em desenvolvimento</h3>
-            <p>A visão de {view === 'week' ? 'Semana' : 'Dia'} será implementada em breve.</p>
-          </div>
-        )}
-      </div>
-
-      {/* CSS for calendar */}
-      <style>{`
-        .calendar-cell:hover {
-          background: var(--bg-surface-hover) !important;
-        }
-        .appointment-card {
-          transition: all 0.2s;
-        }
-        .appointment-card:hover {
-          transform: translateX(2px);
-          filter: brightness(1.2);
-        }
-        .cal-nav-btn {
-          background: transparent;
-          border: none;
-          color: var(--text-primary);
-          padding: 8px;
-          cursor: pointer;
-          display: flex;
-          alignItems: center;
-          justifyContent: center;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .cal-nav-btn:hover {
-          background: rgba(255,255,255,0.05);
-          transform: translateY(-1px);
-        }
-        .cal-nav-btn:active {
-          transform: scale(0.95);
-        }
-        .btn-animated {
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .btn-animated:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        .btn-animated:active {
-          transform: scale(0.95);
-        }
-      `}</style>
-
-      {/* Create Modal */}
       {isModalOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)'
-        }}>
-          <div className="glass-panel" style={{ width: '450px', padding: '0', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Plus size={18} color="var(--accent-primary)"/> {formData.id ? 'Editar Agendamento' : 'Novo Agendamento'}
-              </h3>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateAppointment} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Cliente</label>
-                <select 
-                  className="glass-input" 
-                  required
-                  value={formData.contact_id}
-                  onChange={e => setFormData({...formData, contact_id: e.target.value})}
-                >
-                  <option value="">Selecione um cliente...</option>
-                  {contacts.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
-                  ))}
-                </select>
+        <div className="agenda-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setIsModalOpen(false)}>
+          <section ref={dialogRef} className="agenda-modal" role="dialog" aria-modal="true" aria-labelledby="agenda-editor-title">
+            <header><span className="agenda-modal-icon"><Edit3 size={18} aria-hidden="true" /></span><span><small>{formData.id ? 'Atualizar compromisso' : 'Novo compromisso'}</small><h2 id="agenda-editor-title">{formData.id ? 'Editar Agendamento' : 'Criar Agendamento'}</h2></span><button type="button" onClick={() => setIsModalOpen(false)} aria-label="Fechar formulário"><X size={18} aria-hidden="true" /></button></header>
+            <form onSubmit={handleSaveAppointment}>
+              <div className="agenda-modal-reveal agenda-contact-field">
+                <label htmlFor="agenda-contact-search">Contato associado</label>
+                {selectedContact && <div className="agenda-selected-contact"><span>{(selectedContact.name || 'C').substring(0, 2).toUpperCase()}</span><div><strong>{selectedContact.name || 'Sem nome'}</strong><small>{selectedContact.phone || 'Telefone não informado'}</small></div><button type="button" onClick={() => setFormData((current) => ({ ...current, contact_id: '' }))} aria-label="Remover contato selecionado"><X size={14} aria-hidden="true" /></button></div>}
+                <div className="agenda-contact-search"><Search size={15} aria-hidden="true" /><input id="agenda-contact-search" name="contact_search" type="search" value={contactQuery} onChange={(event) => { setContactQuery(event.target.value); setContactPickerOpen(true); }} onFocus={() => setContactPickerOpen(true)} placeholder={selectedContact ? 'Trocar contato…' : 'Buscar por nome ou telefone…'} autoComplete="off" /></div>
+                {contactPickerOpen && <div className="agenda-contact-results" role="listbox" aria-label="Contatos encontrados">{visibleContacts.map((contact) => <button key={contact.id} type="button" role="option" aria-selected={String(contact.id) === String(formData.contact_id)} onClick={() => { setFormData((current) => ({ ...current, contact_id: contact.id })); setContactQuery(''); setContactPickerOpen(false); }}><span>{(contact.name || 'C').substring(0, 2).toUpperCase()}</span><div><strong>{contact.name || 'Sem nome'}</strong><small>{contact.phone || 'Telefone não informado'}</small></div>{String(contact.id) === String(formData.contact_id) && <Check size={14} aria-hidden="true" />}</button>)}{visibleContacts.length === 0 && <p>Nenhum contato encontrado.</p>}</div>}
               </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Título / Procedimento</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  required
-                  placeholder="Ex: Avaliação Estética"
-                  value={formData.title}
-                  onChange={e => setFormData({...formData, title: e.target.value})}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Data</label>
-                  <input 
-                    type="date" 
-                    className="glass-input" 
-                    required
-                    value={formData.date}
-                    onChange={e => setFormData({...formData, date: e.target.value})}
-                  />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Horário (SP)</label>
-                  <input 
-                    type="time" 
-                    className="glass-input" 
-                    required
-                    value={formData.start_time}
-                    onChange={e => setFormData({...formData, start_time: e.target.value})}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                {formData.id ? (
-                  <button type="button" onClick={handleCancelAppointment} className="btn-animated" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '500' }}>
-                    <Trash2 size={14} /> Excluir
-                  </button>
-                ) : <div/>}
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button type="button" className="btn-animated" onClick={() => setIsModalOpen(false)} style={{ background: 'transparent', border: '1px solid var(--border-glass)', color: 'var(--text-primary)', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                    Cancelar
-                  </button>
-                  <button type="submit" className="glass-btn btn-animated" style={{ padding: '8px 16px' }}>
-                    {formData.id ? 'Salvar Edição' : 'Confirmar'}
-                  </button>
-                </div>
-              </div>
+              <div className="agenda-modal-reveal agenda-form-field"><label htmlFor="agenda-title">Título ou procedimento</label><input id="agenda-title" name="appointment_title" type="text" required value={formData.title} onChange={(event) => setFormData((current) => ({ ...current, title: event.target.value }))} placeholder="Ex.: Reunião de alinhamento…" autoComplete="off" /></div>
+              <div className="agenda-modal-reveal agenda-form-row"><div className="agenda-form-field"><label htmlFor="agenda-date">Data</label><input id="agenda-date" name="appointment_date" type="date" required value={formData.date} onChange={(event) => setFormData((current) => ({ ...current, date: event.target.value }))} /></div><div className="agenda-form-field"><label htmlFor="agenda-time">Horário de São Paulo</label><input id="agenda-time" name="appointment_time" type="time" required value={formData.start_time} onChange={(event) => setFormData((current) => ({ ...current, start_time: event.target.value }))} /></div></div>
+              <div className="agenda-modal-reveal agenda-form-field"><label htmlFor="agenda-description"><AlignLeft size={13} aria-hidden="true" /> Observações</label><textarea id="agenda-description" name="appointment_description" rows="3" value={formData.description} onChange={(event) => setFormData((current) => ({ ...current, description: event.target.value }))} placeholder="Adicione contexto para o atendimento…" /></div>
+              {formError && <p className="agenda-form-error agenda-modal-reveal" role="alert">{formError}</p>}
+              {confirmDelete && <div className="agenda-delete-confirm agenda-modal-reveal"><Trash2 size={15} aria-hidden="true" /><span><strong>Cancelar este agendamento?</strong><small>Ele sairá das visualizações da agenda.</small></span><button type="button" onClick={() => setConfirmDelete(false)}>Manter</button></div>}
+              <footer className="agenda-modal-reveal">{formData.id ? <button type="button" className="agenda-delete-button" onClick={handleCancelAppointment} disabled={isSaving}><Trash2 size={14} aria-hidden="true" />{confirmDelete ? 'Confirmar exclusão' : 'Excluir'}</button> : <span />}<div><button type="button" className="agenda-secondary-button" onClick={() => setIsModalOpen(false)}>Cancelar</button><button type="submit" className="agenda-save-button" disabled={isSaving}>{isSaving ? 'Salvando…' : formData.id ? 'Salvar alterações' : 'Criar agendamento'}</button></div></footer>
             </form>
-          </div>
+          </section>
         </div>
       )}
-      {/* Day Details Modal */}
+
       {isDayModalOpen && selectedDayDate && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 9998,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)'
-        }}>
-          <div className="glass-panel" style={{ width: '450px', padding: '0', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
-              <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CalendarIcon size={18} color="var(--accent-primary)"/> {format(selectedDayDate, "dd 'de' MMMM", { locale: ptBR })}
-              </h3>
-              <button onClick={() => setIsDayModalOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                <X size={18} />
-              </button>
-            </div>
-            
-            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {(() => {
-                const dayApps = activeAppointments.filter(app => {
-                  const localStart = toZonedTime(new Date(app.start_time), TZ);
-                  return isSameDay(localStart, selectedDayDate);
-                });
-                
-                if (dayApps.length === 0) {
-                  return <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '14px' }}>Nenhum agendamento para este dia.</div>;
-                }
-                
-                return dayApps.map(app => (
-                  <div key={app.id} className="appointment-card" style={{
-                    padding: '12px',
-                    borderRadius: '8px',
-                    background: app.created_by === 'ai' ? 'rgba(139, 92, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                    borderLeft: `3px solid ${app.created_by === 'ai' ? '#8b5cf6' : '#10b981'}`,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <div style={{ color: 'var(--text-primary)', fontWeight: '600', fontSize: '14px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {formatInTimeZone(app.start_time, TZ, 'HH:mm')} - {app.title}
-                        {app.created_by === 'ai' && <Bot size={14} color="#8b5cf6"/>}
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <User size={12}/> {app.contacts?.name || 'Cliente'}
-                      </div>
-                    </div>
-                    <button 
-                      className="btn-animated"
-                      onClick={() => {
-                        const localStart = toZonedTime(new Date(app.start_time), TZ);
-                        setFormData({
-                          id: app.id,
-                          contact_id: app.contact_id,
-                          title: app.title,
-                          description: app.description || '',
-                          date: format(localStart, 'yyyy-MM-dd'),
-                          start_time: format(localStart, 'HH:mm')
-                        });
-                        setIsDayModalOpen(false);
-                        setIsModalOpen(true);
-                      }}
-                      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-glass)', padding: '6px 12px', borderRadius: '6px', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '12px' }}
-                    >
-                      Editar
-                    </button>
-                  </div>
-                ));
-              })()}
-            </div>
-            
-            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border-glass)', background: 'rgba(255,255,255,0.02)' }}>
-              <button 
-                className="glass-btn btn-animated" 
-                style={{ width: '100%', padding: '10px' }}
-                onClick={() => {
-                  setFormData({ id: null, contact_id: '', title: '', description: '', start_time: '', date: format(selectedDayDate, 'yyyy-MM-dd') });
-                  setIsDayModalOpen(false);
-                  setIsModalOpen(true);
-                }}
-              >
-                <Plus size={16}/> Novo Agendamento
-              </button>
-            </div>
-          </div>
+        <div className="agenda-modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setIsDayModalOpen(false)}>
+          <section ref={dayDialogRef} className="agenda-modal agenda-day-modal" role="dialog" aria-modal="true" aria-labelledby="agenda-day-title">
+            <header><span className="agenda-modal-icon"><CalendarDays size={18} aria-hidden="true" /></span><span><small>{format(selectedDayDate, 'EEEE', { locale: ptBR })}</small><h2 id="agenda-day-title">{format(selectedDayDate, "dd 'de' MMMM", { locale: ptBR })}</h2></span><button type="button" onClick={() => setIsDayModalOpen(false)} aria-label="Fechar detalhes do dia"><X size={18} aria-hidden="true" /></button></header>
+            <div className="agenda-day-modal-content">{appointmentsForDay(selectedDayDate).map((appointment) => <AgendaEvent key={appointment.id} appointment={appointment} contacts={contacts} onEdit={openAppointmentEditor} />)}{appointmentsForDay(selectedDayDate).length === 0 && <div className="agenda-empty-state"><CalendarDays size={26} aria-hidden="true" /><strong>Nenhum compromisso</strong><p>Este dia está livre para novos agendamentos.</p></div>}</div>
+            <footer><button type="button" className="agenda-save-button agenda-animated-action" onClick={() => openNewAppointment(selectedDayDate)}><Plus size={15} aria-hidden="true" /> Novo Agendamento</button></footer>
+          </section>
         </div>
       )}
     </div>

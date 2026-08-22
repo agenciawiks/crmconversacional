@@ -1,13 +1,189 @@
-import React, { useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { gsap } from 'gsap';
+import {
+  BadgeDollarSign,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleUserRound,
+  FilterX,
+  MessageSquare,
+  Pencil,
+  Phone,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  StickyNote,
+  Tag,
+  TrendingUp,
+  User,
+  Users,
+  X,
+} from 'lucide-react';
 import { useCrm } from '../context/CrmContext';
-import { MessageSquare, Tag, StickyNote, Phone, User } from 'lucide-react';
+import { isProfilePhotoStale, normalizeProfilePhotoUrl, queueProfilePhotoSync } from '../services/profilePhotoService';
 import TagBadge from './TagBadge';
 
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'Todas as fases' },
+  { value: 'new', label: 'Novo Lead' },
+  { value: 'contacted', label: 'Em Contato' },
+  { value: 'no_answer', label: 'Sem Resposta' },
+  { value: 'proposal', label: 'Tem Interesse' },
+  { value: 'won', label: 'Vendido' },
+  { value: 'lost', label: 'Perdido' },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: 'all', label: 'Todos os canais' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'telegram', label: 'Instagram' },
+  { value: 'webchat', label: 'TikTok' },
+];
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  maximumFractionDigits: 0,
+});
+
+function getStatusLabel(status) {
+  return STATUS_OPTIONS.find((option) => option.value === status)?.label || 'Sem fase';
+}
+
+function getChannelLabel(contact) {
+  if (contact.channel === 'whatsapp') {
+    if (contact.provider === 'meta_cloud') return 'WhatsApp Oficial';
+    if (contact.provider === 'evolution') return 'WhatsApp Evolution';
+    return 'WhatsApp';
+  }
+  if (contact.channel === 'telegram') return 'Instagram';
+  if (contact.channel === 'webchat') return 'TikTok';
+  return contact.channel ? `${contact.channel.charAt(0).toUpperCase()}${contact.channel.slice(1)}` : 'Outro canal';
+}
+
+function ContactsFilterSelect({ id, label, icon: Icon, value, options, isOpen, onToggle, onChange }) {
+  const menuRef = useRef(null);
+  const selectedOption = options.find((option) => option.value === value) || options[0];
+
+  useLayoutEffect(() => {
+    if (!isOpen || !menuRef.current) return undefined;
+    const tween = gsap.fromTo(
+      menuRef.current,
+      { autoAlpha: 0, y: -8, scale: 0.96 },
+      { autoAlpha: 1, y: 0, scale: 1, duration: 0.3, ease: 'back.out(1.7)', transformOrigin: 'top center' },
+    );
+    return () => tween.kill();
+  }, [isOpen]);
+
+  return (
+    <div className={`contacts-filter-select ${isOpen ? 'is-open' : ''}`}>
+      <button
+        type="button"
+        className="contacts-filter-trigger contacts-animated-action"
+        onClick={onToggle}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={`${id}-options`}
+      >
+        <span className="contacts-filter-trigger-icon"><Icon size={15} aria-hidden="true" /></span>
+        <span className="contacts-filter-trigger-copy"><small>{label}</small><strong>{selectedOption.label}</strong></span>
+        <ChevronDown className="contacts-filter-chevron" size={15} aria-hidden="true" />
+      </button>
+      {isOpen && (
+        <div ref={menuRef} id={`${id}-options`} className="contacts-filter-drawer" role="listbox" aria-label={label}>
+          <div className="contacts-filter-drawer-heading"><span>{label}</span><small>{options.length} opções</small></div>
+          <div className="contacts-filter-options">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={option.value === value ? 'is-selected' : ''}
+                onClick={() => {
+                  onChange(option.value);
+                  onToggle(false);
+                }}
+              >
+                <span>{option.label}</span>
+                {option.value === value && <Check size={14} aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContactAvatar({ contact, size = 'regular', onNeedPhoto }) {
+  const avatarRef = useRef(null);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState(null);
+  const initials = (contact.name || 'Sem nome').substring(0, 2).toUpperCase();
+  const avatarUrl = normalizeProfilePhotoUrl(contact.avatar_url);
+  const storedAvatarInvalid = Boolean(contact.avatar_url && !avatarUrl);
+  const imageFailed = Boolean(avatarUrl && failedAvatarUrl === avatarUrl);
+  const shouldRequestPhoto = contact.provider === 'evolution'
+    && (imageFailed || storedAvatarInvalid || isProfilePhotoStale(contact));
+
+  useEffect(() => {
+    const avatar = avatarRef.current;
+    if (!avatar || !shouldRequestPhoto || !onNeedPhoto) return undefined;
+
+    const requestPhoto = () => onNeedPhoto(contact, { force: imageFailed || storedAvatarInvalid });
+    if (!('IntersectionObserver' in window)) {
+      requestPhoto();
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        requestPhoto();
+        observer.disconnect();
+      },
+      { root: avatar.closest('.contacts-page'), rootMargin: '180px 0px', threshold: 0.01 },
+    );
+
+    observer.observe(avatar);
+    return () => observer.disconnect();
+  }, [contact, imageFailed, onNeedPhoto, shouldRequestPhoto, storedAvatarInvalid]);
+
+  return (
+    <span
+      ref={avatarRef}
+      className={`contacts-avatar contacts-avatar--${size}`}
+      style={{ '--contact-avatar-color': contact.avatarColor || '#1595c5' }}
+      aria-hidden="true"
+    >
+      {avatarUrl && !imageFailed ? (
+        <img
+          src={avatarUrl}
+          alt=""
+          width={size === 'large' ? 58 : 42}
+          height={size === 'large' ? 58 : 42}
+          loading="lazy"
+          onError={() => setFailedAvatarUrl(avatarUrl)}
+        />
+      ) : initials}
+    </span>
+  );
+}
+
 export default function ContactsList() {
-  const { 
-    contacts, 
-    addContact, 
-    setActiveContactId, 
+  const rootRef = useRef(null);
+  const filterPanelRef = useRef(null);
+  const drawerRef = useRef(null);
+  const drawerCloseRef = useRef(null);
+  const {
+    contacts,
+    tenantId,
+    initialDataLoaded,
+    addContact,
+    setActiveContactId,
     setActiveScreen,
     changeContactStatus,
     addNoteToContact,
@@ -19,17 +195,19 @@ export default function ContactsList() {
     setDateFilter,
     customDateRange,
     setCustomDateRange,
-    getFilteredContacts
+    getFilteredContacts,
   } = useCrm();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [openFilter, setOpenFilter] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newLeadName, setNewLeadName] = useState('');
   const [newLeadPhone, setNewLeadPhone] = useState('');
   const [newLeadChannel, setNewLeadChannel] = useState('whatsapp');
   const [newLeadMsg, setNewLeadMsg] = useState('Olá, gostaria de saber mais informações.');
-
-  // Editing drawer state
   const [selectedContact, setSelectedContact] = useState(null);
   const [editName, setEditName] = useState('');
   const [editStatus, setEditStatus] = useState('');
@@ -38,25 +216,258 @@ export default function ContactsList() {
   const [newTagText, setNewTagText] = useState('');
   const [newNoteText, setNewNoteText] = useState('');
 
-  // Financial sum metrics
   const dateFilteredContacts = getFilteredContacts();
   const totalLeads = dateFilteredContacts.length;
-  const totalRevenue = dateFilteredContacts.filter(c => c.status === 'won').reduce((sum, c) => sum + c.value, 0);
-  const conversionRate = totalLeads > 0 
-    ? ((dateFilteredContacts.filter(c => c.status === 'won').length / totalLeads) * 100).toFixed(0) 
-    : 0;
- 
-  const filteredContacts = dateFilteredContacts.filter(c => 
-    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (c.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const wonContacts = dateFilteredContacts.filter((contact) => contact.status === 'won');
+  const totalRevenue = wonContacts.reduce((sum, contact) => sum + (Number(contact.value) || 0), 0);
+  const conversionRate = totalLeads > 0 ? Math.round((wonContacts.length / totalLeads) * 100) : 0;
 
-  const handleCreateLead = (e) => {
-    e.preventDefault();
+  const tagOptions = useMemo(() => {
+    const names = new Set((globalTags || []).map((tag) => tag.name).filter(Boolean));
+    (contacts || []).forEach((contact) => {
+      (contact.tags || []).forEach((tag) => names.add(tag));
+    });
+    return [...names].sort((first, second) => first.localeCompare(second, 'pt-BR'));
+  }, [contacts, globalTags]);
+
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase('pt-BR');
+  const filteredContacts = dateFilteredContacts.filter((contact) => {
+    const matchesSearch = !normalizedSearch || [
+      contact.name,
+      contact.email,
+      contact.phone,
+      ...(contact.tags || []),
+    ].some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(normalizedSearch));
+    const matchesStatus = statusFilter === 'all' || contact.status === statusFilter;
+    const matchesChannel = channelFilter === 'all' || contact.channel === channelFilter;
+    const matchesTag = tagFilter === 'all' || (contact.tags || []).includes(tagFilter);
+    return matchesSearch && matchesStatus && matchesChannel && matchesTag;
+  });
+
+  const activeFilterCount = [statusFilter, channelFilter, tagFilter].filter((value) => value !== 'all').length
+    + (dateFilter !== 'all' ? 1 : 0)
+    + (normalizedSearch ? 1 : 0);
+
+  const liveContact = selectedContact ? contacts.find((contact) => contact.id === selectedContact.id) : null;
+  const notesList = liveContact?.notes || [];
+
+  const requestProfilePhoto = useCallback((contact, { force = false } = {}) => {
+    queueProfilePhotoSync({ contactId: contact.id, tenantId, force }).catch((error) => {
+      console.warn(`[Contacts] Foto indisponível para ${contact.id}:`, error.message);
+    });
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (!openFilter) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (!filterPanelRef.current?.contains(event.target)) setOpenFilter(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setOpenFilter(null);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openFilter]);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+
+    const elements = root.querySelectorAll('[data-kpi-target]');
+    const tweens = [...elements].map((element) => {
+      const target = Number(element.dataset.kpiTarget) || 0;
+      const format = element.dataset.kpiFormat || 'number';
+      const counter = { value: 0 };
+      const renderValue = () => {
+        const currentValue = Math.round(counter.value);
+        if (format === 'currency') element.textContent = currencyFormatter.format(currentValue);
+        else if (format === 'percent') element.textContent = `${currentValue}%`;
+        else element.textContent = currentValue.toLocaleString('pt-BR');
+      };
+
+      renderValue();
+      return gsap.to(counter, {
+        value: target,
+        duration: 1.15,
+        delay: 0.78,
+        ease: 'power3.out',
+        onUpdate: renderValue,
+        onComplete: renderValue,
+      });
+    });
+
+    return () => tweens.forEach((tween) => tween.kill());
+  }, [conversionRate, initialDataLoaded, totalLeads, totalRevenue]);
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+
+    const context = gsap.context(() => {
+      const rows = gsap.utils.toArray('.contacts-table tbody tr').slice(0, 14);
+      const timeline = gsap.timeline({ delay: 0.34, defaults: { ease: 'power3.out' } });
+
+      timeline
+        .from('.contacts-page-header', { autoAlpha: 0, y: 18, duration: 0.48 })
+        .from('.contacts-metric-card', { autoAlpha: 0, y: 18, scale: 0.97, duration: 0.42, stagger: 0.07 }, '-=0.22')
+        .from('.contacts-control-panel', { autoAlpha: 0, y: 14, duration: 0.42 }, '-=0.2')
+        .from('.contacts-table-shell', { autoAlpha: 0, y: 18, duration: 0.5 }, '-=0.24')
+        .from(rows, { autoAlpha: 0, x: -10, duration: 0.3, stagger: 0.025 }, '-=0.3');
+
+      gsap.to('.contacts-ambient-ring', {
+        rotation: 360,
+        duration: 24,
+        repeat: -1,
+        ease: 'none',
+        transformOrigin: 'center',
+      });
+
+      gsap.to('.contacts-metric-icon', {
+        y: -3,
+        rotation: (index) => index % 2 === 0 ? -4 : 4,
+        duration: 1.8,
+        repeat: -1,
+        yoyo: true,
+        stagger: 0.18,
+        ease: 'sine.inOut',
+      });
+    }, root);
+
+    return () => context.revert();
+  }, [initialDataLoaded]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const glow = root?.querySelector('.contacts-cursor-glow');
+    if (!root || !glow) return undefined;
+
+    gsap.set(glow, { xPercent: -50, yPercent: -50 });
+    const moveX = gsap.quickTo(glow, 'x', { duration: 0.55, ease: 'power3.out' });
+    const moveY = gsap.quickTo(glow, 'y', { duration: 0.55, ease: 'power3.out' });
+    const handlePointerMove = (event) => {
+      moveX(event.clientX);
+      moveY(event.clientY);
+    };
+
+    root.addEventListener('pointermove', handlePointerMove, { passive: true });
+    return () => root.removeEventListener('pointermove', handlePointerMove);
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !initialDataLoaded) return undefined;
+
+    const cleanups = [];
+    const actionButtons = [...root.querySelectorAll('.contacts-animated-action, .table-action-btn')];
+
+    actionButtons.forEach((button) => {
+      const handleEnter = () => gsap.to(button, { y: -3, scale: 1.045, duration: 0.24, ease: 'back.out(2)', overwrite: 'auto' });
+      const handleLeave = () => gsap.to(button, { y: 0, scale: 1, duration: 0.28, ease: 'power3.out', overwrite: 'auto' });
+      const handleDown = () => gsap.to(button, { y: 0, scale: 0.94, duration: 0.12, ease: 'power2.out', overwrite: 'auto' });
+      const handleUp = () => gsap.to(button, { y: -2, scale: 1.03, duration: 0.2, ease: 'back.out(2)', overwrite: 'auto' });
+      button.addEventListener('pointerenter', handleEnter);
+      button.addEventListener('pointerleave', handleLeave);
+      button.addEventListener('pointerdown', handleDown);
+      button.addEventListener('pointerup', handleUp);
+      cleanups.push(() => {
+        button.removeEventListener('pointerenter', handleEnter);
+        button.removeEventListener('pointerleave', handleLeave);
+        button.removeEventListener('pointerdown', handleDown);
+        button.removeEventListener('pointerup', handleUp);
+      });
+    });
+
+    const metricCards = window.matchMedia('(pointer: fine)').matches
+      ? [...root.querySelectorAll('.contacts-metric-card')]
+      : [];
+
+    metricCards.forEach((card) => {
+      let bounds = null;
+      const rotateX = gsap.quickTo(card, 'rotationX', { duration: 0.35, ease: 'power3.out' });
+      const rotateY = gsap.quickTo(card, 'rotationY', { duration: 0.35, ease: 'power3.out' });
+      const moveY = gsap.quickTo(card, 'y', { duration: 0.32, ease: 'power3.out' });
+      const handleEnter = () => {
+        bounds = card.getBoundingClientRect();
+        moveY(-6);
+      };
+      const handleMove = (event) => {
+        if (!bounds) return;
+        const horizontal = (event.clientX - bounds.left) / bounds.width - 0.5;
+        const vertical = (event.clientY - bounds.top) / bounds.height - 0.5;
+        rotateY(horizontal * 7);
+        rotateX(vertical * -6);
+      };
+      const handleLeave = () => {
+        bounds = null;
+        rotateX(0);
+        rotateY(0);
+        moveY(0);
+      };
+      card.addEventListener('pointerenter', handleEnter);
+      card.addEventListener('pointermove', handleMove);
+      card.addEventListener('pointerleave', handleLeave);
+      cleanups.push(() => {
+        card.removeEventListener('pointerenter', handleEnter);
+        card.removeEventListener('pointermove', handleMove);
+        card.removeEventListener('pointerleave', handleLeave);
+      });
+    });
+
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf([...actionButtons, ...metricCards]);
+    };
+  }, [filteredContacts.length, initialDataLoaded, showAddForm]);
+
+  useLayoutEffect(() => {
+    if (!selectedContact || !drawerRef.current) return undefined;
+
+    const context = gsap.context(() => {
+      gsap.fromTo('.contacts-drawer-backdrop', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.22, ease: 'power2.out' });
+      const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      timeline
+        .fromTo(drawerRef.current, { xPercent: 100 }, { xPercent: 0, duration: 0.48 })
+        .from('.contacts-drawer-reveal', { autoAlpha: 0, x: 15, duration: 0.34, stagger: 0.045 }, '-=0.24');
+    }, rootRef);
+
+    drawerCloseRef.current?.focus();
+    return () => context.revert();
+  }, [selectedContact]);
+
+  useEffect(() => {
+    if (!selectedContact) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setSelectedContact(null);
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedContact]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setChannelFilter('all');
+    setTagFilter('all');
+    setDateFilter('all');
+  };
+
+  const handleCreateLead = (event) => {
+    event.preventDefault();
     if (!newLeadName.trim() || !newLeadPhone.trim()) return;
-    
-    // Add lead and close form
+
     addContact(newLeadName, newLeadChannel, newLeadPhone, newLeadMsg);
     setNewLeadName('');
     setNewLeadPhone('');
@@ -69,647 +480,225 @@ export default function ContactsList() {
     setActiveScreen('chat');
   };
 
-  // Open editing drawer
   const handleEditContact = (contact) => {
     setSelectedContact(contact);
-    setEditName(contact.name);
-    setEditStatus(contact.status);
+    setEditName(contact.name || '');
+    setEditStatus(contact.status || 'new');
     setEditValue(contact.value || 0);
     setEditTags(contact.tags || []);
     setNewTagText('');
     setNewNoteText('');
   };
 
-  // Save details back to context
   const handleSaveContact = () => {
     if (!selectedContact) return;
-    
     updateContactName(selectedContact.id, editName);
     changeContactStatus(selectedContact.id, editStatus);
     updateContactValue(selectedContact.id, editValue);
     updateContactTags(selectedContact.id, editTags);
-    
     setSelectedContact(null);
   };
 
-  // Tag helper functions
-  const handleAddTag = (e) => {
-    e.preventDefault();
-    if (!newTagText.trim()) return;
-    if (editTags.includes(newTagText.trim())) return;
-    setEditTags([...editTags, newTagText.trim()]);
+  const handleAddTag = (event) => {
+    event.preventDefault();
+    const cleanedTag = newTagText.trim();
+    if (!cleanedTag || editTags.includes(cleanedTag)) return;
+    setEditTags((currentTags) => [...currentTags, cleanedTag]);
     setNewTagText('');
   };
 
-  const handleRemoveTag = (tagToRemove) => {
-    setEditTags(editTags.filter(t => t !== tagToRemove));
+  const handleAddSuggestedTag = (tagName) => {
+    if (!tagName || editTags.includes(tagName)) return;
+    setEditTags((currentTags) => [...currentTags, tagName]);
   };
 
-  // Note helper function
-  const handleAddNote = (e) => {
-    e.preventDefault();
-    if (!newNoteText.trim()) return;
+  const handleRemoveTag = (tagToRemove) => {
+    setEditTags((currentTags) => currentTags.filter((tag) => tag !== tagToRemove));
+  };
+
+  const handleAddNote = (event) => {
+    event.preventDefault();
+    if (!newNoteText.trim() || !selectedContact) return;
     addNoteToContact(selectedContact.id, newNoteText);
     setNewNoteText('');
   };
 
-  // Fetch reactive live contact details from CRM Context
-  const liveContact = selectedContact ? contacts.find(c => c.id === selectedContact.id) : null;
-  const notesList = liveContact ? liveContact.notes || [] : [];
-
   return (
-    <div className="content-wrapper animated-fade-in" style={{ position: 'relative' }}>
-      <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
-        <div className="page-title">
-          <h1>Lista de Contatos</h1>
-          <p>Base unificada de leads capturados, históricos e volumes de vendas.</p>
+    <div ref={rootRef} className="content-wrapper contacts-page">
+      <span className="contacts-cursor-glow" aria-hidden="true" />
+      <span className="contacts-ambient-ring" aria-hidden="true" />
+
+      <header className="contacts-page-header">
+        <div className="contacts-title-block">
+          <span className="contacts-eyebrow"><Sparkles size={13} aria-hidden="true" /> Base inteligente</span>
+          <h1>Leads &amp; Contatos</h1>
+          <p>Encontre, organize e acompanhe cada oportunidade em uma única visão.</p>
         </div>
- 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          {/* Date Range Period Selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="16" y1="2" x2="16" y2="6"></line>
-              <line x1="8" y1="2" x2="8" y2="6"></line>
-              <line x1="3" y1="10" x2="21" y2="10"></line>
-            </svg>
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="crm-status-dropdown"
-              style={{ padding: '6px 32px 6px 12px', fontSize: '12px', height: '34px' }}
-            >
-              <option value="all">Todo o Período</option>
-              <option value="today">Hoje</option>
-              <option value="yesterday">Ontem</option>
-              <option value="7days">Últimos 7 dias</option>
-              <option value="custom">Personalizado</option>
-            </select>
-          </div>
+        <button
+          type="button"
+          className={`contacts-primary-button contacts-animated-action ${showAddForm ? 'is-open' : ''}`}
+          onClick={() => setShowAddForm((visible) => !visible)}
+          aria-expanded={showAddForm}
+          aria-controls="new-lead-form"
+        >
+          {showAddForm ? <X size={18} aria-hidden="true" /> : <Plus size={18} aria-hidden="true" />}
+          {showAddForm ? 'Fechar cadastro' : 'Cadastrar novo lead'}
+        </button>
+      </header>
 
-          {dateFilter === 'custom' && (
-            <div className="animated-fade-in" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input
-                type="date"
-                className="glass-input"
-                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
-                value={customDateRange.start}
-                onChange={(e) => setCustomDateRange({ ...customDateRange, start: e.target.value })}
-                placeholder="De"
-              />
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>até</span>
-              <input
-                type="date"
-                className="glass-input"
-                style={{ padding: '4px 10px', fontSize: '11px', height: '34px', width: '130px' }}
-                value={customDateRange.end}
-                onChange={(e) => setCustomDateRange({ ...customDateRange, end: e.target.value })}
-                placeholder="Até"
-              />
-            </div>
-          )}
+      <section className="contacts-metrics" aria-label="Indicadores de leads">
+        <article className="contacts-metric-card contacts-metric-card--blue">
+          <span className="contacts-metric-icon"><Users size={19} aria-hidden="true" /></span>
+          <small>Leads no período</small>
+          <strong data-kpi-target={totalLeads} data-kpi-format="number">{totalLeads}</strong>
+          <p>{filteredContacts.length} visíveis com os filtros atuais</p>
+        </article>
+        <article className="contacts-metric-card contacts-metric-card--mint">
+          <span className="contacts-metric-icon"><TrendingUp size={19} aria-hidden="true" /></span>
+          <small>Conversão ganha</small>
+          <strong data-kpi-target={conversionRate} data-kpi-format="percent">{conversionRate}%</strong>
+          <p>{wonContacts.length} {wonContacts.length === 1 ? 'venda concluída' : 'vendas concluídas'}</p>
+        </article>
+        <article className="contacts-metric-card contacts-metric-card--lime">
+          <span className="contacts-metric-icon"><BadgeDollarSign size={19} aria-hidden="true" /></span>
+          <small>Receita confirmada</small>
+          <strong data-kpi-target={totalRevenue} data-kpi-format="currency">{currencyFormatter.format(totalRevenue)}</strong>
+          <p>Valor acumulado em negócios ganhos</p>
+        </article>
+      </section>
 
-          <button onClick={() => setShowAddForm(prev => !prev)} className="glass-btn">
-            <span>{showAddForm ? '✕ Fechar Form' : '＋ Novo Lead'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* QUICK INLINE LEAD CREATOR FORM */}
       {showAddForm && (
-        <form onSubmit={handleCreateLead} className="glass-panel" style={{
-          padding: '20px',
-          background: 'var(--bg-surface-solid)',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr)) 100px',
-          gap: '16px',
-          alignItems: 'end',
-          marginBottom: '20px'
-        }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Nome do Lead</span>
-            <input
-              type="text"
-              required
-              className="glass-input"
-              placeholder="Ex: João Souza"
-              value={newLeadName}
-              onChange={(e) => setNewLeadName(e.target.value)}
-            />
+        <form id="new-lead-form" className="contacts-create-card" onSubmit={handleCreateLead}>
+          <div className="contacts-create-heading">
+            <span><CircleUserRound size={18} aria-hidden="true" /></span>
+            <div><strong>Novo lead</strong><small>Adicione um contato manualmente à base.</small></div>
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Canal de Entrada</span>
-            <select
-              className="crm-status-dropdown"
-              value={newLeadChannel}
-              onChange={(e) => setNewLeadChannel(e.target.value)}
-            >
-              <option value="whatsapp">WhatsApp</option>
-              <option value="telegram">Instagram</option>
-              <option value="webchat">Tiktok</option>
-            </select>
+          <div className="contacts-create-grid">
+            <div className="contacts-form-field">
+              <label htmlFor="new-lead-name">Nome do lead</label>
+              <input id="new-lead-name" name="lead-name" type="text" autoComplete="off" required placeholder="Ex.: João Souza…" value={newLeadName} onChange={(event) => setNewLeadName(event.target.value)} />
+            </div>
+            <div className="contacts-form-field">
+              <label htmlFor="new-lead-channel">Canal de entrada</label>
+              <select id="new-lead-channel" name="lead-channel" autoComplete="off" value={newLeadChannel} onChange={(event) => setNewLeadChannel(event.target.value)}>
+                <option value="whatsapp">WhatsApp</option><option value="telegram">Instagram</option><option value="webchat">TikTok</option>
+              </select>
+            </div>
+            <div className="contacts-form-field">
+              <label htmlFor="new-lead-phone">Telefone ou celular</label>
+              <input id="new-lead-phone" name="lead-phone" type="tel" inputMode="tel" autoComplete="off" required placeholder="Ex.: 5511999998888…" value={newLeadPhone} onChange={(event) => setNewLeadPhone(event.target.value)} />
+            </div>
+            <div className="contacts-form-field contacts-form-field--message">
+              <label htmlFor="new-lead-message">Mensagem inicial</label>
+              <input id="new-lead-message" name="lead-message" type="text" autoComplete="off" placeholder="Ex.: Olá, gostaria de saber mais…" value={newLeadMsg} onChange={(event) => setNewLeadMsg(event.target.value)} />
+            </div>
+            <button type="submit" className="contacts-create-submit contacts-animated-action"><Check size={17} aria-hidden="true" /> Criar lead</button>
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Telefone / Celular</span>
-            <input
-              type="text"
-              required
-              className="glass-input"
-              placeholder="Ex: 5511999998888"
-              value={newLeadPhone}
-              onChange={(e) => setNewLeadPhone(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Mensagem Inicial</span>
-            <input
-              type="text"
-              className="glass-input"
-              placeholder="Olá, gostaria de saber..."
-              value={newLeadMsg}
-              onChange={(e) => setNewLeadMsg(e.target.value)}
-            />
-          </div>
-
-          <button type="submit" className="glass-btn" style={{ height: '42px', padding: '0' }}>
-            Criar
-          </button>
         </form>
       )}
 
-      {/* SEARCH AND METRICS SLIDER BAR */}
-      <div className="contacts-toolbar" style={{ marginBottom: '20px' }}>
-        <div className="search-field-wrapper">
-          <input
-            type="text"
-            className="glass-input"
-            placeholder="Pesquisar por nome, e-mail ou tags..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+      <section ref={filterPanelRef} className="contacts-control-panel" aria-label="Pesquisa e filtros">
+        <div className="contacts-search-shell">
+          <Search size={18} aria-hidden="true" />
+          <label className="sr-only" htmlFor="contacts-search">Pesquisar contatos</label>
+          <input id="contacts-search" name="contacts-search" type="search" autoComplete="off" spellCheck={false} placeholder="Busque por nome, e-mail, telefone ou etiqueta…" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+          {searchQuery && <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpar pesquisa"><X size={15} aria-hidden="true" /></button>}
+        </div>
+        <div className="contacts-filter-grid">
+          <ContactsFilterSelect
+            id="contacts-period"
+            label="Período"
+            icon={CalendarDays}
+            value={dateFilter}
+            options={[{ value: 'all', label: 'Todo o período' }, { value: 'today', label: 'Hoje' }, { value: 'yesterday', label: 'Ontem' }, { value: '7days', label: 'Últimos 7 dias' }, { value: 'custom', label: 'Personalizado' }]}
+            isOpen={openFilter === 'period'}
+            onToggle={(close) => setOpenFilter((current) => close === false ? null : current === 'period' ? null : 'period')}
+            onChange={setDateFilter}
+          />
+          <ContactsFilterSelect
+            id="contacts-status"
+            label="Fase do funil"
+            icon={SlidersHorizontal}
+            value={statusFilter}
+            options={STATUS_OPTIONS}
+            isOpen={openFilter === 'status'}
+            onToggle={(close) => setOpenFilter((current) => close === false ? null : current === 'status' ? null : 'status')}
+            onChange={setStatusFilter}
+          />
+          <ContactsFilterSelect
+            id="contacts-channel"
+            label="Canal"
+            icon={MessageSquare}
+            value={channelFilter}
+            options={CHANNEL_OPTIONS}
+            isOpen={openFilter === 'channel'}
+            onToggle={(close) => setOpenFilter((current) => close === false ? null : current === 'channel' ? null : 'channel')}
+            onChange={setChannelFilter}
+          />
+          <ContactsFilterSelect
+            id="contacts-tag"
+            label="Etiqueta"
+            icon={Tag}
+            value={tagFilter}
+            options={[{ value: 'all', label: 'Todas as etiquetas' }, ...tagOptions.map((tagName) => ({ value: tagName, label: tagName }))]}
+            isOpen={openFilter === 'tag'}
+            onToggle={(close) => setOpenFilter((current) => close === false ? null : current === 'tag' ? null : 'tag')}
+            onChange={setTagFilter}
           />
         </div>
-
-        <div className="contacts-metrics-summary">
-          <div className="contacts-summary-pill">
-            Leads: <span>{totalLeads}</span>
+        {dateFilter === 'custom' && (
+          <div className="contacts-custom-dates">
+            <label htmlFor="contacts-date-start">De</label><input id="contacts-date-start" name="contacts-date-start" type="date" autoComplete="off" value={customDateRange.start} onChange={(event) => setCustomDateRange({ ...customDateRange, start: event.target.value })} />
+            <span>até</span>
+            <label htmlFor="contacts-date-end">Até</label><input id="contacts-date-end" name="contacts-date-end" type="date" autoComplete="off" value={customDateRange.end} onChange={(event) => setCustomDateRange({ ...customDateRange, end: event.target.value })} />
           </div>
-          <div className="contacts-summary-pill">
-            Conversão: <span>{conversionRate}%</span>
-          </div>
-          <div className="contacts-summary-pill">
-            Receita: <span>R$ {totalRevenue.toLocaleString('pt-BR')}</span>
-          </div>
+        )}
+        <div className="contacts-results-line" aria-live="polite">
+          <span><strong>{filteredContacts.length}</strong> {filteredContacts.length === 1 ? 'contato encontrado' : 'contatos encontrados'}</span>
+          {activeFilterCount > 0 && <button type="button" onClick={clearFilters}><FilterX size={14} aria-hidden="true" /> Limpar {activeFilterCount} {activeFilterCount === 1 ? 'filtro' : 'filtros'}</button>}
         </div>
-      </div>
+      </section>
 
-      {/* COMPREHENSIVE DATA TABLE */}
-      <div className="contacts-table-wrapper">
-        <table className="contacts-table">
-          <thead>
-            <tr>
-              <th>Cliente / Lead</th>
-              <th>Canal de Entrada</th>
-              <th>Status Funil</th>
-              <th>Valor Comercial</th>
-              <th>Tags Personalizadas</th>
-              <th style={{ textAlign: 'right' }}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredContacts.map(contact => (
-              <tr 
-                key={contact.id}
-                onClick={() => handleEditContact(contact)}
-                style={{ cursor: 'pointer', transition: 'background 0.2s' }}
-              >
-                {/* Visual profile detail */}
-                <td>
-                  <div className="contact-profile-cell">
-                    <div className="avatar" style={{ background: contact.avatar_url ? 'transparent' : contact.avatarColor }}>
-                      {contact.avatar_url ? (
-                        <img src={contact.avatar_url} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                      ) : (
-                        (contact.name || 'Sem nome').substring(0, 2).toUpperCase()
-                      )}
-                    </div>
-                    <div>
-                      <span className="contact-name-bold" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {contact.name}
-                        {contact.tags?.includes('IA Inativa') && (
-                          <User size={14} strokeWidth={2.5} color="var(--warning-color)" title="Aguardando Atendente Humano" />
-                        )}
-                      </span>
-                      <div className="contact-email-sub">{contact.email}</div>
-                    </div>
-                  </div>
-                </td>
+      <section className="contacts-table-shell" aria-labelledby="contacts-list-title">
+        <div className="contacts-table-heading">
+          <div><span className="contacts-eyebrow">Base ativa</span><h2 id="contacts-list-title">Lista de contatos</h2></div>
+          <span className="contacts-table-count">{filteredContacts.length} de {totalLeads}</span>
+        </div>
+        <div className="contacts-table-wrapper">
+          <table className="contacts-table">
+            <thead><tr><th>Cliente / Lead</th><th>Canal</th><th>Fase do funil</th><th>Valor comercial</th><th>Etiquetas</th><th>Ações</th></tr></thead>
+            <tbody>
+              {filteredContacts.map((contact) => (
+                <tr key={contact.id} tabIndex="0" onClick={() => handleEditContact(contact)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleEditContact(contact); } }} aria-label={`Editar ${contact.name || 'contato sem nome'}`}>
+                  <td data-label="Cliente / Lead"><div className="contact-profile-cell"><ContactAvatar contact={contact} onNeedPhoto={requestProfilePhoto} /><div className="contact-profile-copy"><span className="contact-name-bold">{contact.name || 'Sem nome'}{contact.tags?.includes('IA Inativa') && <User size={13} aria-label="Aguardando atendente humano" />}</span><span className="contact-email-sub">{contact.email || contact.phone || 'Sem e-mail cadastrado'}</span></div></div></td>
+                  <td data-label="Canal"><span className="contact-channel-icon-label"><span className={`contacts-channel-mark ${contact.channel}`}>{contact.channel === 'whatsapp' ? 'W' : contact.channel === 'telegram' ? 'I' : 'T'}</span><span>{getChannelLabel(contact)}</span></span></td>
+                  <td data-label="Fase do funil"><span className={`contacts-status-tag status-${contact.status}`}>{getStatusLabel(contact.status)}</span></td>
+                  <td data-label="Valor comercial"><span className="contact-value-display">{contact.value > 0 ? currencyFormatter.format(contact.value) : 'R$ 0'}</span></td>
+                  <td data-label="Etiquetas"><div className="contact-tags-list">{(contact.tags || []).slice(0, 3).map((tagName) => { const tagDefinition = globalTags?.find((tag) => tag.name.toLocaleLowerCase('pt-BR') === tagName.toLocaleLowerCase('pt-BR')); return <TagBadge key={tagName} name={tagName} color={tagDefinition?.color || '#75a7b1'} />; })}{(contact.tags || []).length > 3 && <span className="contacts-more-tags">+{contact.tags.length - 3}</span>}{(contact.tags || []).length === 0 && <span className="contacts-no-tags">Sem etiquetas</span>}</div></td>
+                  <td data-label="Ações"><div className="contact-action-btn-row"><button type="button" className="table-action-btn table-action-btn--edit contacts-animated-action" onClick={(event) => { event.stopPropagation(); handleEditContact(contact); }} aria-label={`Editar ${contact.name || 'contato'}`}><Pencil size={14} aria-hidden="true" /></button><button type="button" className="table-action-btn contacts-animated-action" onClick={(event) => { event.stopPropagation(); handleOpenChat(contact.id); }}><MessageSquare size={14} aria-hidden="true" /> Conversar</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredContacts.length === 0 && <div className="contacts-empty-state"><span><FilterX size={25} aria-hidden="true" /></span><strong>Nenhum contato encontrado</strong><p>Ajuste a busca ou remova os filtros para visualizar a base.</p><button type="button" onClick={clearFilters}>Limpar filtros</button></div>}
+        </div>
+      </section>
 
-                {/* Entry channel */}
-                <td>
-                  <span className="contact-channel-icon-label">
-                    <span className={`kanban-card-channel-icon ${contact.channel}`}>
-                      {contact.channel === 'whatsapp' && 'W'}
-                      {contact.channel === 'telegram' && 'I'}
-                      {contact.channel === 'webchat' && 'T'}
-                    </span>
-                    <span style={{ fontSize: '13px' }}>
-                      {contact.channel === 'whatsapp' ? (
-                        contact.provider === 'meta_cloud' ? 'Whats (Oficial)' :
-                        contact.provider === 'evolution' ? 'Whats (Evolution)' : 'WhatsApp'
-                      ) : contact.channel === 'telegram' ? (
-                        'Instagram'
-                      ) : contact.channel === 'webchat' ? (
-                        'Tiktok'
-                      ) : (
-                        contact.channel.charAt(0).toUpperCase() + contact.channel.slice(1)
-                      )}
-                    </span>
-                  </span>
-                </td>
-
-                {/* Funnel pipeline stage tag */}
-                <td>
-                  <span className={`tag status-${contact.status}`}>
-                    {contact.status === 'new' && 'Novo Lead'}
-                    {contact.status === 'contacted' && 'Em Contato'}
-                    {contact.status === 'no_answer' && 'Sem Resposta'}
-                    {contact.status === 'proposal' && 'Tem Interesse'}
-                    {contact.status === 'won' && 'Vendido'}
-                    {contact.status === 'lost' && 'Perdido'}
-                  </span>
-                </td>
-
-                {/* Monetary transaction scale */}
-                <td>
-                  <span className="contact-value-display">
-                    {contact.value > 0 ? `R$ ${contact.value.toLocaleString('pt-BR')}` : 'R$ ---'}
-                  </span>
-                </td>
-
-                {/* Personal labels rows */}
-                <td>
-                  <div className="contact-tags-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    {(contact.tags || []).map(tag => {
-                      const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
-                      const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
-                      return (
-                        <TagBadge key={tag} name={tag} color={color} />
-                      );
-                    })}
-                  </div>
-                </td>
-
-                {/* Interactive links column */}
-                <td style={{ textAlign: 'right' }}>
-                  <div className="contact-action-btn-row" style={{ justifyContent: 'flex-end' }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenChat(contact.id);
-                      }}
-                      className="table-action-btn"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <MessageSquare size={14} strokeWidth={2.5} />
-                      Conversar
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filteredContacts.length === 0 && (
-              <tr>
-                <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>
-                  Nenhum contato coincide com a busca.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* ========================================================= */}
-      {/* PREMIUM DETAILS DRAWER (SLIDE-IN MODAL PANEL) */}
-      {/* ========================================================= */}
       {selectedContact && (
-        <>
-          {/* Blur backdrop cover */}
-          <div 
-            onClick={() => setSelectedContact(null)} 
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              background: 'rgba(0, 0, 0, 0.5)',
-              backdropFilter: 'blur(5px)',
-              webkitBackdropFilter: 'blur(5px)',
-              zIndex: 999,
-              animation: 'fadeIn 0.2s ease-out'
-            }}
-          />
-
-          {/* Slide-out Panel container */}
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            right: 0,
-            width: '440px',
-            height: '100%',
-            background: 'var(--bg-surface-solid)',
-            backdropFilter: 'var(--glass-blur)',
-            webkitBackdropFilter: 'var(--glass-blur)',
-            borderLeft: '1px solid var(--border-glass)',
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 1000,
-            display: 'flex',
-            flexDirection: 'column',
-            animation: 'slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-            padding: '28px',
-            color: 'var(--text-primary)',
-            fontFamily: 'var(--font-sans)'
-          }}>
-            
-            {/* Header section */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '800', margin: 0, letterSpacing: '-0.3px', background: 'linear-gradient(90deg, var(--text-primary), var(--text-secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                Ficha do Lead
-              </h2>
-              <button 
-                onClick={() => setSelectedContact(null)}
-                style={{
-                  background: 'var(--bg-surface-hover)',
-                  border: '1px solid var(--border-glass)',
-                  color: 'var(--text-secondary)',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
-                  e.currentTarget.style.color = '#ef4444';
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-surface-hover)';
-                  e.currentTarget.style.color = 'var(--text-secondary)';
-                  e.currentTarget.style.borderColor = 'var(--border-glass)';
-                }}
-              >
-                ✕
-              </button>
+        <div className="contacts-drawer-layer">
+          <button type="button" className="contacts-drawer-backdrop" onClick={() => setSelectedContact(null)} aria-label="Fechar ficha do lead" />
+          <aside ref={drawerRef} className="contacts-drawer" role="dialog" aria-modal="true" aria-labelledby="contact-drawer-title">
+            <header className="contacts-drawer-header contacts-drawer-reveal"><div><span className="contacts-eyebrow">Edição do contato</span><h2 id="contact-drawer-title">Ficha do lead</h2></div><button ref={drawerCloseRef} type="button" className="contacts-drawer-close" onClick={() => setSelectedContact(null)} aria-label="Fechar ficha"><X size={18} aria-hidden="true" /></button></header>
+            <div className="contacts-drawer-profile contacts-drawer-reveal"><ContactAvatar contact={selectedContact} size="large" onNeedPhoto={requestProfilePhoto} /><div><strong>{editName || selectedContact.name || 'Sem nome'}</strong><span><Phone size={13} aria-hidden="true" /> {selectedContact.phone || 'Telefone não cadastrado'}</span><small>{getChannelLabel(selectedContact)}</small></div></div>
+            <div className="contacts-drawer-scroll">
+              <section className="contacts-drawer-section contacts-drawer-reveal"><div className="contacts-section-heading"><CircleUserRound size={16} aria-hidden="true" /><div><strong>Dados comerciais</strong><small>Informações principais do lead</small></div></div><div className="contacts-edit-grid"><div className="contacts-form-field contacts-form-field--wide"><label htmlFor="edit-contact-name">Nome do lead</label><input id="edit-contact-name" name="edit-contact-name" type="text" autoComplete="off" value={editName} onChange={(event) => setEditName(event.target.value)} /></div><div className="contacts-form-field"><label htmlFor="edit-contact-value">Valor comercial</label><div className="contacts-currency-input"><span>R$</span><input id="edit-contact-value" name="edit-contact-value" type="number" inputMode="decimal" autoComplete="off" min="0" value={editValue} onChange={(event) => setEditValue(Number(event.target.value) || 0)} /></div></div><div className="contacts-form-field"><label htmlFor="edit-contact-status">Fase no funil</label><select id="edit-contact-status" name="edit-contact-status" value={editStatus} onChange={(event) => setEditStatus(event.target.value)}>{STATUS_OPTIONS.filter((option) => option.value !== 'all').map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div></div></section>
+              <section className="contacts-drawer-section contacts-drawer-reveal"><div className="contacts-section-heading"><Tag size={16} aria-hidden="true" /><div><strong>Etiquetas</strong><small>Organize e segmente este contato</small></div></div><div className="contacts-edit-tags">{editTags.map((tagName) => { const tagDefinition = globalTags?.find((tag) => tag.name.toLocaleLowerCase('pt-BR') === tagName.toLocaleLowerCase('pt-BR')); return <TagBadge key={tagName} name={tagName} color={tagDefinition?.color || '#75a7b1'} onDelete={() => handleRemoveTag(tagName)} />; })}{editTags.length === 0 && <span>Sem etiquetas vinculadas.</span>}</div>{tagOptions.filter((tagName) => !editTags.includes(tagName)).length > 0 && <div className="contacts-tag-suggestions"><small>Sugestões</small><div>{tagOptions.filter((tagName) => !editTags.includes(tagName)).slice(0, 5).map((tagName) => <button key={tagName} type="button" onClick={() => handleAddSuggestedTag(tagName)}><Plus size={12} aria-hidden="true" /> {tagName}</button>)}</div></div>}<form className="contacts-inline-form" onSubmit={handleAddTag}><label className="sr-only" htmlFor="new-contact-tag">Nova etiqueta</label><input id="new-contact-tag" name="new-contact-tag" type="text" autoComplete="off" placeholder="Adicionar nova etiqueta…" value={newTagText} onChange={(event) => setNewTagText(event.target.value)} /><button type="submit"><Plus size={15} aria-hidden="true" /> Adicionar</button></form></section>
+              <section className="contacts-drawer-section contacts-drawer-reveal"><div className="contacts-section-heading"><StickyNote size={16} aria-hidden="true" /><div><strong>Anotações</strong><small>Histórico e contexto do atendimento</small></div></div><div className="contacts-notes-list">{notesList.map((note) => <article key={note.id}><header><span>Anotado</span><time>{note.date}</time></header><p>{note.text}</p></article>)}{notesList.length === 0 && <div className="contacts-notes-empty">Nenhuma anotação registrada.</div>}</div><form className="contacts-note-form" onSubmit={handleAddNote}><label className="sr-only" htmlFor="new-contact-note">Nova anotação</label><textarea id="new-contact-note" name="new-contact-note" autoComplete="off" rows="3" placeholder="Escreva uma observação sobre o cliente…" value={newNoteText} onChange={(event) => setNewNoteText(event.target.value)} /><button type="submit">Salvar observação <ChevronRight size={15} aria-hidden="true" /></button></form></section>
             </div>
-
-            {/* Profile Summary Badge */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px', background: 'var(--bg-surface-hover)', border: '1px solid var(--border-glass)', borderRadius: '12px', marginBottom: '24px' }}>
-              <div style={{ 
-                width: '54px', 
-                height: '54px', 
-                borderRadius: '50%', 
-                background: selectedContact.avatar_url ? 'transparent' : selectedContact.avatarColor, 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                fontWeight: '700', 
-                fontSize: '20px',
-                color: '#fff',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-                overflow: 'hidden'
-              }}>
-                {selectedContact.avatar_url ? (
-                  <img src={selectedContact.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  (selectedContact.name || 'Sem nome').substring(0, 2).toUpperCase()
-                )}
-              </div>
-              <div>
-                <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--text-primary)' }}>{editName || selectedContact.name}</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                    {selectedContact.channel === 'telegram' ? '@' : (
-                      <Phone size={12} strokeWidth={2.5} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
-                    )}
-                    {selectedContact.phone}
-                  </span>
-                  <span style={{ color: 'var(--border-glass)' }}>|</span>
-                  <span style={{ textTransform: 'capitalize' }}>
-                    {selectedContact.channel === 'telegram' ? 'Instagram' : 
-                     selectedContact.channel === 'whatsapp' ? 'WhatsApp' : 
-                     selectedContact.channel === 'webchat' ? 'Tiktok' : selectedContact.channel}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Scrollable Fields area */}
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '4px', marginBottom: '20px' }}>
-              
-              {/* Field: Client Name */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Nome do Lead</label>
-                <input 
-                  type="text" 
-                  className="glass-input" 
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-              </div>
-
-              {/* Fields: Value & Status Stage */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Valor Comercial</label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>R$</span>
-                    <input 
-                      type="number" 
-                      className="glass-input" 
-                      value={editValue}
-                      onChange={(e) => setEditValue(Number(e.target.value) || 0)}
-                      style={{ paddingLeft: '32px' }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)' }}>Fase no Funil</label>
-                  <select 
-                    className="crm-status-dropdown" 
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    style={{ width: '100%', height: '42px' }}
-                  >
-                    <option value="new">Novo Lead</option>
-                    <option value="no_answer">Sem Resposta</option>
-                    <option value="contacted">Em Contato</option>
-                    <option value="proposal">Tem Interesse</option>
-                    <option value="won">Vendido</option>
-                    <option value="lost">Perdido</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Tags Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Tag size={12} strokeWidth={2.5} style={{ color: 'var(--accent-primary)' }} />
-                  Etiquetas (Tags)
-                </label>
-                
-                {/* Active tags visual lists */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', minHeight: '30px', padding: '10px', background: 'var(--bg-app)', border: '1px dashed var(--border-glass)', borderRadius: '8px', alignItems: 'center' }}>
-                  {editTags.map(tag => {
-                    const tagColorObj = globalTags?.find(t => t.name.toLowerCase() === tag.toLowerCase());
-                    const color = tagColorObj ? tagColorObj.color : '#9CA3AF';
-                    return (
-                      <TagBadge 
-                        key={tag} 
-                        name={tag} 
-                        color={color} 
-                        onDelete={() => handleRemoveTag(tag)}
-                      />
-                    );
-                  })}
-                  {editTags.length === 0 && (
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '2px 4px' }}>Sem etiquetas ainda</span>
-                  )}
-                </div>
-
-                {/* Add Tag field inline */}
-                <form onSubmit={handleAddTag} style={{ display: 'flex', gap: '8px' }}>
-                  <input 
-                    type="text" 
-                    className="glass-input" 
-                    placeholder="Adicionar nova etiqueta..." 
-                    value={newTagText}
-                    onChange={(e) => setNewTagText(e.target.value)}
-                    style={{ flex: 1, height: '36px', fontSize: '13px' }}
-                  />
-                  <button 
-                    type="submit" 
-                    className="glass-btn" 
-                    style={{ height: '36px', padding: '0 14px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    ＋ Add
-                  </button>
-                </form>
-              </div>
-
-              {/* Divider */}
-              <div style={{ height: '1px', background: 'var(--border-glass)', margin: '4px 0' }} />
-
-              {/* Notes (Observações) Section */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <StickyNote size={12} strokeWidth={2.5} style={{ color: 'var(--accent-primary)' }} />
-                  Anotações & Observações
-                </label>
-
-                {/* Live Notes Timeline list */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '200px', overflowY: 'auto', paddingRight: '2px' }}>
-                  {notesList.map(note => (
-                    <div 
-                      key={note.id} 
-                      style={{ 
-                        padding: '12px', 
-                        background: 'var(--bg-app)', 
-                        border: '1px solid var(--border-glass)', 
-                        borderRadius: '8px', 
-                        fontSize: '13px',
-                        lineHeight: '1.4'
-                      }}
-                    >
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: '600', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
-                        <span>Anotado</span>
-                        <span>{note.date}</span>
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)' }}>{note.text}</div>
-                    </div>
-                  ))}
-                  {notesList.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic', background: 'var(--bg-app)', border: '1px dashed var(--border-glass)', borderRadius: '8px' }}>
-                      Nenhuma anotação registrada ainda.
-                    </div>
-                  )}
-                </div>
-
-                {/* Add new note input box */}
-                <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                  <textarea 
-                    className="glass-input" 
-                    rows="2" 
-                    placeholder="Escrever observações sobre o cliente..." 
-                    value={newNoteText}
-                    onChange={(e) => setNewNoteText(e.target.value)}
-                    style={{ resize: 'none', padding: '10px', fontSize: '13px', borderRadius: '8px' }}
-                  />
-                  <button 
-                    type="submit" 
-                    className="glass-btn secondary"
-                    style={{ height: '34px', fontSize: '12px', width: 'fit-content', alignSelf: 'flex-end', padding: '0 16px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    Salvar Observação
-                  </button>
-                </form>
-              </div>
-
-            </div>
-
-            {/* Save / Footer actions */}
-            <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid var(--border-glass)', paddingTop: '20px' }}>
-              <button 
-                onClick={() => setSelectedContact(null)}
-                className="glass-btn secondary"
-                style={{ flex: 1, height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleSaveContact}
-                className="glass-btn"
-                style={{ 
-                  flex: 2, 
-                  height: '44px', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  background: 'var(--accent-primary)',
-                  border: 'none',
-                  color: '#fff',
-                  boxShadow: '0 0 16px var(--accent-glow)',
-                  fontWeight: '600'
-                }}
-              >
-                Salvar Alterações
-              </button>
-            </div>
-
-          </div>
-        </>
+            <footer className="contacts-drawer-footer contacts-drawer-reveal"><button type="button" className="contacts-drawer-cancel" onClick={() => setSelectedContact(null)}>Cancelar</button><button type="button" className="contacts-drawer-save" onClick={handleSaveContact}><Check size={17} aria-hidden="true" /> Salvar alterações</button></footer>
+          </aside>
+        </div>
       )}
-
-      {/* Sliding and fading keyframes inline stylesheet */}
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideIn {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-      `}</style>
     </div>
   );
 }

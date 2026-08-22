@@ -1,593 +1,454 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { gsap } from 'gsap';
+import {
+  Activity, AlertCircle, AlertOctagon, Bot, BrainCircuit, Check, CheckCircle2,
+  ChevronDown, ChevronRight, Eye, EyeOff, FileText, Gauge, KeyRound, MessageSquareText,
+  PauseCircle, Radio, Save, ShieldCheck, SlidersHorizontal, Sparkles,
+  TestTube2, WandSparkles, X, Zap,
+} from 'lucide-react';
 import SupabaseService from '../services/supabaseService';
 import OpenAIStatusCard from './OpenAIStatusCard';
 import { useAuth } from '../context/AuthContext';
-import { 
-  Bot, 
-  Sliders, 
-  FileText, 
-  AlertOctagon, 
-  PauseCircle, 
-  Save, 
-  Eye, 
-  EyeOff, 
-  X, 
-  CheckCircle,
-  AlertCircle,
-  MessageSquare
-} from 'lucide-react';
+
+const DEFAULT_SETTINGS = {
+  id: null, tenantId: null, isEnabled: false, agentName: 'Atendente IA',
+  model: 'gpt-4o-mini', apiKeyConfigured: false, temperature: 0.7,
+  systemPrompt: '', negativePrompt: '', welcomeMessage: '', pausePhrases: [],
+};
+
+const PROVIDER_LABELS = {
+  evolution: 'Evolution API', meta: 'WhatsApp Oficial',
+  meta_cloud: 'WhatsApp Oficial', instagram: 'Instagram',
+};
+
+const TABS = [
+  { id: 'prompt', label: 'Prompt', description: 'Identidade & contexto', icon: FileText },
+  { id: 'guidelines', label: 'Diretrizes', description: 'Limites da conversa', icon: ShieldCheck },
+  { id: 'rules', label: 'Regras', description: 'Pausa & handoff', icon: PauseCircle },
+  { id: 'model', label: 'Modelo & Teste', description: 'OpenAI & conexão', icon: TestTube2 },
+];
+
+const getTemperatureLabel = (value) => {
+  if (Number(value) <= 0.3) return 'Preciso & factual';
+  if (Number(value) >= 0.8) return 'Criativo & variado';
+  return 'Equilibrado';
+};
 
 export default function AiAgentSettings() {
   const { effectiveTenantId } = useAuth();
+  const rootRef = useRef(null);
+  const channelPickerRef = useRef(null);
+  const channelDrawerRef = useRef(null);
+  const statusTimerRef = useRef(null);
+  const firstEntranceFinished = useRef(false);
   const [channels, setChannels] = useState([]);
   const [selectedChannelId, setSelectedChannelId] = useState('');
-  
-  const [id, setId] = useState(null);
-  const [tenantId, setTenantId] = useState(null);
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [agentName, setAgentName] = useState('Atendente IA');
-  const [model, setModel] = useState('gpt-4o-mini');
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [apiKey, setApiKey] = useState('');
-  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
-  const [temperature, setTemperature] = useState(0.7);
-  const [systemPrompt, setSystemPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
-  const [welcomeMessage, setWelcomeMessage] = useState('');
-  const [pausePhrases, setPausePhrases] = useState([]);
-  
-  // UI states
   const [showApiKey, setShowApiKey] = useState(false);
   const [newPhrase, setNewPhrase] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('prompt');
+  const [channelDrawerOpen, setChannelDrawerOpen] = useState(false);
+  const [channelsLoaded, setChannelsLoaded] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [loadedChannelId, setLoadedChannelId] = useState('');
+  const [settingsRevision, setSettingsRevision] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState({ type: '', text: '' });
 
-  // Load channels on mount
+  const isLoading = !channelsLoaded || settingsLoading || Boolean(selectedChannelId && loadedChannelId !== selectedChannelId);
+  const selectedChannel = useMemo(
+    () => channels.find((channel) => channel.id === selectedChannelId) || null,
+    [channels, selectedChannelId],
+  );
+  const promptCharacters = settings.systemPrompt.trim().length;
+  const completedSections = [
+    Boolean(settings.agentName.trim() && settings.systemPrompt.trim()),
+    Boolean(settings.negativePrompt.trim()),
+    settings.pausePhrases.length > 0,
+    settings.apiKeyConfigured || Boolean(apiKey.trim()),
+  ].filter(Boolean).length;
+
+  const updateSetting = (key, value) => setSettings((current) => ({ ...current, [key]: value }));
+
+  const showStatus = (type, text) => {
+    window.clearTimeout(statusTimerRef.current);
+    setStatusMsg({ type, text });
+    statusTimerRef.current = window.setTimeout(() => setStatusMsg({ type: '', text: '' }), 4300);
+  };
+
   useEffect(() => {
-    async function init() {
+    let active = true;
+    async function loadChannels() {
+      setChannelsLoaded(false);
+      setLoadedChannelId('');
       try {
-        const chs = await SupabaseService.fetchChannels(effectiveTenantId);
-        setChannels(chs);
-        if (chs.length > 0) {
-          setSelectedChannelId(chs[0].id);
-        } else {
-          setSelectedChannelId('');
-        }
-      } catch (err) {
-        console.error('Error loading channels:', err);
+        const result = await SupabaseService.fetchChannels(effectiveTenantId);
+        if (!active) return;
+        const nextChannels = result || [];
+        setChannels(nextChannels);
+        setSelectedChannelId((current) => (
+          nextChannels.some((channel) => channel.id === current) ? current : nextChannels[0]?.id || ''
+        ));
+      } catch (error) {
+        console.error('[AiAgentSettings] Failed to load channels:', error);
+        if (active) showStatus('error', 'Não foi possível carregar os canais. Atualize a página e tente novamente.');
+      } finally {
+        if (active) setChannelsLoaded(true);
       }
     }
-    init();
+    loadChannels();
+    return () => { active = false; };
   }, [effectiveTenantId]);
 
-  // Load settings when selected channel changes
   useEffect(() => {
+    let active = true;
     async function loadSettings() {
       if (!selectedChannelId) {
-        setIsLoading(false);
+        setSettings({ ...DEFAULT_SETTINGS, tenantId: effectiveTenantId || null });
+        setSettingsLoading(false);
+        setLoadedChannelId('');
+        setSettingsRevision((revision) => revision + 1);
         return;
       }
-      setIsLoading(true);
+      setSettingsLoading(true);
       try {
         const config = await SupabaseService.fetchAiSettings(selectedChannelId);
-        if (config) {
-          setId(config.id);
-          setTenantId(config.tenant_id);
-          setIsEnabled(config.is_enabled);
-          setAgentName(config.agent_name);
-          setModel(config.model);
-          setApiKey('');
-          setApiKeyConfigured(config.api_key_configured === true);
-          setTemperature(config.temperature);
-          setSystemPrompt(config.system_prompt);
-          setNegativePrompt(config.negative_prompt);
-          setWelcomeMessage(config.welcome_message || '');
-          setPausePhrases(config.pause_trigger_phrases || []);
-        } else {
-          // Reset if no settings found for this channel
-          setId(null);
-          const selectedChannel = channels.find(ch => ch.id === selectedChannelId);
-          setTenantId(selectedChannel?.tenantId || effectiveTenantId || null);
-          setIsEnabled(false);
-          setAgentName('Atendente IA');
-          setModel('gpt-4o-mini');
-          setApiKey('');
-          setApiKeyConfigured(false);
-          setTemperature(0.7);
-          setSystemPrompt('');
-          setNegativePrompt('');
-          setWelcomeMessage('');
-          setPausePhrases([]);
-        }
-      } catch (err) {
-        console.error('Error loading AI settings:', err);
-        showStatus('error', 'Falha ao carregar configurações do banco de dados.');
+        if (!active) return;
+        const channel = channels.find((item) => item.id === selectedChannelId);
+        setSettings(config ? {
+          id: config.id,
+          tenantId: config.tenant_id,
+          isEnabled: config.is_enabled === true,
+          agentName: config.agent_name || 'Atendente IA',
+          model: config.model || 'gpt-4o-mini',
+          apiKeyConfigured: config.api_key_configured === true,
+          temperature: Number(config.temperature ?? 0.7),
+          systemPrompt: config.system_prompt || '',
+          negativePrompt: config.negative_prompt || '',
+          welcomeMessage: config.welcome_message || '',
+          pausePhrases: Array.isArray(config.pause_trigger_phrases) ? config.pause_trigger_phrases : [],
+        } : { ...DEFAULT_SETTINGS, tenantId: channel?.tenantId || effectiveTenantId || null });
+        setApiKey('');
+        setShowApiKey(false);
+      } catch (error) {
+        console.error('[AiAgentSettings] Failed to load settings:', error);
+        if (active) showStatus('error', 'Não foi possível carregar a configuração deste canal. Tente novamente.');
       } finally {
-        setIsLoading(false);
+        if (active) {
+          setSettingsLoading(false);
+          setLoadedChannelId(selectedChannelId);
+          setSettingsRevision((revision) => revision + 1);
+        }
       }
     }
     loadSettings();
-  }, [selectedChannelId, channels, effectiveTenantId]);
+    return () => { active = false; };
+  }, [channels, effectiveTenantId, selectedChannelId]);
 
-  function showStatus(type, text) {
-    setStatusMsg({ type, text });
-    setTimeout(() => {
-      setStatusMsg({ type: '', text: '' });
-    }, 4000);
-  }
+  useEffect(() => () => window.clearTimeout(statusTimerRef.current), []);
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    setIsSaving(true);
-    
-    const settingsData = {
-      id,
-      tenant_id: tenantId,
-      channel_id: selectedChannelId,
-      is_enabled: isEnabled,
-      agent_name: agentName,
-      model,
-      ...(apiKey ? { api_key: apiKey } : {}),
-      temperature: Number(temperature),
-      system_prompt: systemPrompt,
-      negative_prompt: negativePrompt,
-      welcome_message: welcomeMessage,
-      pause_trigger_phrases: pausePhrases
+  useEffect(() => {
+    if (!channelDrawerOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (!channelPickerRef.current?.contains(event.target)) setChannelDrawerOpen(false);
     };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setChannelDrawerOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [channelDrawerOpen]);
 
+  useLayoutEffect(() => {
+    const drawer = channelDrawerRef.current;
+    if (!channelDrawerOpen || !drawer) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const context = gsap.context(() => {
+      gsap.fromTo(drawer, { autoAlpha: 0, y: reduceMotion ? -4 : -9, scale: reduceMotion ? 0.99 : 0.955 }, { autoAlpha: 1, y: 0, scale: 1, duration: reduceMotion ? 0.22 : 0.34, ease: 'back.out(1.7)', transformOrigin: 'top center' });
+      gsap.fromTo('.ai-channel-option', { autoAlpha: 0, x: reduceMotion ? -2 : -8 }, { autoAlpha: 1, x: 0, duration: reduceMotion ? 0.18 : 0.28, stagger: reduceMotion ? 0.02 : 0.045, ease: 'power3.out', delay: reduceMotion ? 0.03 : 0.08 });
+    }, drawer);
+    return () => context.revert();
+  }, [channelDrawerOpen]);
+
+  const addPhrase = () => {
+    const phrase = newPhrase.trim().toLocaleLowerCase('pt-BR');
+    if (!phrase || settings.pausePhrases.includes(phrase)) return;
+    updateSetting('pausePhrases', [...settings.pausePhrases, phrase]);
+    setNewPhrase('');
+  };
+
+  const removePhrase = (phraseToRemove) => {
+    updateSetting('pausePhrases', settings.pausePhrases.filter((phrase) => phrase !== phraseToRemove));
+  };
+
+  const handlePhraseKeyDown = (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addPhrase();
+  };
+
+  const handleSave = async (event) => {
+    event.preventDefault();
+    if (!settings.agentName.trim()) {
+      setActiveTab('prompt');
+      showStatus('error', 'Informe o nome do agente antes de salvar.');
+      window.setTimeout(() => rootRef.current?.querySelector('#ai-agent-name')?.focus(), 0);
+      return;
+    }
+    if (!settings.systemPrompt.trim()) {
+      setActiveTab('prompt');
+      showStatus('error', 'Escreva o prompt principal antes de salvar.');
+      window.setTimeout(() => rootRef.current?.querySelector('#ai-system-prompt')?.focus(), 0);
+      return;
+    }
+    setIsSaving(true);
     try {
-      const result = await SupabaseService.saveAiSettings(settingsData);
-      if (result) {
-        if (typeof result === 'object' && result.id) {
-          setId(result.id);
-          setTenantId(result.tenant_id);
-          setApiKeyConfigured(result.api_key_configured === true || apiKeyConfigured || Boolean(apiKey));
-        }
-        if (apiKey) setApiKey('');
-        showStatus('success', 'Configurações do Agente de IA salvas com sucesso!');
-      } else {
-        showStatus('error', 'Ocorreu um erro ao salvar as configurações.');
-      }
-    } catch (err) {
-      console.error('Save settings error:', err);
-      showStatus('error', 'Falha na conexão com o Supabase.');
+      const result = await SupabaseService.saveAiSettings({
+        id: settings.id,
+        tenant_id: settings.tenantId,
+        channel_id: selectedChannelId,
+        is_enabled: settings.isEnabled,
+        agent_name: settings.agentName.trim(),
+        model: settings.model,
+        ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+        temperature: Number(settings.temperature),
+        system_prompt: settings.systemPrompt,
+        negative_prompt: settings.negativePrompt,
+        welcome_message: settings.welcomeMessage,
+        pause_trigger_phrases: settings.pausePhrases,
+      });
+      if (!result) throw new Error('AI settings were not persisted');
+      setSettings((current) => ({
+        ...current,
+        id: result.id || current.id,
+        tenantId: result.tenant_id || current.tenantId,
+        apiKeyConfigured: result.api_key_configured === true || current.apiKeyConfigured || Boolean(apiKey.trim()),
+      }));
+      setApiKey('');
+      setShowApiKey(false);
+      showStatus('success', 'Configurações salvas com segurança para este canal.');
+    } catch (error) {
+      console.error('[AiAgentSettings] Save failed:', error);
+      showStatus('error', 'Não foi possível salvar. Verifique a conexão e tente novamente.');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const addPhrase = () => {
-    const trimmed = newPhrase.trim().toLowerCase();
-    if (trimmed && !pausePhrases.includes(trimmed)) {
-      setPausePhrases([...pausePhrases, trimmed]);
-      setNewPhrase('');
-    }
-  };
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root || isLoading) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const distance = reduceMotion ? 0.45 : 1;
+    const speed = reduceMotion ? 0.72 : 1;
+    firstEntranceFinished.current = false;
+    const context = gsap.context(() => {
+      const targets = [root.querySelector('.ai-page-header'), ...gsap.utils.toArray('.ai-metric-card'), root.querySelector('.ai-channel-strip'), root.querySelector('.ai-workspace')].filter(Boolean);
+      gsap.set(targets, { willChange: 'transform,opacity' });
+      gsap.timeline({
+        delay: 0.05,
+        defaults: { ease: 'power3.out' },
+        onComplete: () => {
+          firstEntranceFinished.current = true;
+          gsap.set(targets, { clearProps: 'transform,opacity,visibility,willChange' });
+        },
+      })
+        .fromTo('.ai-page-header', { autoAlpha: 0, y: 32 * distance }, { autoAlpha: 1, y: 0, duration: 0.56 * speed }, 0)
+        .fromTo('.ai-metric-card', { autoAlpha: 0, y: 24 * distance, scale: reduceMotion ? 0.98 : 0.94 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48 * speed, stagger: 0.075 * speed }, 0.14 * speed)
+        .fromTo('.ai-channel-strip', { autoAlpha: 0, y: 20 * distance }, { autoAlpha: 1, y: 0, duration: 0.45 * speed }, 0.35 * speed)
+        .fromTo('.ai-workspace', { autoAlpha: 0, y: 25 * distance, scale: reduceMotion ? 0.998 : 0.992 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.5 * speed }, 0.48 * speed)
+        .fromTo('.ai-tab-button', { autoAlpha: 0, x: -14 * distance }, { autoAlpha: 1, x: 0, duration: 0.34 * speed, stagger: 0.055 * speed }, 0.58 * speed)
+        .fromTo('.ai-tab-panel > *', { autoAlpha: 0, y: 14 * distance }, { autoAlpha: 1, y: 0, duration: 0.35 * speed, stagger: 0.045 * speed }, 0.7 * speed);
+      if (!reduceMotion) {
+        gsap.to('.ai-ambient-orbit', { rotation: 360, duration: 34, repeat: -1, ease: 'none', transformOrigin: 'center' });
+        gsap.to('.ai-metric-icon', { y: -3, rotation: (index) => index % 2 ? 4 : -4, duration: 1.9, repeat: -1, yoyo: true, stagger: 0.14, ease: 'sine.inOut' });
+      }
+    }, root);
+    return () => context.revert();
+  }, [isLoading, settingsRevision]);
 
-  const removePhrase = (phraseToRemove) => {
-    setPausePhrases(pausePhrases.filter(p => p !== phraseToRemove));
-  };
+  useLayoutEffect(() => {
+    const panel = rootRef.current?.querySelector('.ai-tab-panel');
+    if (!panel || isLoading || !firstEntranceFinished.current) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const context = gsap.context(() => {
+      gsap.fromTo(panel, { autoAlpha: 0, y: reduceMotion ? 7 : 17, scale: reduceMotion ? 0.999 : 0.994 }, { autoAlpha: 1, y: 0, scale: 1, duration: reduceMotion ? 0.28 : 0.4, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+      gsap.fromTo(panel.children, { autoAlpha: 0, y: reduceMotion ? 5 : 12 }, { autoAlpha: 1, y: 0, duration: reduceMotion ? 0.22 : 0.33, stagger: reduceMotion ? 0.025 : 0.045, ease: 'power3.out', clearProps: 'transform,opacity,visibility' });
+    }, panel);
+    return () => context.revert();
+  }, [activeTab, isLoading]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addPhrase();
-    }
-  };
+  useEffect(() => {
+    const root = rootRef.current;
+    const glow = root?.querySelector('.ai-cursor-glow');
+    if (!root || !glow) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    gsap.set(glow, { xPercent: -50, yPercent: -50 });
+    const moveX = gsap.quickTo(glow, 'x', { duration: 0.55, ease: 'power3.out' });
+    const moveY = gsap.quickTo(glow, 'y', { duration: 0.55, ease: 'power3.out' });
+    const move = (event) => { moveX(event.clientX); moveY(event.clientY); };
+    root.addEventListener('pointermove', move, { passive: true });
+    return () => root.removeEventListener('pointermove', move);
+  }, []);
 
-  if (isLoading) {
-    return (
-      <div className="content-wrapper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-          <div className="pulsing-dot" style={{ width: '12px', height: '12px' }}></div>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Carregando configurações do Agente...</span>
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || isLoading) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const buttons = [...root.querySelectorAll('.ai-animated-action')];
+    const cleanups = buttons.map((button) => {
+      const enter = () => gsap.to(button, { y: reduceMotion ? -1 : -3, scale: reduceMotion ? 1.012 : 1.035, duration: reduceMotion ? 0.13 : 0.22, ease: 'back.out(2)', overwrite: 'auto' });
+      const leave = () => gsap.to(button, { y: 0, scale: 1, duration: reduceMotion ? 0.14 : 0.26, ease: 'power3.out', overwrite: 'auto' });
+      const down = () => gsap.to(button, { y: 0, scale: reduceMotion ? 0.985 : 0.95, duration: 0.11, ease: 'power2.out', overwrite: 'auto' });
+      button.addEventListener('pointerenter', enter);
+      button.addEventListener('pointerleave', leave);
+      button.addEventListener('pointerdown', down);
+      return () => { button.removeEventListener('pointerenter', enter); button.removeEventListener('pointerleave', leave); button.removeEventListener('pointerdown', down); };
+    });
+    return () => { cleanups.forEach((cleanup) => cleanup()); gsap.killTweensOf(buttons); };
+  }, [activeTab, channelDrawerOpen, isLoading, settings.pausePhrases.length]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!root || isLoading || !supportsHover) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const cards = [...root.querySelectorAll('.ai-metric-card')];
+    const cleanups = cards.map((card) => {
+      let bounds;
+      const icon = card.querySelector('.ai-metric-icon');
+      const shine = card.querySelector('.ai-metric-shine');
+      const rotateX = gsap.quickTo(card, 'rotationX', { duration: 0.32, ease: 'power3.out' });
+      const rotateY = gsap.quickTo(card, 'rotationY', { duration: 0.32, ease: 'power3.out' });
+      const lift = gsap.quickTo(card, 'y', { duration: 0.28, ease: 'power3.out' });
+      const scale = gsap.quickTo(card, 'scale', { duration: 0.28, ease: 'power3.out' });
+      const enter = () => {
+        bounds = card.getBoundingClientRect();
+        gsap.set(card, { transformPerspective: 850 });
+        lift(reduceMotion ? -3 : -8);
+        scale(reduceMotion ? 1.008 : 1.025);
+        if (icon) gsap.to(icon, { scale: reduceMotion ? 1.03 : 1.13, rotation: reduceMotion ? 2 : 7, duration: 0.28, ease: 'back.out(2)', overwrite: 'auto' });
+        if (shine) gsap.fromTo(shine, { xPercent: -145, autoAlpha: 0 }, { xPercent: 245, autoAlpha: reduceMotion ? 0.3 : 0.68, duration: reduceMotion ? 0.5 : 0.78, ease: 'power2.out', overwrite: 'auto' });
+      };
+      const move = (event) => {
+        if (!bounds) return;
+        rotateX((((event.clientY - bounds.top) / bounds.height) - 0.5) * -7);
+        rotateY((((event.clientX - bounds.left) / bounds.width) - 0.5) * 8);
+      };
+      const leave = () => {
+        bounds = undefined;
+        rotateX(0);
+        rotateY(0);
+        lift(0);
+        scale(1);
+        if (icon) gsap.to(icon, { scale: 1, rotation: 0, duration: 0.3, ease: 'power3.out', overwrite: 'auto' });
+        if (shine) gsap.to(shine, { autoAlpha: 0, duration: 0.18, overwrite: 'auto' });
+      };
+      card.addEventListener('pointerenter', enter); card.addEventListener('pointermove', move); card.addEventListener('pointerleave', leave);
+      return () => { card.removeEventListener('pointerenter', enter); card.removeEventListener('pointermove', move); card.removeEventListener('pointerleave', leave); };
+    });
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+      gsap.killTweensOf(cards);
+      gsap.killTweensOf(root.querySelectorAll('.ai-metric-icon, .ai-metric-shine'));
+      gsap.set(cards, { clearProps: 'transform,transformPerspective' });
+    };
+  }, [isLoading]);
+
+  useLayoutEffect(() => {
+    if (isLoading) return undefined;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const counters = [...(rootRef.current?.querySelectorAll('[data-ai-kpi]') || [])];
+    const tweens = counters.map((element) => {
+      const target = Number(element.dataset.aiKpi) || 0;
+      const counter = { value: 0 };
+      const render = () => { element.textContent = Math.round(counter.value).toLocaleString('pt-BR'); };
+      render();
+      return gsap.to(counter, { value: target, duration: reduceMotion ? 0.38 : 1, delay: reduceMotion ? 0.2 : 0.47, ease: 'power3.out', onUpdate: render, onComplete: render });
+    });
+    return () => tweens.forEach((tween) => tween.kill());
+  }, [completedSections, isLoading, promptCharacters, settings.pausePhrases.length]);
+
+  const renderPromptPanel = () => (
+    <div className="ai-tab-panel" id="ai-panel-prompt" role="tabpanel" aria-labelledby="ai-tab-prompt">
+      <section className="ai-editor-card ai-editor-card--identity">
+        <header className="ai-card-heading"><span><Bot size={18} aria-hidden="true" /></span><div><small>Identidade</small><h2>Quem fala com o cliente?</h2><p>Defina o nome e a primeira mensagem da experiência.</p></div></header>
+        <div className="ai-field-grid">
+          <div className="ai-field"><label htmlFor="ai-agent-name">Nome do Agente</label><input id="ai-agent-name" name="agent_name" type="text" autoComplete="off" value={settings.agentName} onChange={(event) => updateSetting('agentName', event.target.value)} placeholder="Ex.: Assistente Wiks…" aria-required="true" /></div>
+          <div className="ai-field"><label htmlFor="ai-welcome-message">Mensagem de Boas-Vindas <em>Opcional</em></label><textarea id="ai-welcome-message" name="welcome_message" autoComplete="off" value={settings.welcomeMessage} onChange={(event) => updateSetting('welcomeMessage', event.target.value)} placeholder="Ex.: Olá! Como posso ajudar você hoje?…" rows="3" /><small>Se ficar em branco, a IA responde diretamente desde a primeira mensagem.</small></div>
         </div>
+      </section>
+      <section className="ai-editor-card ai-editor-card--prompt">
+        <header className="ai-card-heading"><span><BrainCircuit size={18} aria-hidden="true" /></span><div><small>Prompt Principal</small><h2>Contexto, personalidade & objetivo</h2><p>Escreva livremente quem o agente representa, o que ele sabe e como deve conduzir a conversa.</p></div><b>{promptCharacters.toLocaleString('pt-BR')} caracteres</b></header>
+        <div className="ai-field"><label htmlFor="ai-system-prompt">Prompt do Sistema</label><textarea id="ai-system-prompt" name="system_prompt" autoComplete="off" value={settings.systemPrompt} onChange={(event) => updateSetting('systemPrompt', event.target.value)} placeholder="Você é o assistente virtual da empresa. Seu objetivo é acolher, entender a necessidade e orientar o próximo passo…" rows="12" aria-required="true" /><small>Quanto mais claros forem contexto, objetivo, tom e informações do negócio, mais consistente será a resposta.</small></div>
+      </section>
+    </div>
+  );
+
+  const renderGuidelinesPanel = () => (
+    <div className="ai-tab-panel" id="ai-panel-guidelines" role="tabpanel" aria-labelledby="ai-tab-guidelines">
+      <section className="ai-editor-card ai-editor-card--guardrail">
+        <header className="ai-card-heading"><span><AlertOctagon size={18} aria-hidden="true" /></span><div><small>Diretrizes</small><h2>O que o agente não pode fazer?</h2><p>Cadastre manualmente limites comerciais, éticos e operacionais.</p></div></header>
+        <div className="ai-guideline-layout">
+          <div className="ai-field"><label htmlFor="ai-negative-prompt">Instruções Negativas</label><textarea id="ai-negative-prompt" name="negative_prompt" autoComplete="off" value={settings.negativePrompt} onChange={(event) => updateSetting('negativePrompt', event.target.value)} placeholder={'Ex.:\n- Nunca ofereça descontos sem autorização.\n- Não invente preços ou prazos.\n- Encaminhe assuntos sensíveis para um humano…'} rows="12" /><small>Use uma regra por linha e descreva também o comportamento esperado quando a regra for acionada.</small></div>
+          <aside className="ai-guideline-tips" aria-label="Sugestões de diretrizes"><span><WandSparkles size={17} aria-hidden="true" /></span><h3>Checklist de Segurança</h3><p>Você controla todo o conteúdo. Considere registrar:</p><ul><li>Limites de preço e desconto</li><li>Assuntos que exigem especialista</li><li>Dados que nunca devem ser solicitados</li><li>Quando admitir que não sabe</li><li>Quando transferir para atendimento humano</li></ul></aside>
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderRulesPanel = () => (
+    <div className="ai-tab-panel" id="ai-panel-rules" role="tabpanel" aria-labelledby="ai-tab-rules">
+      <section className={`ai-activation-card ${settings.isEnabled ? 'is-active' : ''}`}>
+        <span className="ai-activation-icon"><Radio size={20} aria-hidden="true" /></span><div><small>Estado da Automação</small><h2>{settings.isEnabled ? 'Agente ativo neste canal' : 'Agente pausado neste canal'}</h2><p>{settings.isEnabled ? 'Novas mensagens podem ser respondidas automaticamente conforme as regras.' : 'As configurações ficam salvas, mas nenhuma resposta automática será iniciada.'}</p></div>
+        <label className="ai-switch"><input name="is_enabled" type="checkbox" checked={settings.isEnabled} onChange={(event) => updateSetting('isEnabled', event.target.checked)} /><span aria-hidden="true"><i /></span><b>{settings.isEnabled ? 'Ativo' : 'Pausado'}</b></label>
+      </section>
+      <section className="ai-editor-card ai-editor-card--rules">
+        <header className="ai-card-heading"><span><PauseCircle size={18} aria-hidden="true" /></span><div><small>Handoff Humano</small><h2>Gatilhos de pausa</h2><p>Ao identificar uma dessas frases, o robô pausa e o contato recebe a etiqueta “IA Inativa”.</p></div><b>{settings.pausePhrases.length.toLocaleString('pt-BR')} regras</b></header>
+        <div className="ai-rule-composer"><label htmlFor="ai-pause-phrase">Nova Frase de Pausa</label><div><input id="ai-pause-phrase" name="pause_phrase" type="text" autoComplete="off" value={newPhrase} onChange={(event) => setNewPhrase(event.target.value)} onKeyDown={handlePhraseKeyDown} placeholder="Ex.: quero falar com um atendente…" /><button type="button" className="ai-secondary-action ai-animated-action" onClick={addPhrase}><Zap size={15} aria-hidden="true" /> Adicionar Gatilho</button></div><small>Pressione Enter ou use o botão para adicionar.</small></div>
+        <div className="ai-rule-list" aria-label="Gatilhos configurados">{settings.pausePhrases.length > 0 ? settings.pausePhrases.map((phrase, index) => <div className="ai-rule-chip" key={phrase}><span>{String(index + 1).padStart(2, '0')}</span><p>{phrase}</p><button type="button" className="ai-animated-action" onClick={() => removePhrase(phrase)} aria-label={`Remover gatilho ${phrase}`}><X size={14} aria-hidden="true" /></button></div>) : <div className="ai-empty-rules"><PauseCircle size={23} aria-hidden="true" /><strong>Nenhum gatilho cadastrado</strong><p>Adicione frases que devem interromper a automação e chamar o time.</p></div>}</div>
+      </section>
+    </div>
+  );
+
+  const renderModelPanel = () => (
+    <div className="ai-tab-panel" id="ai-panel-model" role="tabpanel" aria-labelledby="ai-tab-model">
+      <div className="ai-model-grid">
+        <section className="ai-editor-card ai-editor-card--model">
+          <header className="ai-card-heading"><span><SlidersHorizontal size={18} aria-hidden="true" /></span><div><small>Provedor & Modelo</small><h2>OpenAI</h2><p>Escolha o modelo e o equilíbrio ideal para este canal.</p></div><i className="ai-provider-badge"><CheckCircle2 size={13} aria-hidden="true" /> API Oficial</i></header>
+          <div className="ai-field"><label htmlFor="ai-model">Modelo de IA</label><select id="ai-model" name="model" value={settings.model} onChange={(event) => updateSetting('model', event.target.value)}><option value="gpt-4o-mini">GPT-4o Mini — rápido & econômico</option><option value="gpt-4o">GPT-4o — raciocínio avançado</option></select></div>
+          <div className="ai-temperature-field"><div><label htmlFor="ai-temperature">Temperatura</label><span>{Number(settings.temperature).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></div><input id="ai-temperature" name="temperature" type="range" min="0" max="1.2" step="0.1" value={settings.temperature} onChange={(event) => updateSetting('temperature', Number(event.target.value))} aria-describedby="ai-temperature-hint" /><div className="ai-temperature-scale"><span>Preciso</span><strong id="ai-temperature-hint">{getTemperatureLabel(settings.temperature)}</strong><span>Criativo</span></div></div>
+          <div className="ai-field"><label htmlFor="ai-api-key">Atualizar Chave da API <em>Write-only</em></label><div className="ai-secret-field"><KeyRound size={16} aria-hidden="true" /><input id="ai-api-key" name="openai_api_key" type={showApiKey ? 'text' : 'password'} autoComplete="new-password" spellCheck="false" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={settings.apiKeyConfigured ? 'Cole somente se quiser trocar a chave…' : 'Cole sua chave sk-proj-…'} /><button type="button" className="ai-animated-action" onClick={() => setShowApiKey((visible) => !visible)} aria-label={showApiKey ? 'Ocultar chave da API' : 'Mostrar chave da API'}>{showApiKey ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}</button></div><small>A chave salva nunca retorna ao navegador. Este campo serve apenas para cadastrar ou substituir.</small></div>
+        </section>
+        <OpenAIStatusCard channelId={selectedChannelId} model={settings.model} apiKeyConfigured={settings.apiKeyConfigured} />
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="content-wrapper animated-fade-in" style={{ height: '100%', overflowY: 'auto', padding: '24px 32px' }}>
-      
-      {/* Header section */}
-      <div className="page-header" style={{ marginBottom: '24px' }}>
-        <div className="page-title">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{
-              background: 'var(--accent-primary)',
-              color: '#fff',
-              padding: '6px',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              boxShadow: '0 4px 12px var(--accent-glow)'
-            }}>
-              <Bot size={22} />
-            </div>
-            <h1>Configurações do Agente de IA</h1>
-          </div>
-          <p>Defina a identidade, as diretrizes da persona, chaves de API e regras de handoff com humanos.</p>
-        </div>
-      </div>
-
-      {/* OpenAI Status Card */}
-      <OpenAIStatusCard channelId={selectedChannelId} />
-
-      {/* Channel Selector */}
-      <div className="glass-panel" style={{ marginBottom: '24px', padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <h2 style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>Selecione o Canal:</h2>
-        <select 
-          className="glass-input" 
-          style={{ maxWidth: '300px' }}
-          value={selectedChannelId}
-          onChange={(e) => setSelectedChannelId(e.target.value)}
-        >
-          {channels.length === 0 ? (
-            <option value="">Nenhum canal encontrado</option>
-          ) : (
-            channels.map(ch => (
-              <option key={ch.id} value={ch.id}>{ch.name} ({ch.provider})</option>
-            ))
-          )}
-        </select>
-        {!selectedChannelId && channels.length > 0 && (
-          <span style={{ fontSize: '12px', color: 'var(--color-status-lost)' }}>Selecione um canal para configurar a IA.</span>
-        )}
-      </div>
-
-      {/* Alert banner for save status */}
-      {statusMsg.text && (
-        <div className={`builder-alert-bar animated-fade-in`} style={{
-          position: 'fixed',
-          top: '24px',
-          right: '24px',
-          zIndex: 1000,
-          background: 'var(--bg-surface-solid)',
-          border: `1px solid ${statusMsg.type === 'success' ? 'var(--color-status-won)' : 'var(--color-status-lost)'}`,
-          padding: '12px 20px',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-lg)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}>
-          {statusMsg.type === 'success' ? (
-            <CheckCircle size={18} style={{ color: 'var(--color-status-won)' }} />
-          ) : (
-            <AlertCircle size={18} style={{ color: 'var(--color-status-lost)' }} />
-          )}
-          <span style={{ fontWeight: '500', fontSize: '13px' }}>{statusMsg.text}</span>
-        </div>
-      )}
-
-      {selectedChannelId && (
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1000px', paddingBottom: '40px' }}>
-        
-        {/* Row 1: Global Status & Core Settings */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-          
-          {/* Card: Status & Model */}
-          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-              <Bot size={18} style={{ color: 'var(--accent-primary)' }} />
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Status & Modelo</h2>
-            </div>
-
-            {/* Enable Toggle Switch */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'var(--bg-surface-hover)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-glass)' }}>
-              <div>
-                <span style={{ fontSize: '13px', fontWeight: '600', display: 'block', color: 'var(--text-primary)' }}>Ativar Robô neste Canal</span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Habilitar resposta automática por IA para este canal</span>
-              </div>
-              <label className="theme-toggle-switch" style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={isEnabled} 
-                  onChange={(e) => setIsEnabled(e.target.checked)}
-                  style={{ opacity: 0, width: 0, height: 0 }} 
-                />
-                <span style={{
-                  position: 'absolute',
-                  cursor: 'pointer',
-                  top: 0, left: 0, right: 0, bottom: 0,
-                  backgroundColor: isEnabled ? 'var(--accent-primary)' : 'var(--text-muted)',
-                  borderRadius: '34px',
-                  transition: '0.3s',
-                  boxShadow: isEnabled ? '0 0 10px var(--accent-glow)' : 'none'
-                }}>
-                  <span style={{
-                    position: 'absolute',
-                    content: '""',
-                    height: '18px', width: '18px',
-                    left: isEnabled ? '26px' : '3px',
-                    bottom: '3px',
-                    backgroundColor: 'white',
-                    borderRadius: '50%',
-                    transition: '0.3s'
-                  }}></span>
-                </span>
-              </label>
-            </div>
-
-            {/* Agent Name */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Nome do Agente</label>
-              <input 
-                type="text" 
-                className="glass-input" 
-                value={agentName}
-                onChange={(e) => setAgentName(e.target.value)}
-                placeholder="Ex: Assistente Wiks"
-                required
-              />
-            </div>
-
-            {/* Model Select */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Modelo de IA</label>
-              <select 
-                className="glass-input" 
-                style={{ appearance: 'none', backgroundPosition: 'right 12px center', backgroundRepeat: 'no-repeat', paddingRight: '32px' }}
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                <option value="gpt-4o-mini">GPT-4o Mini (Recomendado – Rápido e Barato)</option>
-                <option value="gpt-4o">GPT-4o (Avançado – Raciocínio Complexo)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Card: Parâmetros & API */}
-          <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-              <Sliders size={18} style={{ color: 'var(--accent-primary)' }} />
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Parâmetros & Credenciais</h2>
-            </div>
-
-            {/* Temperature Slider */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Temperatura ({temperature})</label>
-                <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--accent-secondary)' }}>
-                  {temperature <= 0.3 ? 'Mais Preciso/Factual' : temperature >= 0.8 ? 'Mais Criativo/Variado' : 'Equilibrado'}
-                </span>
-              </div>
-              <input 
-                type="range" 
-                min="0" 
-                max="1.2" 
-                step="0.1" 
-                value={temperature}
-                onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                style={{ 
-                  width: '100%', 
-                  accentColor: 'var(--accent-primary)',
-                  background: 'var(--border-glass)',
-                  height: '6px',
-                  borderRadius: '3px',
-                  cursor: 'pointer'
-                }}
-              />
-            </div>
-
-            {/* API Key Status & Write-Only Input */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Status da Chave de API</label>
-              <div style={{
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-surface-hover)',
-                border: '1px solid var(--border-glass)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <div style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  background: apiKeyConfigured ? 'var(--color-status-won)' : 'var(--color-status-contacted)',
-                  boxShadow: apiKeyConfigured ? '0 0 8px var(--color-status-won)' : 'none'
-                }} />
-                <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                  {apiKeyConfigured
-                    ? 'Chave configurada com segurança (não exibida)'
-                    : 'Nenhuma chave OpenAI configurada neste canal'}
-                </span>
-              </div>
-
-              {/* Write-Only Rotation Input */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Atualizar / Rotacionar Chave (Write-Only)
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type={showApiKey ? 'text' : 'password'} 
-                    className="glass-input" 
-                    style={{ paddingRight: '40px' }}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Cole uma nova chave sk-proj-... para atualizar"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    style={{
-                      position: 'absolute',
-                      right: '12px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center'
-                    }}
-                  >
-                    {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: '1.3' }}>
-                  Este campo opera em modo <strong>Write-Only</strong> (apenas gravação): a chave salva é enviada ao banco com segurança e nunca é lida ou exposta no navegador.
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Mensagem de Boas-Vindas (Opcional) */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-            <MessageSquare size={18} style={{ color: 'var(--accent-primary)' }} />
-            <div>
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Mensagem de Boas-Vindas (Opcional)</h2>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Se configurada, esta mensagem será enviada automaticamente no primeiro contato do cliente. Deixe em branco se quiser que o Agente de IA responda diretamente usando Inteligência Artificial desde a primeira mensagem.
-              </p>
-            </div>
-          </div>
-          <textarea
-            className="glass-input"
-            style={{ minHeight: '80px', fontSize: '12.5px', padding: '12px', lineHeight: '1.5' }}
-            value={welcomeMessage}
-            onChange={(e) => setWelcomeMessage(e.target.value)}
-            placeholder="Ex: Olá! Seja bem-vindo à Clínica Estética. Como posso te ajudar hoje?"
-          />
-        </div>
-
-        {/* System Prompt (Persona / Context) */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-            <FileText size={18} style={{ color: 'var(--accent-primary)' }} />
-            <div>
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Persona & Diretrizes (System Prompt)</h2>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Escreva as regras de comportamento do agente, quem ele representa, e informações sobre a empresa.</p>
-            </div>
-          </div>
-          <textarea
-            className="glass-input"
-            style={{ minHeight: '160px', fontSize: '12.5px', padding: '12px', lineHeight: '1.5' }}
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            placeholder="Você é um assistente virtual da barbearia The Barber. Seu objetivo é ajudar os clientes a agendar horários, tirar dúvidas sobre serviços e preços...
-Seja simpático, use emojis e responda em parágrafos curtos."
-            required
-          />
-        </div>
-
-        {/* Negative Prompt (Constraints) */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-            <AlertOctagon size={18} style={{ color: 'var(--color-status-lost)' }} />
-            <div>
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Instruções Negativas (O QUE NÃO FAZER)</h2>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Defina explicitamente limites éticos, regras de descontos e tópicos proibidos.</p>
-            </div>
-          </div>
-          <textarea
-            className="glass-input"
-            style={{ minHeight: '100px', fontSize: '12.5px', padding: '12px', borderLeft: '3px solid var(--color-status-lost)', lineHeight: '1.5' }}
-            value={negativePrompt}
-            onChange={(e) => setNegativePrompt(e.target.value)}
-            placeholder="- NUNCA mencione concorrentes diretos.
-- NUNCA dê descontos sem autorização manual.
-- NUNCA fale sobre assuntos políticos ou religiosos."
-          />
-        </div>
-
-        {/* Pause Trigger Phrases */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '12px' }}>
-            <PauseCircle size={18} style={{ color: 'var(--color-status-contacted)' }} />
-            <div>
-              <h2 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>Gatilhos de Handoff & Pausa</h2>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Quando o cliente falar qualquer uma dessas frases, o robô pausará automaticamente e adicionará a tag 'IA Inativa' ao lead.</p>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '8px', background: 'var(--bg-app)', border: '1px solid var(--border-glass)', borderRadius: 'var(--radius-md)' }}>
-            {/* Tag List */}
-            {pausePhrases.map(phrase => (
-              <span key={phrase} style={{
-                background: 'var(--bg-surface-hover)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-glass)',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontWeight: '500'
-              }}>
-                {phrase}
-                <button
-                  type="button"
-                  onClick={() => removePhrase(phrase)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: 0
-                  }}
-                >
-                  <X size={12} style={{ strokeWidth: 3 }} />
-                </button>
-              </span>
-            ))}
-
-            {/* Input tag */}
-            <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: '150px' }}>
-              <input
-                type="text"
-                placeholder={pausePhrases.length === 0 ? "Ex: falar com humano, atendente..." : "Nova frase..."}
-                value={newPhrase}
-                onChange={(e) => setNewPhrase(e.target.value)}
-                onKeyDown={handleKeyDown}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  outline: 'none',
-                  color: 'var(--text-primary)',
-                  fontSize: '12px',
-                  width: '100%',
-                  padding: '4px'
-                }}
-              />
-              <button
-                type="button"
-                className="glass-btn secondary"
-                onClick={addPhrase}
-              >
-                Adicionar
-              </button>
-            </div>
-          </div>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Pressione Enter ou clique no botão '+' para adicionar a frase como gatilho de pausa.</span>
-        </div>
-
-        {/* Save button card */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="glass-btn"
-            style={{
-              padding: '12px 28px',
-              fontSize: '14px',
-              opacity: isSaving ? 0.7 : 1,
-            }}
-          >
-            <Save size={16} />
-            {isSaving ? 'Salvando...' : 'Salvar Configurações'}
-          </button>
-        </div>
-
+    <div ref={rootRef} className={`content-wrapper ai-agent-page ${isLoading ? 'is-loading' : 'is-ready'}`} aria-busy={isLoading}>
+      <div className="ai-cursor-glow" aria-hidden="true" />
+      <div className="ai-ambient-orbit ai-ambient-orbit--one" aria-hidden="true" />
+      <div className="ai-ambient-orbit ai-ambient-orbit--two" aria-hidden="true" />
+      {isLoading && <div className="ai-loading-overlay" role="status" aria-live="polite"><span><BrainCircuit size={21} aria-hidden="true" /></span><strong>Preparando o agente…</strong><small>Carregando canal, prompt e regras reais.</small></div>}
+      {statusMsg.text && <div className={`ai-toast is-${statusMsg.type}`} role="status" aria-live="polite"><span>{statusMsg.type === 'success' ? <Check size={17} aria-hidden="true" /> : <AlertCircle size={17} aria-hidden="true" />}</span><p>{statusMsg.text}</p><button type="button" onClick={() => setStatusMsg({ type: '', text: '' })} aria-label="Fechar aviso"><X size={15} aria-hidden="true" /></button></div>}
+      <header className="ai-page-header"><div><span className="ai-overline"><Sparkles size={13} aria-hidden="true" /> Inteligência Conversacional</span><h1>Agente de IA</h1><p>Configure a personalidade, as regras e o modelo que atende cada canal.</p></div><button type="button" className="ai-primary-action ai-animated-action" disabled={!selectedChannelId || isSaving} onClick={handleSave}><Save size={16} aria-hidden="true" />{isSaving ? 'Salvando…' : 'Salvar Configuração'}</button></header>
+      <section className="ai-metrics" aria-label="Resumo do Agente de IA">
+        <article className="ai-metric-card is-mint"><span className="ai-metric-shine" aria-hidden="true" /><span><small>Estado do Agente</small><strong className="ai-kpi-label">{settings.isEnabled ? 'Ativo' : 'Pausado'}</strong><p>{settings.isEnabled ? 'Respondendo automaticamente' : 'Automação desativada'}</p></span><i className="ai-metric-icon"><Activity size={18} aria-hidden="true" /></i></article>
+        <article className="ai-metric-card is-blue"><span className="ai-metric-shine" aria-hidden="true" /><span><small>Prompt Configurado</small><strong data-ai-kpi={promptCharacters}>{promptCharacters}</strong><p>caracteres de contexto</p></span><i className="ai-metric-icon"><MessageSquareText size={18} aria-hidden="true" /></i></article>
+        <article className="ai-metric-card is-cyan"><span className="ai-metric-shine" aria-hidden="true" /><span><small>Regras de Handoff</small><strong data-ai-kpi={settings.pausePhrases.length}>{settings.pausePhrases.length}</strong><p>gatilhos de pausa ativos</p></span><i className="ai-metric-icon"><PauseCircle size={18} aria-hidden="true" /></i></article>
+        <article className="ai-metric-card is-lime"><span className="ai-metric-shine" aria-hidden="true" /><span><small>Configuração</small><strong data-ai-kpi={completedSections}>{completedSections}</strong><p>de 4 áreas preenchidas</p></span><i className="ai-metric-icon"><Gauge size={18} aria-hidden="true" /></i></article>
+      </section>
+      <section className="ai-channel-strip"><span className="ai-channel-icon"><Radio size={18} aria-hidden="true" /></span><div><small>Canal em Configuração</small><strong>{selectedChannel?.name || 'Nenhum canal conectado'}</strong><p>{selectedChannel ? `${PROVIDER_LABELS[selectedChannel.provider] || selectedChannel.provider} · configurações isoladas neste canal` : 'Conecte um canal para liberar as configurações do agente.'}</p></div><div ref={channelPickerRef} className={`ai-channel-picker ${channelDrawerOpen ? 'is-open' : ''}`}><button type="button" className="ai-channel-trigger ai-animated-action" onClick={() => setChannelDrawerOpen((open) => !open)} aria-haspopup="listbox" aria-expanded={channelDrawerOpen} aria-controls="ai-channel-options" disabled={channels.length === 0}><span className="ai-channel-trigger-icon"><Radio size={15} aria-hidden="true" /></span><span className="ai-channel-trigger-copy"><small>Trocar Canal</small><strong>{selectedChannel ? `${selectedChannel.name} · ${PROVIDER_LABELS[selectedChannel.provider] || selectedChannel.provider}` : 'Nenhum canal conectado'}</strong></span><ChevronDown className="ai-channel-trigger-chevron" size={15} aria-hidden="true" /></button>{channelDrawerOpen && <div ref={channelDrawerRef} id="ai-channel-options" className="ai-channel-drawer" role="listbox" aria-label="Trocar Canal"><div className="ai-channel-drawer-heading"><span>Escolha o Canal</span><small>{channels.length.toLocaleString('pt-BR')} {channels.length === 1 ? 'opção' : 'opções'}</small></div><div className="ai-channel-options">{channels.map((channel) => { const selected = channel.id === selectedChannelId; return <button key={channel.id} type="button" role="option" aria-selected={selected} className={`ai-channel-option ai-animated-action ${selected ? 'is-selected' : ''}`} onClick={() => { setSelectedChannelId(channel.id); setChannelDrawerOpen(false); }}><span><Radio size={14} aria-hidden="true" /></span><div><strong>{channel.name}</strong><small>{PROVIDER_LABELS[channel.provider] || channel.provider}</small></div>{selected && <Check size={14} aria-hidden="true" />}</button>; })}</div></div>}</div></section>
+      {!selectedChannelId ? <section className="ai-no-channel"><span><Bot size={25} aria-hidden="true" /></span><h2>Conecte um canal primeiro</h2><p>O agente é configurado individualmente por canal para manter prompts, credenciais e regras isolados.</p></section> : (
+        <form className="ai-workspace" onSubmit={handleSave}>
+          <nav className="ai-tabs" aria-label="Áreas de configuração do agente" role="tablist">{TABS.map((tab) => { const Icon = tab.icon; const selected = activeTab === tab.id; return <button key={tab.id} id={`ai-tab-${tab.id}`} type="button" role="tab" aria-selected={selected} aria-controls={`ai-panel-${tab.id}`} className={`ai-tab-button ai-animated-action ${selected ? 'is-active' : ''}`} onClick={() => setActiveTab(tab.id)}><span><Icon size={17} aria-hidden="true" /></span><div><strong>{tab.label}</strong><small>{tab.description}</small></div><ChevronRight size={15} aria-hidden="true" /></button>; })}</nav>
+          <div className="ai-workspace-content">{activeTab === 'prompt' && renderPromptPanel()}{activeTab === 'guidelines' && renderGuidelinesPanel()}{activeTab === 'rules' && renderRulesPanel()}{activeTab === 'model' && renderModelPanel()}<footer className="ai-save-bar"><div><span><ShieldCheck size={15} aria-hidden="true" /></span><p><strong>Configuração por canal</strong><small>Alterações são aplicadas somente após salvar.</small></p></div><button type="submit" className="ai-primary-action ai-animated-action" disabled={isSaving}>{isSaving ? <span className="ai-button-spinner" aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}{isSaving ? 'Salvando…' : 'Salvar Configuração'}</button></footer></div>
         </form>
       )}
     </div>

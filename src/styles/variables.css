@@ -31,6 +31,7 @@
 
 /* Dark Theme (Default) - Leyton Graves Aesthetic */
 .dark-theme {
+  color-scheme: dark;
   --bg-app: #08080C;
   --bg-surface: #12121A;
   --bg-surface-solid: #0E0E14;
@@ -60,6 +61,7 @@
 
 /* Light Theme - High-Contrast Outline Aesthetic */
 .light-theme {
+  color-scheme: light;
   --bg-app: #F8FAFC;
   --bg-surface: #FFFFFF;
   --bg-surface-solid: #FFFFFF;

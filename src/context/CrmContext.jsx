@@ -10,12 +10,15 @@ import {
   removeContactsFromList
 } from '../lib/contactBulkActions';
 import N8nService from '../services/n8nService';
+import { isProfilePhotoStale, queueProfilePhotoSync } from '../services/profilePhotoService';
 import * as followUpService from '../services/followUpService';
+import { isVisibleChatMessage, mergeMessageHistory } from '../lib/messageHistory';
 
 const CrmContext = createContext();
 
 const META_CHANNEL_ID = '4886443e-4996-4d2a-83e1-d96f503e1a28';
 const EVO_CHANNEL_ID = '50df1e49-8f4c-4f90-b3c5-e9b95e37d8ed';
+const MESSAGE_HISTORY_PAGE_SIZE = 200;
 
 const initialFlowNodes = [
   { id: '1', type: 'trigger', label: 'Mensagem Recebida', x: 80, y: 150, data: { condition: 'Qualquer palavra' } },
@@ -57,6 +60,7 @@ export const CrmProvider = ({ children, tenantId }) => {
     return localStorage.getItem('crm_active_screen') || 'dashboard';
   });
   const [contacts, setContacts] = useState([]);
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false);
   const [appointments, setAppointments] = useState([]);
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'yesterday', '7days', 'custom'
   const [customDateRange, setCustomDateRange] = useState({ start: '', end: '' });
@@ -71,6 +75,14 @@ export const CrmProvider = ({ children, tenantId }) => {
   const [followupRules, setFollowupRules] = useState([]);
   const [globalTags, setGlobalTags] = useState([]);
   const [channels, setChannels] = useState([]);
+  const [messageHistoryState, setMessageHistoryState] = useState({
+    contactId: null,
+    status: 'idle',
+    hasOlder: false,
+    error: null,
+    loadingOlder: false
+  });
+  const [messageHistoryReloadToken, setMessageHistoryReloadToken] = useState(0);
 
   // Operator Notification & Audio Speed States (In-Memory Session Only)
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -247,6 +259,8 @@ export const CrmProvider = ({ children, tenantId }) => {
   const lastPollRef = useRef(new Date().toISOString());
   const knownMsgIdsRef = useRef(new Set());
   const migrationDone = useRef(false);
+  const messageHistoryRequestRef = useRef(0);
+  const olderHistoryRequestRef = useRef(0);
 
   // Load Initial Data from Supabase
   useEffect(() => {
@@ -255,6 +269,7 @@ export const CrmProvider = ({ children, tenantId }) => {
         setContacts([]);
         setChannels([]);
         setAppointments([]);
+        setInitialDataLoaded(true);
         return;
       }
 
@@ -402,6 +417,8 @@ export const CrmProvider = ({ children, tenantId }) => {
         }
       } catch (e) {
         console.error("[CrmContext] Error loading initial data:", e);
+      } finally {
+        setInitialDataLoaded(true);
       }
     }
     loadData();
@@ -513,52 +530,60 @@ export const CrmProvider = ({ children, tenantId }) => {
       if (!contact) return;
 
       // Sync if missing photo OR if photo is expired (> 15 days)
-      const needsSync = !contact.avatar_url || (contact.avatar_updated_at && 
-        (Date.now() - new Date(contact.avatar_updated_at)) > 15 * 24 * 60 * 60 * 1000);
+      const needsSync = isProfilePhotoStale(contact);
       if (!needsSync) return;
 
       try {
         console.log(`[CRM] Secured debounced fetch triggered for contact_id: ${contact.id}`);
-        const n8nUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || 'https://n8n-n8n.rh3fr2.easypanel.host';
-        const photoPath = import.meta.env.VITE_N8N_PROFILE_PHOTO_PATH || '/webhook/fetch-profile-photo';
-        await fetch(`${n8nUrl}${photoPath}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contact_id: contact.id })
-        });
+        await queueProfilePhotoSync({ contactId: contact.id, tenantId });
       } catch (err) {
         console.error('[CRM] Fetch avatar error:', err);
       }
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [activeContactId]);
+  }, [activeContactId, tenantId]);
 
   // Load full message history for active contact on selection
   useEffect(() => {
-    if (!activeContactId) return;
+    if (!activeContactId || !tenantId) return;
 
     let active = true;
+    const requestId = ++messageHistoryRequestRef.current;
     async function loadActiveMessages() {
+      await Promise.resolve();
+      if (!active || requestId !== messageHistoryRequestRef.current) return;
+      setMessageHistoryState({
+        contactId: activeContactId,
+        status: 'loading',
+        hasOlder: false,
+        error: null,
+        loadingOlder: false
+      });
       try {
         const { data: dbMessages, error } = await supabase
           .from('messages')
           .select('*')
           .eq('contact_id', activeContactId)
           .eq('tenant_id', tenantId)
-          .order('timestamp', { ascending: true });
+          .order('timestamp', { ascending: false })
+          .limit(MESSAGE_HISTORY_PAGE_SIZE + 1);
 
         if (error) throw error;
-        if (!active) return;
+        if (!active || requestId !== messageHistoryRequestRef.current) return;
 
-        const cMsgs = (dbMessages || []).map(m => {
+        const visibleRows = (dbMessages || []).filter(isVisibleChatMessage);
+        const hasOlder = (dbMessages || []).length > MESSAGE_HISTORY_PAGE_SIZE;
+        const recentRows = visibleRows.slice(0, MESSAGE_HISTORY_PAGE_SIZE).reverse();
+
+        const cMsgs = recentRows.map(m => {
           knownMsgIdsRef.current.add(m.id);
           return normalizeMessage(m);
         });
 
         // Determine contact channel and provider
-        const channelId = dbMessages && dbMessages.length > 0
-          ? dbMessages[dbMessages.length - 1].channel_id
+        const channelId = recentRows.length > 0
+          ? recentRows[recentRows.length - 1].channel_id
           : null;
         const channel = channelId ? channels.find(ch => ch.id === channelId) : null;
 
@@ -581,15 +606,30 @@ export const CrmProvider = ({ children, tenantId }) => {
           if (c.id === activeContactId) {
             return {
               ...c,
-              messages: cMsgs,
+              messages: mergeMessageHistory(cMsgs, c.messages || []),
               provider: resolvedProvider !== 'unknown' ? resolvedProvider : c.provider,
               channel: resolvedChannel
             };
           }
           return c;
         }));
+        setMessageHistoryState({
+          contactId: activeContactId,
+          status: 'ready',
+          hasOlder,
+          error: null,
+          loadingOlder: false
+        });
       } catch (e) {
+        if (!active || requestId !== messageHistoryRequestRef.current) return;
         console.error("[CrmContext] Error loading active messages:", e);
+        setMessageHistoryState({
+          contactId: activeContactId,
+          status: 'error',
+          hasOlder: false,
+          error: 'Não foi possível carregar o histórico. Tente novamente.',
+          loadingOlder: false
+        });
       }
     }
 
@@ -597,7 +637,64 @@ export const CrmProvider = ({ children, tenantId }) => {
     return () => {
       active = false;
     };
-  }, [activeContactId, channels, tenantId]);
+  }, [activeContactId, channels, tenantId, messageHistoryReloadToken]);
+
+  const retryMessageHistory = useCallback(() => {
+    setMessageHistoryReloadToken((value) => value + 1);
+  }, []);
+
+  const loadOlderMessages = useCallback(async (contactId = activeContactIdRef.current) => {
+    if (!contactId || !tenantId) return 0;
+    const contact = contactsRef.current.find((item) => item.id === contactId);
+    const oldestMessage = (contact?.messages || []).find(isVisibleChatMessage);
+    const oldestTimestamp = oldestMessage?.timestamp instanceof Date
+      ? oldestMessage.timestamp.toISOString()
+      : oldestMessage?.timestamp;
+    if (!oldestTimestamp) return 0;
+
+    const requestId = ++olderHistoryRequestRef.current;
+    setMessageHistoryState((current) => current.contactId === contactId
+      ? { ...current, loadingOlder: true, error: null }
+      : current);
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('contact_id', contactId)
+        .eq('tenant_id', tenantId)
+        .lt('timestamp', oldestTimestamp)
+        .order('timestamp', { ascending: false })
+        .limit(MESSAGE_HISTORY_PAGE_SIZE + 1);
+
+      if (error) throw error;
+      if (requestId !== olderHistoryRequestRef.current) return 0;
+
+      const visibleRows = (data || []).filter(isVisibleChatMessage);
+      const hasOlder = (data || []).length > MESSAGE_HISTORY_PAGE_SIZE;
+      const olderMessages = visibleRows
+        .slice(0, MESSAGE_HISTORY_PAGE_SIZE)
+        .reverse()
+        .map((message) => {
+          knownMsgIdsRef.current.add(message.id);
+          return normalizeMessage(message);
+        });
+
+      setContacts((previous) => (previous || []).map((item) => item.id === contactId
+        ? { ...item, messages: mergeMessageHistory(olderMessages, item.messages || []) }
+        : item));
+      setMessageHistoryState((current) => current.contactId === contactId
+        ? { ...current, status: 'ready', hasOlder, loadingOlder: false, error: null }
+        : current);
+      return olderMessages.length;
+    } catch (error) {
+      console.error('[CrmContext] Error loading older messages:', error);
+      setMessageHistoryState((current) => current.contactId === contactId
+        ? { ...current, status: 'error', loadingOlder: false, error: 'Não foi possível carregar mensagens anteriores. Tente novamente.' }
+        : current);
+      return 0;
+    }
+  }, [tenantId]);
 
   // Merge a new message into contacts state (deduplicating by id)
   const mergeMessage = useCallback((payload) => {
@@ -1038,7 +1135,11 @@ export const CrmProvider = ({ children, tenantId }) => {
       const mappedChannel = {
         id: newDbChannel.id,
         name: newDbChannel.name,
-        provider: newDbChannel.provider === 'meta' ? 'meta_cloud' : 'evolution',
+        provider: newDbChannel.provider === 'meta'
+          ? 'meta_cloud'
+          : newDbChannel.provider === 'instagram'
+            ? 'instagram'
+            : 'evolution',
         status: newDbChannel.status,
         url: newDbChannel.url,
         instance: newDbChannel.instance,
@@ -1060,30 +1161,41 @@ export const CrmProvider = ({ children, tenantId }) => {
 
   const toggleChannelStatus = async (id) => {
     const chan = channels.find(c => c.id === id);
-    if (!chan) return;
+    if (!chan) return false;
     const newStatus = chan.status === 'connected' ? 'disconnected' : 'connected';
 
     setChannels(prev => (prev || []).map(c => (c.id === id ? { ...c, status: newStatus } : c)));
 
     if (id && id.toString().includes('-')) {
       try {
-        await SupabaseService.updateChannelStatus(id, newStatus);
+        const updated = await SupabaseService.updateChannelStatus(id, newStatus);
+        if (!updated) throw new Error('Channel status update was not persisted');
       } catch (e) {
         console.error("[CrmContext] Error updating channel status in database:", e);
+        setChannels(prev => (prev || []).map(c => (c.id === id ? { ...c, status: chan.status } : c)));
+        return false;
       }
     }
+    return true;
   };
 
   const deleteChannel = async (id) => {
+    const removedChannel = channels.find(c => c.id === id);
     setChannels(prev => prev.filter(c => c.id !== id));
 
     if (id && id.toString().includes('-')) {
       try {
-        await SupabaseService.deleteChannel(id);
+        const deleted = await SupabaseService.deleteChannel(id);
+        if (!deleted) throw new Error('Channel deletion was not persisted');
       } catch (e) {
         console.error("[CrmContext] Error deleting channel from database:", e);
+        if (removedChannel) {
+          setChannels(prev => prev.some(c => c.id === id) ? prev : [removedChannel, ...prev]);
+        }
+        return false;
       }
     }
+    return true;
   };
 
   useEffect(() => {
@@ -1807,7 +1919,7 @@ export const CrmProvider = ({ children, tenantId }) => {
   return (
     <CrmContext.Provider value={{
       tenantId,
-      activeScreen, setActiveScreen, contacts: sortedContacts, activeContactId, setActiveContactId, activeContact,
+      activeScreen, setActiveScreen, contacts: sortedContacts, initialDataLoaded, activeContactId, setActiveContactId, activeContact,
       flowNodes, theme, toggleTheme, changeContactStatus, bulkChangeContactStatus, bulkDeleteContacts,
       addNoteToContact, updateContactTags, updateContactName,
       updateContactValue, addContact, sendMessage, isBotEnabled, setIsBotEnabled, updateNodePosition,
@@ -1817,7 +1929,8 @@ export const CrmProvider = ({ children, tenantId }) => {
       appointments, setAppointments,
       soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled,
       requestNotificationPermission, audioSpeed, setAudioSpeed,
-      realtimeStatus, reconnectRealtime
+      realtimeStatus, reconnectRealtime,
+      messageHistoryState, loadOlderMessages, retryMessageHistory
     }}>
       {children}
     </CrmContext.Provider>

@@ -1,9 +1,53 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { gsap } from 'gsap';
 import { useCrm } from '../context/CrmContext';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, MessageSquare, Kanban, Calendar, Bot, Users, Link2, Sun, Moon, Clock, LogOut, Bell, BellOff, Volume2, VolumeX, RotateCw, Shield, Building2 } from 'lucide-react';
+import { resolveUserDisplayName } from '../utils/userIdentity';
+import {
+  Bell, BellOff, Bot, Building2, Calendar, Check, ChevronDown, ChevronRight,
+  Clock, Kanban, LayoutDashboard, Link2, LogOut, Menu, MessageSquare,
+  Moon, PanelLeftClose, RotateCw, Shield, Sun, Users, Volume2, VolumeX,
+  Wifi, WifiOff, X
+} from 'lucide-react';
+
+const NAVIGATION_GROUPS = [
+  {
+    label: 'Visão Geral',
+    items: [
+      { id: 'dashboard', label: 'Painel Geral', icon: LayoutDashboard, permission: 'view_dashboard' },
+      { id: 'chat', label: 'Chat Ao Vivo', icon: MessageSquare, permission: 'view_chat' }
+    ]
+  },
+  {
+    label: 'Comercial',
+    items: [
+      { id: 'kanban', label: 'Funil Comercial', icon: Kanban, permission: 'view_kanban' },
+      { id: 'calendar', label: 'Agenda', icon: Calendar, permission: 'view_calendar' },
+      { id: 'contacts', label: 'Leads & Contatos', icon: Users, permission: 'view_contacts' }
+    ]
+  },
+  {
+    label: 'Automação',
+    items: [
+      { id: 'builder', label: 'Agente de IA', icon: Bot, permission: 'manage_ai_agent' },
+      { id: 'followup', label: 'Follow-Up', icon: Clock, permission: 'manage_followup' },
+      { id: 'channels', label: 'Conectar Canais', icon: Link2, permission: 'manage_channels' }
+    ]
+  },
+  {
+    label: 'Gestão',
+    items: [
+      { id: 'users', label: 'Usuários & Acessos', icon: Shield, permission: 'manage_users' },
+      { id: 'provision', label: 'Novo Cliente', icon: Building2, superAdminOnly: true }
+    ]
+  }
+];
 
 export default function Sidebar() {
-  const { 
+  const sidebarRef = useRef(null);
+  const tenantPickerRef = useRef(null);
+  const tenantDrawerRef = useRef(null);
+  const {
     activeScreen, setActiveScreen, theme, toggleTheme,
     soundEnabled, setSoundEnabled, notificationsEnabled, setNotificationsEnabled, requestNotificationPermission,
     realtimeStatus, reconnectRealtime
@@ -18,477 +62,333 @@ export default function Sidebar() {
     switchTenant,
     signOut
   } = useAuth();
-  
-  const displayName = profile?.full_name || user?.user_metadata?.name || user?.email || 'Usuário Logado';
-  const displayInitials = (displayName || 'UA').substring(0, 2).toUpperCase();
 
-  const menuItems = [
-    {
-      id: 'dashboard',
-      label: 'Painel Geral',
-      icon: <LayoutDashboard size={20} strokeWidth={2} />,
-      permission: 'view_dashboard'
-    },
-    {
-      id: 'chat',
-      label: 'Chat Ao Vivo',
-      icon: <MessageSquare size={20} strokeWidth={2} />,
-      permission: 'view_chat'
-    },
-    {
-      id: 'kanban',
-      label: 'Funil Comercial',
-      icon: <Kanban size={20} strokeWidth={2} />,
-      permission: 'view_kanban'
-    },
-    {
-      id: 'calendar',
-      label: 'Agenda',
-      icon: <Calendar size={20} strokeWidth={2} />,
-      permission: 'view_calendar'
-    },
-    {
-      id: 'builder',
-      label: 'Agente de IA',
-      icon: <Bot size={20} strokeWidth={2} />,
-      permission: 'manage_ai_agent'
-    },
-    {
-      id: 'contacts',
-      label: 'Leads & Contatos',
-      icon: <Users size={20} strokeWidth={2} />,
-      permission: 'view_contacts'
-    },
-    {
-      id: 'channels',
-      label: 'Conectar Canais',
-      icon: <Link2 size={20} strokeWidth={2} />,
-      permission: 'manage_channels'
-    },
-    {
-      id: 'followup',
-      label: 'Follow-Up',
-      icon: <Clock size={20} strokeWidth={2} />,
-      permission: 'manage_followup'
-    },
-    {
-      id: 'users',
-      label: 'Usuários & Acessos',
-      icon: <Shield size={20} strokeWidth={2} />,
-      permission: 'manage_users'
-    },
-    {
-      id: 'provision',
-      label: 'Novo Cliente',
-      icon: <Building2 size={20} strokeWidth={2} />,
-      superAdminOnly: true
+  const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem('crm_sidebar_collapsed') === 'true');
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 900px)').matches);
+  const [tenantPickerOpen, setTenantPickerOpen] = useState(false);
+  const displayName = resolveUserDisplayName(profile, user);
+  const displayInitials = (displayName || 'UA').substring(0, 2).toUpperCase();
+  const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
+  const tenantName = selectedTenant?.name || selectedTenant?.slug || 'Selecionar cliente';
+
+  const canViewItem = (item) => {
+    if (item.superAdminOnly && !isSuperAdmin) return false;
+    if (item.permission && permissions && permissions[item.permission] !== true) return false;
+    return true;
+  };
+
+  const visibleGroups = NAVIGATION_GROUPS
+    .map((group) => ({ ...group, items: group.items.filter(canViewItem) }))
+    .filter((group) => group.items.length > 0);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 900px)');
+    const handleViewportChange = (event) => {
+      setIsMobileViewport(event.matches);
+      if (!event.matches) setIsMobileOpen(false);
+    };
+    mediaQuery.addEventListener('change', handleViewportChange);
+    return () => mediaQuery.removeEventListener('change', handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobileOpen) return undefined;
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setIsMobileOpen(false);
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isMobileOpen]);
+
+  useEffect(() => {
+    if (!tenantPickerOpen) return undefined;
+    const handleOutsidePointer = (event) => {
+      if (!tenantPickerRef.current?.contains(event.target)) setTenantPickerOpen(false);
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setTenantPickerOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointer);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [tenantPickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!tenantPickerOpen || !tenantDrawerRef.current) return undefined;
+    const context = gsap.context(() => {
+      gsap.fromTo(tenantDrawerRef.current, { y: -10, autoAlpha: 0, scale: .96 }, { y: 0, autoAlpha: 1, scale: 1, duration: .34, ease: 'back.out(1.7)' });
+      gsap.fromTo('.crm-sidebar-tenant-option', { x: -9, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .25, stagger: .035, delay: .04, ease: 'power2.out' });
+    }, tenantPickerRef);
+    return () => context.revert();
+  }, [tenantPickerOpen]);
+
+  useLayoutEffect(() => {
+    const root = sidebarRef.current;
+    if (!root) return undefined;
+
+    const context = gsap.context(() => {
+      const brand = root.querySelector('.crm-sidebar-brand');
+      const tenant = root.querySelector('.crm-sidebar-tenant');
+      const navItems = root.querySelectorAll('.crm-sidebar-nav-item');
+      const footerItems = root.querySelectorAll('.crm-sidebar-footer > *');
+      const connectingDot = root.querySelector('.crm-sidebar-status-dot.is-connecting');
+      const timeline = gsap.timeline({ defaults: { ease: 'power3.out' } });
+      if (brand) timeline.from(brand, { x: -22, autoAlpha: 0, duration: 0.48, clearProps: 'transform,opacity,visibility' }, 0);
+      if (tenant) timeline.from(tenant, { x: -18, autoAlpha: 0, duration: 0.42, clearProps: 'transform,opacity,visibility' }, 0.12);
+      if (navItems.length) timeline.from(navItems, { x: -18, autoAlpha: 0, duration: 0.38, stagger: 0.045, clearProps: 'transform,opacity,visibility' }, 0.16);
+      if (footerItems.length) timeline.from(footerItems, { y: 14, autoAlpha: 0, duration: 0.4, stagger: 0.07, clearProps: 'transform,opacity,visibility' }, 0.34);
+
+      if (connectingDot) {
+        gsap.to(connectingDot, {
+          scale: 1.55,
+          autoAlpha: 0.45,
+          duration: 0.8,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut'
+        });
+      }
+    }, root);
+
+    return () => context.revert();
+  }, []);
+
+  useLayoutEffect(() => {
+    const activeItem = sidebarRef.current?.querySelector('.crm-sidebar-nav-item.is-active');
+    if (!activeItem) return undefined;
+
+    const tween = gsap.fromTo(
+      activeItem,
+      { x: -4, scale: 0.985 },
+      { x: 0, scale: 1, duration: 0.34, ease: 'back.out(1.7)', clearProps: 'transform' }
+    );
+    return () => tween.kill();
+  }, [activeScreen]);
+
+  const toggleCollapsed = () => {
+    setIsCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem('crm_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const navigateTo = (screen) => {
+    setActiveScreen(screen);
+    setIsMobileOpen(false);
+    setTenantPickerOpen(false);
+  };
+
+  const toggleTenantPicker = () => {
+    if (isCollapsed && !isMobileViewport) {
+      setIsCollapsed(false);
+      localStorage.setItem('crm_sidebar_collapsed', 'false');
     }
-  ];
+    setTenantPickerOpen((current) => !current);
+  };
+
+  const selectTenant = (tenantId) => {
+    if (tenantId && tenantId !== selectedTenantId) switchTenant(tenantId);
+    setTenantPickerOpen(false);
+  };
+
+  const toggleNotifications = async () => {
+    if (!notificationsEnabled) {
+      await requestNotificationPermission();
+      return;
+    }
+    setNotificationsEnabled(false);
+  };
+
+  const realtimeCopy = realtimeStatus === 'connected'
+    ? { label: 'Tempo real ativo', detail: 'WebSocket', icon: Wifi }
+    : realtimeStatus === 'connecting'
+      ? { label: 'Reconectando…', detail: 'Sincronizando', icon: RotateCw }
+      : { label: 'Sem tempo real', detail: 'Polling ativo', icon: WifiOff };
+  const RealtimeIcon = realtimeCopy.icon;
 
   return (
-    <aside className="glass-panel crm-sidebar" style={{
-      width: '260px',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      borderRadius: '0',
-      borderRight: '1px solid var(--border-glass)',
-      background: 'var(--bg-sidebar)',
-      zIndex: 100
-    }}>
-      {/* Brand logo container */}
-      <div className="sidebar-brand" style={{
-        padding: '24px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        borderBottom: '1px solid var(--border-glass)'
-      }}>
-        <div style={{
-          width: '38px',
-          height: '38px',
-          borderRadius: 'var(--radius-md)',
-          background: '#ffffff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-          padding: '4px',
-          boxShadow: '0 4px 12px var(--accent-glow)',
-          border: '1px solid var(--border-glass)'
-        }}>
-          <img 
-            src="/logo.jpg" 
-            alt="Wiks Logo" 
-            style={{ 
-              width: '100%', 
-              height: '100%', 
-              objectFit: 'contain',
-              borderRadius: '6px'
-            }} 
-          />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: '18px',
-            fontWeight: '800',
-            letterSpacing: '0.5px',
-            color: 'var(--text-primary)'
-          }}>CRM Wiks</span>
-          <span style={{
-            fontSize: '10px',
-            color: 'var(--text-muted)',
-            fontWeight: '600',
-            textTransform: 'uppercase',
-            letterSpacing: '1px'
-          }}>Conversacional</span>
-        </div>
-      </div>
+    <>
+      <button
+        type="button"
+        className="crm-mobile-sidebar-trigger"
+        aria-label={isMobileOpen ? 'Fechar menu principal' : 'Abrir menu principal'}
+        aria-expanded={isMobileOpen}
+        aria-controls="crm-primary-sidebar"
+        onClick={() => setIsMobileOpen((current) => !current)}
+      >
+        {isMobileOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+      </button>
 
-      {isSuperAdmin && (
-        <div className="sidebar-tenant-switcher" style={{
-          padding: '14px 16px',
-          borderBottom: '1px solid var(--border-glass)',
-          background: 'rgba(124, 58, 237, 0.08)'
-        }}>
-          <label
-            htmlFor="superadmin-tenant-selector"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginBottom: '8px',
-              color: 'var(--text-secondary)',
-              fontSize: '10px',
-              fontWeight: '800',
-              letterSpacing: '0.8px',
-              textTransform: 'uppercase'
-            }}
-          >
-            <Building2 size={13} />
-            Cliente em visualização
-          </label>
-          <select
-            id="superadmin-tenant-selector"
-            className="glass-input"
-            value={selectedTenantId || ''}
-            onChange={(event) => switchTenant(event.target.value)}
-            style={{
-              width: '100%',
-              minHeight: '38px',
-              padding: '8px 10px',
-              fontSize: '12px',
-              fontWeight: '700'
-            }}
-          >
-            {tenants.length === 0 && (
-              <option value="">Nenhum cliente encontrado</option>
-            )}
-            {tenants.map(tenant => (
-              <option key={tenant.id} value={tenant.id}>
-                {tenant.name || tenant.slug || tenant.id}
-              </option>
-            ))}
-          </select>
-          <div style={{
-            marginTop: '7px',
-            color: 'var(--accent-secondary)',
-            fontSize: '10px',
-            fontWeight: '700'
-          }}>
-            Modo superadministrador
+      <button
+        type="button"
+        className={`crm-sidebar-backdrop ${isMobileOpen ? 'is-visible' : ''}`}
+        aria-label="Fechar menu principal"
+        tabIndex={isMobileOpen ? 0 : -1}
+        onClick={() => setIsMobileOpen(false)}
+      />
+
+      <aside
+        id="crm-primary-sidebar"
+        ref={sidebarRef}
+        className={`crm-sidebar ${isCollapsed ? 'is-collapsed' : ''} ${isMobileOpen ? 'is-mobile-open' : ''}`}
+        aria-label="Navegação principal"
+        aria-hidden={isMobileViewport && !isMobileOpen ? true : undefined}
+        inert={isMobileViewport && !isMobileOpen ? true : undefined}
+      >
+        <header className="crm-sidebar-brand">
+          <div className="crm-sidebar-logo-shell">
+            <img src="/logo.jpg" alt="CRM Wiks" width="38" height="38" />
           </div>
-        </div>
-      )}
-
-      {/* Navigation menu list */}
-      <nav className="sidebar-nav" style={{
-        flex: 1,
-        padding: '20px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        overflowY: 'auto'
-      }}>
-        {menuItems.map(item => {
-          if (item.superAdminOnly && !isSuperAdmin) {
-            return null;
-          }
-          // Checa a permissão. Se não houver permission definida no array, permite.
-          if (item.permission && permissions && permissions[item.permission] !== true) {
-            return null;
-          }
-          
-          const isActive = activeScreen === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveScreen(item.id)}
-              className={`sidebar-nav-btn ${isActive ? 'active' : ''}`}
-            >
-              <span className="sidebar-nav-icon">
-                {item.icon}
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* Footer controls: theme switcher & active agent profile */}
-      <div className="sidebar-footer" style={{
-        padding: '16px 20px',
-        borderTop: '1px solid var(--border-glass)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px'
-      }}>
-        {/* Operator Alert & Notification Controls */}
-        <div className="sidebar-footer-alerts" style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
+          <div className="crm-sidebar-brand-copy">
+            <strong translate="no">CRM Wiks</strong>
+            <span>Conversacional</span>
+          </div>
           <button
             type="button"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            title={soundEnabled ? "Alertas Sonoros: Ativados (Clique para silenciar)" : "Alertas Sonoros: Silenciados (Clique para ativar)"}
-            style={{
-              flex: 1,
-              padding: '6px 8px',
-              borderRadius: 'var(--radius-md)',
-              background: soundEnabled ? 'var(--bg-surface-hover)' : 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid var(--border-glass)',
-              color: soundEnabled ? 'var(--text-primary)' : 'var(--color-status-lost)',
-              fontSize: '11px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '5px',
-              transition: 'all 0.2s ease'
-            }}
+            className="crm-sidebar-collapse"
+            aria-label={isCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+            aria-expanded={!isCollapsed}
+            onClick={toggleCollapsed}
           >
-            {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
-            <span>{soundEnabled ? 'Som' : 'Muto'}</span>
+            {isCollapsed ? <ChevronRight size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
           </button>
-
-          <button
-            type="button"
-            onClick={async () => {
-              if (!notificationsEnabled) {
-                await requestNotificationPermission();
-              } else {
-                setNotificationsEnabled(false);
-              }
-            }}
-            title={notificationsEnabled ? "Notificações Desktop: Ativas (Clique para desativar)" : "Notificações Desktop: Desativadas (Clique para ativar)"}
-            style={{
-              flex: 1,
-              padding: '6px 8px',
-              borderRadius: 'var(--radius-md)',
-              background: notificationsEnabled ? 'var(--bg-surface-hover)' : 'rgba(239, 68, 68, 0.1)',
-              border: '1px solid var(--border-glass)',
-              color: notificationsEnabled ? 'var(--text-primary)' : 'var(--color-status-lost)',
-              fontSize: '11px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '5px',
-              transition: 'all 0.2s ease'
-            }}
-          >
-            {notificationsEnabled ? <Bell size={13} /> : <BellOff size={13} />}
-            <span>{notificationsEnabled ? 'Notif' : 'Sem Notif'}</span>
+          <button type="button" className="crm-sidebar-mobile-close" aria-label="Fechar menu principal" onClick={() => setIsMobileOpen(false)}>
+            <X size={18} aria-hidden="true" />
           </button>
-        </div>
+        </header>
 
-        {/* Realtime Connection Health Indicator */}
-        <div
-          className="sidebar-realtime"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            borderRadius: 'var(--radius-md)',
-            background: realtimeStatus === 'disconnected' ? 'rgba(239, 68, 68, 0.12)' : 'var(--bg-surface-hover)',
-            border: realtimeStatus === 'disconnected' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid var(--border-glass)',
-            transition: 'all 0.2s ease',
-            marginBottom: '4px'
-          }}
-          title={
-            realtimeStatus === 'connected' 
-              ? "Tempo real conectado (WebSocket ativo)" 
-              : realtimeStatus === 'connecting'
-                ? "Reconectando servidor em tempo real..."
-                : "Sem conexão WebSocket. As mensagens continuam sendo recebidas via Polling automático (5s)."
-          }
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              flexShrink: 0,
-              background: realtimeStatus === 'connected' 
-                ? 'var(--color-status-won)' 
-                : realtimeStatus === 'connecting'
-                  ? 'var(--warning-color)'
-                  : 'var(--color-status-lost)',
-              boxShadow: realtimeStatus === 'connected'
-                ? '0 0 8px var(--color-status-won)'
-                : realtimeStatus === 'connecting'
-                  ? '0 0 8px var(--warning-color)'
-                  : '0 0 8px var(--color-status-lost)',
-              animation: realtimeStatus === 'connecting' ? 'pulse 1.5s infinite' : 'none'
-            }} />
-            <span style={{
-              fontSize: '11px',
-              fontWeight: '600',
-              color: realtimeStatus === 'disconnected' ? 'var(--color-status-lost)' : 'var(--text-secondary)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
-              {realtimeStatus === 'connected' && 'Tempo real ativo'}
-              {realtimeStatus === 'connecting' && 'Reconectando...'}
-              {realtimeStatus === 'disconnected' && 'Sem tempo real'}
-            </span>
-          </div>
-
-          {realtimeStatus === 'disconnected' ? (
+        {isSuperAdmin && (
+          <section ref={tenantPickerRef} className={`crm-sidebar-tenant ${tenantPickerOpen ? 'is-open' : ''}`} aria-label="Cliente em visualização">
+            <div className="crm-sidebar-tenant-heading">
+              <span><Building2 size={14} aria-hidden="true" />Cliente em visualização</span>
+              <em>Superadmin</em>
+            </div>
             <button
               type="button"
-              onClick={reconnectRealtime}
-              style={{
-                background: 'var(--color-status-lost)',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '3px 8px',
-                fontSize: '10px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-              title="Forçar reconexão dos canais em tempo real"
+              id="superadmin-tenant-selector"
+              className="crm-sidebar-tenant-trigger"
+              aria-label="Selecionar cliente em visualização"
+              aria-haspopup="listbox"
+              aria-expanded={tenantPickerOpen}
+              aria-controls="superadmin-tenant-options"
+              onClick={toggleTenantPicker}
             >
-              <RotateCw size={10} strokeWidth={2.5} />
-              Reconectar
+              <span className="crm-sidebar-tenant-trigger-icon"><Building2 size={15} aria-hidden="true" /></span>
+              <span className="crm-sidebar-tenant-trigger-copy"><strong>{tenantName}</strong><small>{selectedTenant?.slug || 'Ambiente do cliente'}</small></span>
+              <ChevronDown size={15} aria-hidden="true" />
             </button>
-          ) : (
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-              {realtimeStatus === 'connected' ? 'WebSocket' : 'Polling'}
-            </span>
-          )}
-        </div>
-
-        {/* Theme Switcher Toggle */}
-        <button
-          onClick={toggleTheme}
-          className="sidebar-theme-btn"
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {theme === 'dark' ? (
-              <>
-                <Moon size={16} strokeWidth={2} />
-                Modo Escuro
-              </>
-            ) : (
-              <>
-                <Sun size={16} strokeWidth={2} />
-                Modo Claro
-              </>
+            <button type="button" className="crm-sidebar-tenant-compact" title={tenantName} aria-label={`Trocar cliente: ${tenantName}`} aria-haspopup="listbox" aria-expanded={tenantPickerOpen} onClick={toggleTenantPicker}><Building2 size={18} aria-hidden="true" /></button>
+            {tenantPickerOpen && (
+              <div ref={tenantDrawerRef} id="superadmin-tenant-options" className="crm-sidebar-tenant-drawer" role="listbox" aria-label="Clientes disponíveis">
+                <div className="crm-sidebar-tenant-drawer-header"><span>Trocar ambiente</span><strong>{tenants.length} {tenants.length === 1 ? 'cliente' : 'clientes'}</strong></div>
+                <div className="crm-sidebar-tenant-options">
+                  {tenants.length === 0 ? <p>Nenhum cliente encontrado.</p> : tenants.map((tenant) => {
+                    const isSelected = tenant.id === selectedTenantId;
+                    const name = tenant.name || tenant.slug || tenant.id;
+                    return (
+                      <button key={tenant.id} type="button" role="option" aria-selected={isSelected} className={`crm-sidebar-tenant-option ${isSelected ? 'is-selected' : ''}`} onClick={() => selectTenant(tenant.id)}>
+                        <span>{name.slice(0, 2).toUpperCase()}</span>
+                        <span><strong>{name}</strong><small>{tenant.slug || tenant.plan || 'Cliente CRM'}</small></span>
+                        {isSelected && <Check size={15} aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
-          </span>
-          <span style={{
-            fontSize: '9px',
-            background: 'var(--accent-primary)',
-            color: '#fff',
-            padding: '2px 6px',
-            borderRadius: '100px',
-            fontWeight: '600'
-          }}>ATV</span>
-        </button>
+          </section>
+        )}
 
-        {/* User profile & Logout */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '8px'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            overflow: 'hidden'
-          }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: 'var(--radius-round)',
-              background: 'var(--accent-primary)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: '700',
-              fontSize: '13px',
-              border: '2px solid var(--border-glass)',
-              flexShrink: 0
-            }}>
-              {displayInitials}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <span style={{
-                fontSize: '12px',
-                fontWeight: '600',
-                color: 'var(--text-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }} title={displayName}>
-                {displayName}
-              </span>
-              <span style={{
-                fontSize: '10px',
-                color: 'var(--color-status-won)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontWeight: '500'
-              }}>
-                <span className="pulsing-dot" style={{ width: '5px', height: '5px' }}></span> Logado
-              </span>
-            </div>
+        <nav className="crm-sidebar-nav" aria-label="Áreas do CRM">
+          {visibleGroups.map((group) => (
+            <section className="crm-sidebar-nav-group" key={group.label} aria-label={group.label}>
+              <span className="crm-sidebar-nav-heading">{group.label}</span>
+              <div className="crm-sidebar-nav-list">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeScreen === item.id;
+                  return (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className={`crm-sidebar-nav-item ${isActive ? 'is-active' : ''}`}
+                      aria-current={isActive ? 'page' : undefined}
+                      aria-label={isCollapsed ? item.label : undefined}
+                      title={isCollapsed ? item.label : undefined}
+                      onClick={() => navigateTo(item.id)}
+                    >
+                      <span className="crm-sidebar-nav-icon"><Icon size={18} strokeWidth={2} aria-hidden="true" /></span>
+                      <span className="crm-sidebar-nav-label">{item.label}</span>
+                      <ChevronRight className="crm-sidebar-nav-arrow" size={14} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </nav>
+
+        <footer className="crm-sidebar-footer">
+          <div className="crm-sidebar-quick-controls" aria-label="Preferências rápidas">
+            <button
+              type="button"
+              className={soundEnabled ? 'is-enabled' : 'is-disabled'}
+              aria-label={soundEnabled ? 'Desativar alertas sonoros' : 'Ativar alertas sonoros'}
+              aria-pressed={soundEnabled}
+              onClick={() => setSoundEnabled(!soundEnabled)}
+            >
+              {soundEnabled ? <Volume2 size={16} aria-hidden="true" /> : <VolumeX size={16} aria-hidden="true" />}
+              <span className="crm-sidebar-control-label">{soundEnabled ? 'Som ativo' : 'Sem som'}</span>
+            </button>
+            <button
+              type="button"
+              className={notificationsEnabled ? 'is-enabled' : 'is-disabled'}
+              aria-label={notificationsEnabled ? 'Desativar notificações' : 'Ativar notificações'}
+              aria-pressed={notificationsEnabled}
+              onClick={toggleNotifications}
+            >
+              {notificationsEnabled ? <Bell size={16} aria-hidden="true" /> : <BellOff size={16} aria-hidden="true" />}
+              <span className="crm-sidebar-control-label">{notificationsEnabled ? 'Notificações' : 'Sem notificações'}</span>
+            </button>
+            <button
+              type="button"
+              className="is-enabled"
+              aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
+              onClick={toggleTheme}
+            >
+              {theme === 'dark' ? <Moon size={16} aria-hidden="true" /> : <Sun size={16} aria-hidden="true" />}
+              <span className="crm-sidebar-control-label">{theme === 'dark' ? 'Tema escuro' : 'Tema claro'}</span>
+            </button>
           </div>
-          
-          <button 
-            onClick={signOut}
-            title="Sair da Conta"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              cursor: 'pointer',
-              padding: '6px',
-              borderRadius: 'var(--radius-md)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s ease'
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; e.currentTarget.style.color = 'var(--color-status-lost)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
-          >
-            <LogOut size={16} strokeWidth={2} />
-          </button>
-        </div>
-      </div>
-    </aside>
+
+          <div className={`crm-sidebar-realtime is-${realtimeStatus}`} role="status" aria-live="polite">
+            <span className={`crm-sidebar-status-dot is-${realtimeStatus}`} aria-hidden="true" />
+            <span className="crm-sidebar-realtime-icon"><RealtimeIcon size={15} aria-hidden="true" /></span>
+            <span className="crm-sidebar-realtime-copy"><strong>{realtimeCopy.label}</strong><small>{realtimeCopy.detail}</small></span>
+            {realtimeStatus === 'disconnected' && (
+              <button type="button" aria-label="Reconectar tempo real" title="Reconectar tempo real" onClick={reconnectRealtime}>
+                <RotateCw size={13} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+
+          <div className="crm-sidebar-account">
+            <span className="crm-sidebar-avatar" aria-hidden="true">{displayInitials}</span>
+            <span className="crm-sidebar-account-copy">
+              <strong title={displayName}>{displayName}</strong>
+              <small><i />Conta conectada</small>
+            </span>
+            <button type="button" className="crm-sidebar-logout" aria-label="Sair da conta" title="Sair da conta" onClick={signOut}>
+              <LogOut size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </footer>
+      </aside>
+    </>
   );
 }

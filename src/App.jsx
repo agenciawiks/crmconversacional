@@ -1,20 +1,27 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { gsap } from 'gsap';
 import { CrmProvider, useCrm } from './context/CrmContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginScreen from './components/LoginScreen';
 import FirstLoginPrompt from './components/FirstLoginPrompt';
-import { Loader2 } from 'lucide-react';
+import SessionLoadingScreen from './components/SessionLoadingScreen';
 
 // Import CSS stylesheets in sequence
 import './styles/variables.css';
 import './styles/main.css';
+import './styles/sidebar.css';
 import './styles/dashboard.css';
+import './styles/auth.css';
 import './styles/chat.css';
 import './styles/kanban.css';
 import './styles/builder.css';
 import './styles/contacts.css';
+import './styles/calendar.css';
+import './styles/channels.css';
+import './styles/ai-agent.css';
 import './styles/followup.css';
 import './styles/provision.css';
+import './styles/users.css';
 
 // Import subcomponents
 import Sidebar from './components/Sidebar';
@@ -63,6 +70,7 @@ function getPermittedScreen(requestedScreen, permissions, isSuperAdmin) {
 }
 
 function AppContent() {
+  const screenStageRef = useRef(null);
   const { activeScreen, setActiveScreen } = useCrm();
   const { permissions, isSuperAdmin } = useAuth();
   
@@ -78,6 +86,18 @@ function AppContent() {
       setActiveScreen(permittedScreen);
     }
   }, [activeScreen, permittedScreen, setActiveScreen]);
+
+  useLayoutEffect(() => {
+    const stage = screenStageRef.current;
+    if (!stage) return undefined;
+
+    const tween = gsap.fromTo(
+      stage,
+      { x: 12, autoAlpha: 0 },
+      { x: 0, autoAlpha: 1, duration: 0.32, ease: 'power3.out', clearProps: 'transform,opacity,visibility' }
+    );
+    return () => tween.kill();
+  }, [permittedScreen]);
 
   const renderActiveScreen = () => {
     switch (permittedScreen) {
@@ -97,17 +117,16 @@ function AppContent() {
 
   return (
     <div className="app-container">
-      {/* Sleek Sidebar navigation panels */}
+      <a className="crm-skip-link" href="#crm-main-content">Pular para o conteúdo</a>
       <Sidebar />
-      
-      {/* Main content area with global status banner */}
-      <div style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {/* Global OpenAI quota warning banner */}
+
+      <div className="app-workspace">
         <OpenAIStatusBanner />
 
-        {/* Active screen viewport */}
-        <main style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          {renderActiveScreen()}
+        <main id="crm-main-content" className="app-viewport" tabIndex="-1">
+          <div ref={screenStageRef} key={permittedScreen} className="app-screen-stage">
+            {renderActiveScreen()}
+          </div>
         </main>
       </div>
     </div>
@@ -120,11 +139,7 @@ function AuthGuard() {
   const { session, loading, profile, effectiveTenantId } = useAuth();
 
   if (loading) {
-    return (
-      <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
-        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent-primary)' }} />
-      </div>
-    );
+    return <SessionLoadingScreen />;
   }
 
   if (!session) {
