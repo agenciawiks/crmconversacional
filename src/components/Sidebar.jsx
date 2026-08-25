@@ -242,10 +242,10 @@ export default function Sidebar() {
       >
         <header className="crm-sidebar-brand">
           <div className="crm-sidebar-logo-shell">
-            <img src="/logo.jpg" alt="CRM Wiks" width="38" height="38" />
+            <img src="/logo-mess.svg" alt="CRM Mess" width="38" height="38" />
           </div>
           <div className="crm-sidebar-brand-copy">
-            <strong translate="no">CRM Wiks</strong>
+            <strong translate="no">CRM Mess</strong>
             <span>Conversacional</span>
           </div>
           <button
