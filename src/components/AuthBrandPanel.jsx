@@ -4,13 +4,13 @@ export default function AuthBrandPanel({ mode = 'login' }) {
   const isFirstAccess = mode === 'first-access';
 
   return (
-    <aside className="auth-brand-panel" aria-label="CRM Wiks Conversacional">
+    <aside className="auth-brand-panel" aria-label="CRM Mess Conversacional">
       <div className="auth-brand auth-reveal">
         <span className="auth-logo-shell">
-          <img src="/logo.jpg" alt="" width="48" height="48" />
+          <img src="/logo-mess.svg" alt="" width="48" height="48" />
         </span>
         <span>
-          <strong>CRM Wiks</strong>
+          <strong>CRM Mess</strong>
           <small>CONVERSACIONAL</small>
         </span>
       </div>
