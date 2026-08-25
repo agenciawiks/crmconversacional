@@ -7,6 +7,7 @@ const firstAccessSource = await readFile(new URL('../src/components/FirstLoginPr
 const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
 const authContextSource = await readFile(new URL('../src/context/AuthContext.jsx', import.meta.url), 'utf8');
 const motionSource = await readFile(new URL('../src/hooks/useAuthExperienceMotion.js', import.meta.url), 'utf8');
+const authErrorSource = await readFile(new URL('../src/lib/authErrorMessage.js', import.meta.url), 'utf8');
 
 test('login preserves Supabase password authentication and semantic fields', () => {
   assert.match(loginSource, /supabase\.auth\.signInWithPassword/);
@@ -14,6 +15,14 @@ test('login preserves Supabase password authentication and semantic fields', () 
   assert.match(loginSource, /htmlFor="login-email"/);
   assert.match(loginSource, /autoComplete="email"/);
   assert.match(loginSource, /autoComplete="current-password"/);
+  assert.match(loginSource, /getAuthErrorMessage/);
+  assert.match(loginSource, /finally/);
+});
+
+test('login distinguishes invalid credentials from an unavailable authentication service', () => {
+  assert.match(authErrorSource, /invalid_credentials/);
+  assert.match(authErrorSource, /status === 402/);
+  assert.match(authErrorSource, /temporariamente indisponível/);
 });
 
 test('first access preserves both password choices and completion RPC flow', () => {
