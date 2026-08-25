@@ -379,7 +379,7 @@ export default function AiAgentSettings() {
       <section className="ai-editor-card ai-editor-card--identity">
         <header className="ai-card-heading"><span><Bot size={18} aria-hidden="true" /></span><div><small>Identidade</small><h2>Quem fala com o cliente?</h2><p>Defina o nome e a primeira mensagem da experiência.</p></div></header>
         <div className="ai-field-grid">
-          <div className="ai-field"><label htmlFor="ai-agent-name">Nome do Agente</label><input id="ai-agent-name" name="agent_name" type="text" autoComplete="off" value={settings.agentName} onChange={(event) => updateSetting('agentName', event.target.value)} placeholder="Ex.: Assistente Wiks…" aria-required="true" /></div>
+          <div className="ai-field"><label htmlFor="ai-agent-name">Nome do Agente</label><input id="ai-agent-name" name="agent_name" type="text" autoComplete="off" value={settings.agentName} onChange={(event) => updateSetting('agentName', event.target.value)} placeholder="Ex.: Assistente Mess…" aria-required="true" /></div>
           <div className="ai-field"><label htmlFor="ai-welcome-message">Mensagem de Boas-Vindas <em>Opcional</em></label><textarea id="ai-welcome-message" name="welcome_message" autoComplete="off" value={settings.welcomeMessage} onChange={(event) => updateSetting('welcomeMessage', event.target.value)} placeholder="Ex.: Olá! Como posso ajudar você hoje?…" rows="3" /><small>Se ficar em branco, a IA responde diretamente desde a primeira mensagem.</small></div>
         </div>
       </section>

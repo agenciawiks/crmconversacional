@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { gsap } from 'gsap';
 import { useCrm } from '../context/CrmContext';
 import {
-  ArrowLeft, Bot, Brain, Calendar, Check, CheckCheck, ChevronDown, FileText,
+  ArrowLeft, Bot, Brain, Calendar, Check, CheckCheck, ChevronDown, Clock3, FileText,
   ListChecks, Loader2, MessageSquare, Mic, MoveRight, PanelRightOpen, Paperclip,
   PenLine, Search, Send, Sparkles, Tag, Trash2, User, Users, Wifi, X, XCircle,
 } from 'lucide-react';
@@ -34,6 +34,7 @@ const sanitizeUrl = (url) => {
 
 import SupabaseService from '../services/supabaseService';
 import { PIPELINE_STAGES } from '../lib/contactBulkActions';
+import { getResponseMetricPresentation } from '../lib/responseTimeMetrics';
 import { normalizeProfilePhotoUrl, queueProfilePhotoSync } from '../services/profilePhotoService';
 
 export default function ChatWindow() {
@@ -90,10 +91,36 @@ export default function ChatWindow() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [mobilePane, setMobilePane] = useState('list');
   const [failedAvatarUrls, setFailedAvatarUrls] = useState({});
+  const [responseMetrics, setResponseMetrics] = useState({
+    contactId: null,
+    refreshKey: null,
+    status: 'idle',
+    first: { status: 'empty' },
+    latest: { status: 'empty' }
+  });
   
   const scrollRef = useRef(null);
   const preserveHistoryScrollRef = useRef(false);
   const requestedBrokenAvatarsRef = useRef(new Set());
+  const latestMetricMessage = activeContact?.messages?.[activeContact.messages.length - 1];
+  const responseMetricRefreshKey = latestMetricMessage
+    ? `${latestMetricMessage.id || ''}:${latestMetricMessage.timestamp || latestMetricMessage.time || ''}`
+    : 'empty';
+  const responseMetricsAreLoading = Boolean(activeContactId && !activeContact?.is_group) && (
+    responseMetrics.contactId !== activeContactId
+    || responseMetrics.refreshKey !== responseMetricRefreshKey
+  );
+
+  const firstResponsePresentation = getResponseMetricPresentation(
+    responseMetrics.first,
+    responseMetricsAreLoading,
+    responseMetrics.status === 'error'
+  );
+  const latestResponsePresentation = getResponseMetricPresentation(
+    responseMetrics.latest,
+    responseMetricsAreLoading,
+    responseMetrics.status === 'error'
+  );
 
   const getRenderableAvatarUrl = useCallback((contact) => {
     const normalizedUrl = normalizeProfilePhotoUrl(contact?.avatar_url);
@@ -115,6 +142,40 @@ export default function ChatWindow() {
       console.warn(`[Chat] Foto indisponível para ${contact.id}:`, error.message);
     });
   }, [tenantId]);
+
+  useEffect(() => {
+    if (!activeContactId || !tenantId || activeContact?.is_group) {
+      return undefined;
+    }
+
+    let active = true;
+
+    SupabaseService.fetchContactResponseMetrics(activeContactId, tenantId)
+      .then((metrics) => {
+        if (!active) return;
+        setResponseMetrics({
+          contactId: activeContactId,
+          refreshKey: responseMetricRefreshKey,
+          status: 'ready',
+          ...metrics
+        });
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error('[Chat] Falha ao calcular tempos de resposta:', error);
+        setResponseMetrics({
+          contactId: activeContactId,
+          refreshKey: responseMetricRefreshKey,
+          status: 'error',
+          first: { status: 'empty' },
+          latest: { status: 'empty' }
+        });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeContactId, tenantId, activeContact?.is_group, responseMetricRefreshKey]);
 
   const syncStatusMenuPosition = useCallback(() => {
     const trigger = statusTriggerRef.current;
@@ -216,7 +277,7 @@ export default function ChatWindow() {
         .fromTo('.active-chat-header > *', { y: -16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: reduceMotion ? .2 : .48, stagger: reduceMotion ? .03 : .08 }, reduceMotion ? .46 : 2.12)
         .fromTo(messageEntranceTargets, { y: 20, autoAlpha: 0, scale: .98 }, { y: 0, autoAlpha: 1, scale: 1, duration: reduceMotion ? .18 : .42, stagger: reduceMotion ? .01 : .03 }, reduceMotion ? .5 : 2.25)
         .fromTo('.chat-input-footer', { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: reduceMotion ? .22 : .58 }, reduceMotion ? .52 : 2.34)
-        .fromTo('.chat-profile-sidebar .profile-section', { x: 18, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: reduceMotion ? .18 : .42, stagger: reduceMotion ? .018 : .065 }, reduceMotion ? .48 : 2.12);
+        .fromTo('.chat-profile-sidebar .profile-response-kpi, .chat-profile-sidebar .profile-section', { x: 18, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: reduceMotion ? .18 : .42, stagger: reduceMotion ? .018 : .065 }, reduceMotion ? .48 : 2.12);
     }, root);
     return () => context.revert();
   }, [hasChatData]);
@@ -228,7 +289,7 @@ export default function ChatWindow() {
       gsap.timeline({ defaults: { overwrite: 'auto' } })
         .fromTo('.active-contact-title', { x: -10, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .34, ease: 'power3.out' }, 0)
         .fromTo(recentMessageBubbles, { y: 12, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: .28, stagger: .018, ease: 'power2.out' }, .06)
-        .fromTo('.profile-header-card, .profile-section', { x: 12, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .3, stagger: .035, ease: 'power3.out' }, .04);
+        .fromTo('.profile-header-card, .profile-response-kpi, .profile-section', { x: 12, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .3, stagger: .035, ease: 'power3.out' }, .04);
     }, rootRef);
     return () => context.revert();
   }, [activeContactId]);
@@ -302,7 +363,8 @@ export default function ChatWindow() {
   }, [isStatusDropdownOpen, statusMenuPosition?.placement, syncStatusMenuPosition]);
 
   useEffect(() => {
-    setIsStatusDropdownOpen(false);
+    const frame = window.requestAnimationFrame(() => setIsStatusDropdownOpen(false));
+    return () => window.cancelAnimationFrame(frame);
   }, [activeContactId]);
 
   useLayoutEffect(() => {
@@ -316,7 +378,7 @@ export default function ChatWindow() {
   useLayoutEffect(() => {
     if (!isProfileOpen || !profileRef.current) return undefined;
     const context = gsap.context(() => {
-      gsap.fromTo('.profile-header-card, .profile-section', { x: 16, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .32, stagger: .045, delay: .08, ease: 'power3.out' });
+      gsap.fromTo('.profile-header-card, .profile-response-kpi, .profile-section', { x: 16, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .32, stagger: .045, delay: .08, ease: 'power3.out' });
     }, profileRef);
     return () => context.revert();
   }, [isProfileOpen]);
@@ -1344,6 +1406,27 @@ export default function ChatWindow() {
             )}
           </div>
         </div>
+
+        {!activeContact.is_group && (
+          <section className="profile-response-metrics" aria-label="Tempos de resposta do contato">
+            <article className={`profile-response-kpi is-${firstResponsePresentation.state}`}>
+              <span className="profile-response-icon"><Clock3 size={15} aria-hidden="true" /></span>
+              <span className="profile-response-copy">
+                <small>Primeira resposta</small>
+                <strong>{firstResponsePresentation.value}</strong>
+                <em>Da primeira mensagem até o retorno</em>
+              </span>
+            </article>
+            <article className={`profile-response-kpi is-${latestResponsePresentation.state}`}>
+              <span className="profile-response-icon"><MessageSquare size={15} aria-hidden="true" /></span>
+              <span className="profile-response-copy">
+                <small>Última resposta</small>
+                <strong>{latestResponsePresentation.value}</strong>
+                <em>Da mensagem mais recente até o retorno</em>
+              </span>
+            </article>
+          </section>
+        )}
 
         {/* CONTACT DATA INFO */}
         <div className="profile-section">

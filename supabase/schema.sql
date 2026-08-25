@@ -1,4 +1,4 @@
-/* Supabase schema for CRM Wiks */
+/* Supabase schema for CRM Mess */
 
 -- Table: channels
 CREATE TABLE public.channels (

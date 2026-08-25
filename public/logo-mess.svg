@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">CRM Mess</title>
+  <desc id="description">Símbolo abstrato em forma de M construído por balões de conversa.</desc>
+  <defs>
+    <linearGradient id="mess-blue" x1="72" y1="76" x2="294" y2="392" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24d8f0"/>
+      <stop offset="1" stop-color="#1687f8"/>
+    </linearGradient>
+    <linearGradient id="mess-green" x1="238" y1="118" x2="448" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#59efbb"/>
+      <stop offset="1" stop-color="#20c997"/>
+    </linearGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#082a4a" flood-opacity=".2"/>
+    </filter>
+  </defs>
+  <g filter="url(#soft-shadow)">
+    <path fill="url(#mess-blue)" d="M78 80h160c38 0 68 30 68 68v126c0 38-30 68-68 68h-58l-78 72v-72H78c-38 0-68-30-68-68V148c0-38 30-68 68-68Z"/>
+    <path fill="url(#mess-green)" d="M274 118h160c38 0 68 30 68 68v126c0 38-30 68-68 68h-14v72l-78-72h-68c-38 0-68-30-68-68V186c0-38 30-68 68-68Z"/>
+    <path fill="#fff" fill-opacity=".96" d="M108 163h43l47 61 47-61h43v110h-40v-51l-50 63-50-63v51h-40V163Z"/>
+    <circle cx="356" cy="244" r="18" fill="#0b3653" fill-opacity=".92"/>
+    <circle cx="414" cy="244" r="18" fill="#0b3653" fill-opacity=".92"/>
+  </g>
+</svg>

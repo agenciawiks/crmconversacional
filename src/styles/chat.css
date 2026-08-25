@@ -1119,6 +1119,20 @@
 .profile-header-card .avatar { border-radius: 19px !important; }
 .profile-header-card .avatar img { border-radius: 17px !important; }
 .profile-name { color: var(--chat-copy); font-family: var(--font-display); font-size: 19px; }
+.profile-response-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 10px 0; }
+.profile-response-kpi { display: grid; min-width: 0; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: 7px; padding: 10px 9px; border: 1px solid var(--chat-line); border-radius: 14px; background: linear-gradient(145deg, rgba(54, 191, 243, .07), rgba(79, 224, 173, .045)); box-shadow: inset 0 1px rgba(255, 255, 255, .04); transition: border-color .2s ease, box-shadow .22s ease, transform .22s ease; }
+.profile-response-kpi:hover { border-color: var(--chat-line-strong); box-shadow: 0 11px 24px rgba(0, 0, 0, .09), inset 0 1px rgba(255, 255, 255, .05); transform: translateY(-2px); }
+.profile-response-icon { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(54, 191, 243, .18); border-radius: 9px; color: var(--chat-blue); background: rgba(54, 191, 243, .09); }
+.profile-response-kpi:nth-child(2) .profile-response-icon { border-color: rgba(79, 224, 173, .2); color: var(--chat-mint); background: rgba(79, 224, 173, .09); }
+.profile-response-copy { display: grid; min-width: 0; gap: 2px; }
+.profile-response-copy small { overflow: hidden; color: var(--chat-muted); font-size: 7px; font-weight: 850; letter-spacing: .07em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.profile-response-copy strong { overflow: hidden; color: var(--chat-copy); font-family: var(--font-display); font-size: 13px; font-variant-numeric: tabular-nums; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.profile-response-copy em { color: var(--chat-muted); font-size: 7px; font-style: normal; line-height: 1.35; }
+.profile-response-kpi.is-waiting { border-color: rgba(245, 158, 11, .22); background: linear-gradient(145deg, rgba(245, 158, 11, .08), rgba(54, 191, 243, .035)); }
+.profile-response-kpi.is-waiting .profile-response-icon { border-color: rgba(245, 158, 11, .22); color: #f59e0b; background: rgba(245, 158, 11, .09); }
+.profile-response-kpi.is-loading { opacity: .72; }
+.profile-response-kpi.is-error .profile-response-icon { color: #ef7c85; }
+.light-theme .profile-response-kpi { background: linear-gradient(145deg, rgba(255, 255, 255, .82), rgba(225, 247, 243, .68)); box-shadow: 0 8px 20px rgba(29, 93, 105, .07), inset 0 1px #fff; }
 .profile-section { margin: 10px !important; padding: 16px !important; border-color: var(--chat-line) !important; border-radius: 16px !important; background: rgba(82, 143, 151, .04) !important; box-shadow: inset 0 1px rgba(255, 255, 255, .035) !important; }
 .profile-section { transition: border-color .2s ease, background-color .2s ease, box-shadow .22s ease, transform .22s ease; }
 .profile-section:hover { border-color: var(--chat-line-strong) !important; background: linear-gradient(145deg, rgba(54, 191, 243, .055), rgba(79, 224, 173, .04)) !important; box-shadow: 0 12px 28px rgba(0, 0, 0, .08), inset 0 1px rgba(255, 255, 255, .035) !important; transform: translateY(-1px); }

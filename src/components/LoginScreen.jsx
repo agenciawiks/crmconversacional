@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, Moon, ShieldCheck, Sun } from 'lucide-react';
 import { supabase } from '../supabase';
 import { useAuthExperienceMotion } from '../hooks/useAuthExperienceMotion';
+import { getAuthErrorMessage } from '../lib/authErrorMessage';
 import AuthBackground from './AuthBackground';
 import AuthBrandPanel from './AuthBrandPanel';
 
@@ -37,16 +38,18 @@ export default function LoginScreen() {
     setLoading(true);
     setErrorMsg('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-    if (error) {
-      setErrorMsg('E-mail ou senha incorretos. Revise os dados e tente novamente.');
+      if (error) setErrorMsg(getAuthErrorMessage(error));
+    } catch (error) {
+      setErrorMsg(getAuthErrorMessage(error));
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
@@ -68,8 +71,8 @@ export default function LoginScreen() {
 
         <section className="auth-panel" aria-labelledby="login-title">
           <div className="auth-mobile-brand auth-action-reveal" aria-hidden="true">
-            <span className="auth-logo-shell"><img src="/logo.jpg" alt="" width="42" height="42" /></span>
-            <span><strong>CRM Wiks</strong><small>CONVERSACIONAL</small></span>
+            <span className="auth-logo-shell"><img src="/logo-mess.svg" alt="" width="42" height="42" /></span>
+            <span><strong>CRM Mess</strong><small>CONVERSACIONAL</small></span>
           </div>
 
           <header className="auth-panel-heading auth-action-reveal">
