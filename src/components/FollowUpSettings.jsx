@@ -530,7 +530,7 @@ export default function FollowUpSettings() {
           <div className="followup-settings-layout">
             <form onSubmit={handleSaveSettings} className="followup-settings-card">
               <header><span><Settings2 size={18} aria-hidden="true" /></span><div><h3>Identidade da Empresa</h3><p>O valor será aplicado à variável <code>{'{{company_name}}'}</code>.</p></div></header>
-              <div className="followup-form-field"><label htmlFor="followup-company-name">Nome da Empresa</label><input id="followup-company-name" name="followup_company_name" type="text" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Ex.: Clínica Wiks…" autoComplete="organization" required /></div>
+              <div className="followup-form-field"><label htmlFor="followup-company-name">Nome da Empresa</label><input id="followup-company-name" name="followup_company_name" type="text" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Ex.: Clínica Mess…" autoComplete="organization" required /></div>
               <div className="followup-variable-preview"><small>Prévia da Substituição</small><p>Olá, <strong>{'{{contact_name}}'}</strong>! Aqui é da <strong>{companyName.trim() || 'sua empresa'}</strong>. Podemos continuar?</p></div>
               <footer><button type="submit" className="followup-primary-action followup-animated-action" disabled={isSavingSetting}><Check size={15} aria-hidden="true" />{isSavingSetting ? 'Salvando…' : 'Salvar Variáveis'}</button></footer>
             </form>
