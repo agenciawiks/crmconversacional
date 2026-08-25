@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { buildResponseMetric } from '../lib/responseTimeMetrics';
 
 class SupabaseService {
   static async fetchContacts(tenantId) {
@@ -84,6 +85,67 @@ class SupabaseService {
       sender_name: msg.sender_name || null,
       tenant_id: msg.tenant_id || null
     }));
+  }
+
+  static async fetchContactResponseMetrics(contactId, tenantId) {
+    if (!contactId || !tenantId) {
+      return {
+        first: { status: 'empty' },
+        latest: { status: 'empty' }
+      };
+    }
+
+    const fetchInboundAnchor = async (ascending) => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id,timestamp')
+        .eq('contact_id', contactId)
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'in')
+        .order('timestamp', { ascending })
+        .limit(1);
+
+      if (error) throw error;
+      return data?.[0] || null;
+    };
+
+    const fetchFirstReplyAfter = async (inboundMessage) => {
+      if (!inboundMessage?.timestamp) return { status: 'empty' };
+
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id,timestamp,content')
+        .eq('contact_id', contactId)
+        .eq('tenant_id', tenantId)
+        .eq('direction', 'out')
+        .gt('timestamp', inboundMessage.timestamp)
+        .order('timestamp', { ascending: true })
+        .limit(100);
+
+      if (error) throw error;
+      const reply = (data || []).find((message) => !String(message.content || '').startsWith('[SYSTEM_RESET]'));
+      return buildResponseMetric(inboundMessage.timestamp, reply?.timestamp || null);
+    };
+
+    const [firstInbound, latestInbound] = await Promise.all([
+      fetchInboundAnchor(true),
+      fetchInboundAnchor(false)
+    ]);
+
+    if (!firstInbound) {
+      return {
+        first: { status: 'empty' },
+        latest: { status: 'empty' }
+      };
+    }
+
+    const firstReplyPromise = fetchFirstReplyAfter(firstInbound);
+    const latestReplyPromise = latestInbound?.id === firstInbound.id
+      ? firstReplyPromise
+      : fetchFirstReplyAfter(latestInbound);
+    const [first, latest] = await Promise.all([firstReplyPromise, latestReplyPromise]);
+
+    return { first, latest };
   }
 
   static async resetAiMemory(contactId) {
