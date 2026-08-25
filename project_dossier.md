@@ -1,11 +1,11 @@
-# Dossier Técnico – CRM Wiks (CRM Conversacional)
+# Dossier Técnico – CRM Mess (CRM Conversacional)
 
-Este documento serve como a **especificação técnica definitiva** do projeto **CRM Wiks | CRM Conversacional**. Seu objetivo é fornecer contexto instantâneo e completo sobre a estrutura do site, funcionalidades, banco de dados, fluxos de integração e especificações técnicas.
+Este documento serve como a **especificação técnica definitiva** do projeto **CRM Mess | CRM Conversacional**. Seu objetivo é fornecer contexto instantâneo e completo sobre a estrutura do site, funcionalidades, banco de dados, fluxos de integração e especificações técnicas.
 
 ---
 
 ## 1. Visão Geral do Projeto
-O **CRM Wiks** é um CRM Conversacional moderno e de alta performance, desenhado para unificar atendimentos de clientes vindos de múltiplos canais (com foco em **WhatsApp**), permitindo a operadores humanos gerenciar conversas em tempo real, organizar leads em um funil de vendas (Kanban) e monitorar métricas comerciais por meio de um Dashboard analítico e automatizado.
+O **CRM Mess** é um CRM Conversacional moderno e de alta performance, desenhado para unificar atendimentos de clientes vindos de múltiplos canais (com foco em **WhatsApp**), permitindo a operadores humanos gerenciar conversas em tempo real, organizar leads em um funil de vendas (Kanban) e monitorar métricas comerciais por meio de um Dashboard analítico e automatizado.
 
 ---
 
