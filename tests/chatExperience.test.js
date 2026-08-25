@@ -60,6 +60,19 @@ test('live chat interactions and drawers use scoped GSAP motion', () => {
   assert.match(source, /chat-cursor-glow/);
 });
 
+test('pipeline stage drawer remains above the following profile cards', () => {
+  assert.match(source, /profile-business-section\$\{isStatusDropdownOpen \? ' is-stage-menu-open' : ''\}/);
+  assert.match(source, /createPortal/);
+  assert.match(source, /statusMenuPosition/);
+  assert.match(source, /document\.body/);
+  assert.match(source, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(styles, /\.profile-business-section\.is-stage-menu-open \{ z-index: 140; \}/);
+  assert.match(styles, /\.modern-status-selector \{ position: relative; z-index: 102; isolation: isolate; \}/);
+  assert.match(styles, /\.chat-status-portal \{ position: fixed; z-index: 2001;/);
+  assert.match(styles, /\.chat-status-backdrop \{ position: fixed; z-index: 2000;/);
+  assert.match(styles, /\.chat-status-portal > button \{[^}]*pointer-events: auto;/);
+});
+
 test('human and AI controls remain legible in both themes', () => {
   assert.match(source, /chat-ai-control/);
   assert.match(source, /isAiPaused \? 'is-human' : 'is-ai'/);

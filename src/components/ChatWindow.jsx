@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { gsap } from 'gsap';
 import { useCrm } from '../context/CrmContext';
 import {
@@ -63,6 +64,8 @@ export default function ChatWindow() {
   const fileInputRef = useRef(null);
   const rootRef = useRef(null);
   const profileRef = useRef(null);
+  const statusTriggerRef = useRef(null);
+  const statusMenuRef = useRef(null);
   const firstEntranceFinished = useRef(false);
   const [channelFilter, setChannelFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -78,6 +81,7 @@ export default function ChatWindow() {
   const [editingTag, setEditingTag] = useState(null);
   const [confirmDeleteTag, setConfirmDeleteTag] = useState(null);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [statusMenuPosition, setStatusMenuPosition] = useState(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedContactIds, setSelectedContactIds] = useState([]);
   const [bulkStage, setBulkStage] = useState('');
@@ -111,6 +115,36 @@ export default function ChatWindow() {
       console.warn(`[Chat] Foto indisponível para ${contact.id}:`, error.message);
     });
   }, [tenantId]);
+
+  const syncStatusMenuPosition = useCallback(() => {
+    const trigger = statusTriggerRef.current;
+    if (!trigger) return;
+
+    const rect = trigger.getBoundingClientRect();
+    const viewportPadding = 10;
+    const menuWidth = Math.max(rect.width, 230);
+    const menuHeight = Math.min(statusMenuRef.current?.offsetHeight || 292, window.innerHeight - (viewportPadding * 2));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openAbove = spaceBelow < menuHeight + 12 && rect.top > menuHeight + 12;
+    const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding);
+    const left = Math.min(Math.max(viewportPadding, rect.left), maxLeft);
+    const top = openAbove
+      ? Math.max(viewportPadding, rect.top - menuHeight - 8)
+      : Math.min(rect.bottom + 8, window.innerHeight - menuHeight - viewportPadding);
+
+    setStatusMenuPosition({
+      top,
+      left,
+      width: menuWidth,
+      maxHeight: menuHeight,
+      placement: openAbove ? 'top' : 'bottom',
+    });
+  }, []);
+
+  const toggleStatusDropdown = useCallback(() => {
+    if (!isStatusDropdownOpen) syncStatusMenuPosition();
+    setIsStatusDropdownOpen((isOpen) => !isOpen);
+  }, [isStatusDropdownOpen, syncStatusMenuPosition]);
 
   // Scroll to bottom on active message update
   useEffect(() => {
@@ -245,13 +279,31 @@ export default function ChatWindow() {
   }, [contacts.length]);
 
   useLayoutEffect(() => {
-    if (!isStatusDropdownOpen || !rootRef.current) return undefined;
+    if (!isStatusDropdownOpen || !statusMenuRef.current) return undefined;
+    syncStatusMenuPosition();
+    const menu = statusMenuRef.current;
     const context = gsap.context(() => {
-      gsap.fromTo('.modern-status-menu', { y: -9, autoAlpha: 0, scale: .97 }, { y: 0, autoAlpha: 1, scale: 1, duration: .3, ease: 'back.out(1.7)' });
-      gsap.fromTo('.modern-status-menu > button', { x: -7, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .22, stagger: .035, delay: .04, ease: 'power2.out' });
-    }, rootRef);
-    return () => context.revert();
-  }, [isStatusDropdownOpen]);
+      gsap.fromTo(menu, { y: statusMenuPosition?.placement === 'top' ? 9 : -9, autoAlpha: 0, scale: .97 }, { y: 0, autoAlpha: 1, scale: 1, duration: .3, ease: 'back.out(1.7)' });
+      gsap.fromTo(menu.querySelectorAll('button[role="option"]'), { x: -7, autoAlpha: 0 }, { x: 0, autoAlpha: 1, duration: .22, stagger: .035, delay: .04, ease: 'power2.out' });
+    }, menu);
+    const handleViewportChange = () => syncStatusMenuPosition();
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') setIsStatusDropdownOpen(false);
+    };
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      context.revert();
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isStatusDropdownOpen, statusMenuPosition?.placement, syncStatusMenuPosition]);
+
+  useEffect(() => {
+    setIsStatusDropdownOpen(false);
+  }, [activeContactId]);
 
   useLayoutEffect(() => {
     if (!isTagPanelOpen || !rootRef.current) return undefined;
@@ -1352,7 +1404,7 @@ export default function ChatWindow() {
         </div>
 
         {/* PIPELINE & FINANCIAL DETAILS */}
-        <div className="profile-section" style={{
+        <div className={`profile-section profile-business-section${isStatusDropdownOpen ? ' is-stage-menu-open' : ''}`} style={{
           display: activeContact.is_group ? 'none' : undefined,
           background: 'rgba(20, 20, 28, 0.4)',
           borderRadius: '12px',
@@ -1377,8 +1429,9 @@ export default function ChatWindow() {
               }}
             >
               <button
+                ref={statusTriggerRef}
                 type="button"
-                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                onClick={toggleStatusDropdown}
                 className="modern-status-trigger chat-gsap-action"
                 aria-haspopup="listbox"
                 aria-expanded={isStatusDropdownOpen}
@@ -1409,83 +1462,61 @@ export default function ChatWindow() {
                 <ChevronDown size={14} aria-hidden="true" style={{ transform: isStatusDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }} />
               </button>
 
-              {/* DROPDOWN MENU */}
-              {isStatusDropdownOpen && (
-                <div 
+            </div>
+            {/* END CUSTOM DROPDOWN */}
+
+            {isStatusDropdownOpen && statusMenuPosition && typeof document !== 'undefined' && createPortal(
+              <>
+                <button
+                  type="button"
+                  aria-label="Fechar opções de fase"
+                  onClick={() => setIsStatusDropdownOpen(false)}
+                  className="chat-status-backdrop"
+                />
+                <div
+                  ref={statusMenuRef}
                   id="chat-status-options"
-                  className="modern-status-menu animated-fade-in"
+                  className={'modern-status-menu chat-status-portal is-' + statusMenuPosition.placement}
                   role="listbox"
                   aria-label="Fase no CRM"
                   style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    right: 0,
-                    marginTop: '8px',
-                    background: '#1a1a24',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    padding: '8px',
-                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5)',
-                    zIndex: 100,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '4px'
+                    top: statusMenuPosition.top,
+                    left: statusMenuPosition.left,
+                    width: statusMenuPosition.width,
+                    maxHeight: statusMenuPosition.maxHeight,
                   }}
                 >
                   {[
-                    { id: 'new', label: 'Novos Leads', class: 'new' },
-                    { id: 'no_answer', label: 'Sem Resposta', class: 'no_answer' },
-                    { id: 'contacted', label: 'Em Contato', class: 'contacted' },
-                    { id: 'proposal', label: 'Tem Interesse', class: 'proposal' },
-                    { id: 'won', label: 'Vendas Ganhas', class: 'won' },
-                    { id: 'lost', label: 'Perdidos', class: 'lost' }
-                  ].map(stage => (
+                    { id: 'new', label: 'Novos Leads' },
+                    { id: 'no_answer', label: 'Sem Resposta' },
+                    { id: 'contacted', label: 'Em Contato' },
+                    { id: 'proposal', label: 'Tem Interesse' },
+                    { id: 'won', label: 'Vendas Ganhas' },
+                    { id: 'lost', label: 'Perdidos' },
+                  ].map((stage) => (
                     <button
                       type="button"
                       key={stage.id}
                       role="option"
                       aria-selected={activeContact.status === stage.id}
-                      onClick={() => {
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
                         changeContactStatus(activeContact.id, stage.id);
                         setIsStatusDropdownOpen(false);
                       }}
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        background: activeContact.status === stage.id ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'}
-                      onMouseLeave={(e) => {
-                        if (activeContact.status !== stage.id) e.currentTarget.style.background = 'transparent';
-                      }}
                     >
-                      <span className={`tag status-${stage.id}`} style={{ margin: 0 }}>
+                      <span className={'tag status-' + stage.id}>
                         {stage.label}
                       </span>
                       {activeContact.status === stage.id && (
-                        <CheckCheck size={14} style={{ marginLeft: 'auto', color: 'var(--accent-primary)' }} />
+                        <CheckCheck size={14} aria-hidden="true" />
                       )}
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
-            {/* END CUSTOM DROPDOWN */}
-            
-            {/* Invisible backdrop to close dropdown when clicking outside */}
-            {isStatusDropdownOpen && (
-              <button
-                type="button"
-                aria-label="Fechar opções de fase"
-                onClick={() => setIsStatusDropdownOpen(false)}
-                className="chat-status-backdrop"
-              />
+              </>,
+              document.body
             )}
           </div>
 

@@ -917,11 +917,21 @@
 .chat-tag-panel { overflow: hidden; background: color-mix(in srgb, var(--bg-surface-solid) 88%, var(--chat-blue)) !important; }
 .chat-tag-panel input { min-width: 0; }
 .chat-tag-panel button { touch-action: manipulation; }
+.profile-business-section { position: relative; z-index: 1; overflow: visible; }
+.profile-business-section.is-stage-menu-open { z-index: 140; }
+.modern-status-selector { position: relative; z-index: 102; isolation: isolate; }
 .modern-status-trigger { width: 100%; color: var(--text-primary); text-align: left; }
-.modern-status-menu { border-color: color-mix(in srgb, var(--chat-blue) 22%, var(--border-glass)) !important; background: color-mix(in srgb, var(--bg-surface-solid) 96%, var(--chat-blue)) !important; overscroll-behavior: contain; transform-origin: top center; }
-.modern-status-menu > button { width: 100%; border: 0; color: var(--text-primary); text-align: left; }
-.modern-status-menu > button:hover { background: color-mix(in srgb, var(--chat-blue) 8%, var(--bg-surface-hover)) !important; }
-.chat-status-backdrop { position: fixed; z-index: 99; inset: 0; padding: 0; border: 0; background: transparent; }
+.modern-status-menu { border-color: color-mix(in srgb, var(--chat-blue, #36bff3) 22%, var(--border-glass)) !important; background: color-mix(in srgb, var(--bg-surface-solid) 96%, var(--chat-blue, #36bff3)) !important; overscroll-behavior: contain; pointer-events: auto; transform-origin: top center; }
+.chat-status-portal { position: fixed; z-index: 2001; display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow-x: hidden; overflow-y: auto; border: 1px solid var(--border-glass); border-radius: 12px; box-shadow: 0 24px 64px rgba(0, 0, 0, .38), 0 0 0 1px rgba(54, 191, 243, .05); isolation: isolate; }
+.chat-status-portal.is-top { transform-origin: bottom center; }
+.chat-status-portal > button { position: relative; z-index: 1; display: flex; width: 100%; min-height: 38px; align-items: center; gap: 8px; padding: 8px 11px; border: 0; border-radius: 8px; color: var(--text-primary); background: transparent; text-align: left; pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+.chat-status-portal > button:hover,
+.chat-status-portal > button:focus-visible { background: color-mix(in srgb, var(--chat-blue, #36bff3) 9%, var(--bg-surface-hover)) !important; }
+.chat-status-portal > button[aria-selected='true'] { background: color-mix(in srgb, var(--chat-mint, #4fe0ad) 9%, var(--bg-surface-hover)); }
+.chat-status-portal > button .tag { margin: 0; pointer-events: none; }
+.chat-status-portal > button > svg { margin-left: auto; color: var(--accent-primary); pointer-events: none; }
+.light-theme .chat-status-portal { background: rgba(251, 255, 255, .985) !important; box-shadow: 0 24px 58px rgba(25, 88, 102, .24), inset 0 1px #fff; }
+.chat-status-backdrop { position: fixed; z-index: 2000; inset: 0; padding: 0; border: 0; background: transparent; cursor: default; }
 .chat-profile-close { position: sticky; z-index: 5; top: 10px; float: right; display: none; width: 34px; place-items: center; margin: 10px 10px -44px auto; padding: 0; }
 .chat-profile-backdrop { position: absolute; z-index: 69; inset: 0; display: none; padding: 0; border: 0; opacity: 0; pointer-events: none; background: rgba(2, 14, 20, .52); transition: opacity .24s ease; backdrop-filter: blur(3px); }
 .chat-confirm-backdrop { overscroll-behavior: contain; }
