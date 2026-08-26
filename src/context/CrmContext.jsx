@@ -217,7 +217,7 @@ export const CrmProvider = ({ children, tenantId }) => {
         const titleText = contactName || 'Novo Contato';
         const notif = new Notification(titleText, {
           body: 'Nova mensagem',
-          icon: '/logo-mess.svg',
+          icon: '/logo-mess-v2.svg',
           tag: `crm-msg-${contactId || 'unknown'}`
         });
 
