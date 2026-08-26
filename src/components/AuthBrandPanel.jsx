@@ -7,7 +7,7 @@ export default function AuthBrandPanel({ mode = 'login' }) {
     <aside className="auth-brand-panel" aria-label="CRM Mess Conversacional">
       <div className="auth-brand auth-reveal">
         <span className="auth-logo-shell">
-          <img src="/logo-mess.svg" alt="" width="48" height="48" />
+          <img src="/logo-mess-v2.svg" alt="" width="48" height="48" />
         </span>
         <span>
           <strong>CRM Mess</strong>
