@@ -16,7 +16,7 @@ test('the visible product identity is CRM Mess everywhere in the app shell', asy
   const combinedSource = sources.join('\n');
 
   assert.match(combinedSource, /CRM Mess/);
-  assert.match(combinedSource, /logo-mess\.svg/);
+  assert.match(combinedSource, /logo-mess-v2\.svg/);
   assert.doesNotMatch(combinedSource, /CRM Wiks|Wiks CRM/);
   assert.doesNotMatch(combinedSource, /logo\.jpg/);
 });
