@@ -12,7 +12,7 @@ export default function SessionLoadingScreen() {
       <AuthBackground />
       <section className="auth-session-card auth-stage" role="status" aria-live="polite" aria-label="Validando sessão">
         <div className="auth-session-logo auth-reveal">
-          <img src="/logo-mess.svg" alt="" width="52" height="52" />
+          <img src="/logo-mess-v2.svg" alt="" width="52" height="52" />
           <span className="auth-session-orbit" aria-hidden="true" />
         </div>
         <span className="auth-section-kicker auth-reveal"><ShieldCheck size={14} aria-hidden="true" /> Sessão protegida</span>
