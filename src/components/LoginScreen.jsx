@@ -71,7 +71,7 @@ export default function LoginScreen() {
 
         <section className="auth-panel" aria-labelledby="login-title">
           <div className="auth-mobile-brand auth-action-reveal" aria-hidden="true">
-            <span className="auth-logo-shell"><img src="/logo-mess.svg" alt="" width="42" height="42" /></span>
+            <span className="auth-logo-shell"><img src="/logo-mess-v2.svg" alt="" width="42" height="42" /></span>
             <span><strong>CRM Mess</strong><small>CONVERSACIONAL</small></span>
           </div>
 
