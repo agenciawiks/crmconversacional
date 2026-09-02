@@ -12,7 +12,7 @@ import {
 import N8nService from '../services/n8nService';
 import { isProfilePhotoStale, queueProfilePhotoSync } from '../services/profilePhotoService';
 import * as followUpService from '../services/followUpService';
-import { isVisibleChatMessage, mergeMessageHistory } from '../lib/messageHistory';
+import { isVisibleChatMessage, latestCreatedAt, mergeMessageHistory } from '../lib/messageHistory';
 
 const CrmContext = createContext();
 
@@ -283,7 +283,7 @@ export const CrmProvider = ({ children, tenantId }) => {
           dbAppointments
         ] = await Promise.all([
           SupabaseService.fetchContacts(tenantId),
-          supabase.from('messages').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(500),
+          supabase.from('messages').select('created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1),
           SupabaseService.fetchChannels(tenantId),
           followUpService.fetchRules(tenantId),
           followUpService.fetchSettings(tenantId),
@@ -330,7 +330,10 @@ export const CrmProvider = ({ children, tenantId }) => {
         const idSet = new Set();
         const mappedContacts = (dbContacts || []).map(c => {
           const contactMeta = meta[c.id] || {};
-          const cMsgs = (dbMessages || []).filter(m => m.contact_id === c.id && !(m.content || '').startsWith('[SYSTEM_RESET]')).map(m => {
+          const previewRows = c.initial_messages?.length
+            ? [...c.initial_messages].reverse()
+            : (dbMessages || []).filter(m => m.contact_id === c.id && !(m.content || '').startsWith('[SYSTEM_RESET]'));
+          const cMsgs = previewRows.map(m => {
             idSet.add(m.id);
             return normalizeMessage(m);
           });
@@ -411,7 +414,7 @@ export const CrmProvider = ({ children, tenantId }) => {
 
         // Prevent clock-skew bug by using latest database created_at timestamp
         if (dbMessages && dbMessages.length > 0) {
-          lastPollRef.current = dbMessages[dbMessages.length - 1].created_at;
+          lastPollRef.current = latestCreatedAt(dbMessages, new Date().toISOString());
         } else {
           lastPollRef.current = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         }
@@ -1063,11 +1066,11 @@ export const CrmProvider = ({ children, tenantId }) => {
           .select('*')
           .eq('tenant_id', tenantId)
           .gt('created_at', lastPollRef.current)
-          .order('timestamp', { ascending: true });
+          .order('created_at', { ascending: true });
 
         if (newMsgs && newMsgs.length > 0) {
           // Update lastPollRef to the database-generated timestamp of the last message
-          lastPollRef.current = newMsgs[newMsgs.length - 1].created_at;
+          lastPollRef.current = latestCreatedAt(newMsgs, lastPollRef.current);
 
           for (const m of newMsgs) {
             mergeMessage(m);

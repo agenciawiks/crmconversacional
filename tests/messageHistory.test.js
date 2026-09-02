@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { isVisibleChatMessage, mergeMessageHistory } from '../src/lib/messageHistory.js';
+import { isVisibleChatMessage, latestCreatedAt, mergeMessageHistory } from '../src/lib/messageHistory.js';
 
 const contextSource = await readFile(new URL('../src/context/CrmContext.jsx', import.meta.url), 'utf8');
 const chatSource = await readFile(new URL('../src/components/ChatWindow.jsx', import.meta.url), 'utf8');
+const serviceSource = await readFile(new URL('../src/services/supabaseService.js', import.meta.url), 'utf8');
 
 test('message history hides internal AI reset records', () => {
   assert.equal(isVisibleChatMessage({ content: '[SYSTEM_RESET] limpar memória' }), false);
@@ -35,6 +36,23 @@ test('message history remains chronological when older pages are prepended', () 
   );
 
   assert.deepEqual(merged.map((message) => message.id), ['old', 'new']);
+});
+
+test('poll cursor follows database creation time even when message timestamps are out of order', () => {
+  const latest = latestCreatedAt([
+    { created_at: '2026-09-02T10:02:00.000Z', timestamp: '2026-09-02T12:00:00.000Z' },
+    { created_at: '2026-09-02T10:05:00.000Z', timestamp: '2026-09-02T09:00:00.000Z' },
+  ]);
+  assert.equal(latest, '2026-09-02T10:05:00.000Z');
+});
+
+test('contact list requests a real latest-message preview for each contact', () => {
+  assert.match(serviceSource, /select\('\*, messages\(\*\)'\)/);
+  assert.match(serviceSource, /referencedTable: 'messages'/);
+  assert.match(serviceSource, /initial_messages/);
+  assert.match(contextSource, /c\.initial_messages\?\.length/);
+  assert.match(contextSource, /\.order\('created_at', \{ ascending: true \}\)/);
+  assert.match(contextSource, /latestCreatedAt\(newMsgs, lastPollRef\.current\)/);
 });
 
 test('active conversation loads a bounded recent page without replacing live messages', () => {
