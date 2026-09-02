@@ -27,3 +27,14 @@ export const mergeMessageHistory = (historicalMessages = [], currentMessages = [
 
   return [...merged.values()].sort((a, b) => getMessageTimestamp(a) - getMessageTimestamp(b));
 };
+
+export const latestCreatedAt = (messages = [], fallback = null) => {
+  const timestamps = messages
+    .map((message) => message?.created_at)
+    .filter(Boolean)
+    .map((value) => new Date(value))
+    .filter((value) => Number.isFinite(value.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime());
+
+  return timestamps[0]?.toISOString() || fallback;
+};

@@ -5,12 +5,14 @@ class SupabaseService {
   static async fetchContacts(tenantId) {
     let query = supabase
       .from('contacts')
-      .select('*');
+      .select('*, messages(*)');
 
     if (tenantId) query = query.eq('tenant_id', tenantId);
 
     const { data, error } = await query
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: false })
+      .order('created_at', { referencedTable: 'messages', ascending: false })
+      .limit(3, { referencedTable: 'messages' });
 
     if (error) {
       console.error('[SupabaseService] fetchContacts error:', error);
@@ -43,6 +45,7 @@ class SupabaseService {
         }
         return [{ id: 1, text: c.notes, date: c.updated_at }];
       })(),
+      initial_messages: (c.messages || []).filter((message) => !String(message.content || '').startsWith('[SYSTEM_RESET]')),
       messages: [],
       created_at: c.created_at
     }));
